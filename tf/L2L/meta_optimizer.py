@@ -38,7 +38,7 @@ class l2l(Meta_Optimizer):
         self.optimizer = tf.train.AdamOptimizer(.01)
         lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
         self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([lstm_cell] * self.num_layers)
-        self.hidden_states = self.meta_optimizer.zero_state(1, tf.float32)
+        self.hidden_states = self.meta_optimizer.zero_state(2, tf.float32)
         with tf.variable_scope('rnn'):
             self.meta_optimizer(self.get_gradients(self.func, self.params), self.hidden_states)
             self.W = tf.get_variable('softmax_w', [self.state_size, 1])
@@ -58,13 +58,13 @@ class l2l(Meta_Optimizer):
         _, loss_final, self.params, self.hidden_states =  tf.while_loop(
             cond=lambda t, *_ : t < 10,
             body=update,
-            loop_vars=([0, tf.zeros([1, 1]), self.params, self.hidden_states]),
+            loop_vars=([0, tf.zeros([2, 1]), self.params, self.hidden_states]),
             parallel_iterations=1,
             swap_memory=True,
             name="unroll")
-
-        step = self.optimizer.minimize(loss_final)
-        return loss_final, step
+        loss_sum = tf.reduce_sum(loss_final)
+        step = self.optimizer.minimize(loss_sum)
+        return loss_sum, step
 
     def optimize(self):
         print 'optimize'

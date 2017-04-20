@@ -61,15 +61,15 @@ class test():
 	hidden_state = None
 
 	def __init__(self):
-		self.x = tf.get_variable('x', shape=[1,1], dtype=tf.float32, initializer=tf.ones_initializer(), trainable=False)
+		self.x = tf.get_variable('x', shape=[2,1], dtype=tf.float32, initializer=tf.ones_initializer(), trainable=False)
 		self.t = 0
 		self.lstm_cell = tf.contrib.rnn.BasicLSTMCell(1)
-		self.hidden_state = self.lstm_cell.zero_state(1, tf.float32)
+		self.hidden_state = self.lstm_cell.zero_state(2, tf.float32)
 
 	def func(self, x):
 		return tf.square(x, name='x_squared_sta')
 	def update(self, t, fx_array, x,hidden_state):
-		output, hidden_state = self.lstm_cell(tf.gradients(self.x, self.x)[0], hidden_state)
+		output, hidden_state = self.lstm_cell(tf.gradients(self.func(x), x)[0], hidden_state)
 		x_next = x + output
 		fx_array = fx_array.write(t, x_next)
 		t = t + 1
@@ -79,7 +79,7 @@ class test():
 	def loop(self):
 		fx_array = tf.TensorArray(tf.float32, size=10,
                               clear_after_read=False)
-		t_f, fx_array, self.x, self.hidden_state =  tf.while_loop(
+		t_f, fx_array, x_final, self.hidden_state =  tf.while_loop(
 			cond=lambda t, *_ : t < 10,
 			body=self.update,
 			loop_vars=([0, fx_array, self.x, self.hidden_state]),
@@ -93,7 +93,7 @@ class test():
 			sess.run(tf.global_variables_initializer())
 			# print sess.run(self.x)
 			print sess.run(self.t)
-			print sess.run([fx_array.stack(), self.x, tf.gradients(self.func(self.x), self.x)])
+			print sess.run([fx_array.stack(), x_final, self.x, tf.gradients(self.func(self.x), self.x)])
 			# print sess.run(self.hidden_state)
 			# print sess.run(self.x)
 
