@@ -12,5 +12,5 @@ with tf.Session() as sess:
     loss = 0
     sess.run(tf.global_variables_initializer())
     for epoch in range(epochs):
-        print 'x, loss: ', sess.run([step, loss_final])
+        print 'x, loss: ', sess.run([loss_final, step, optimizer.params])
 
