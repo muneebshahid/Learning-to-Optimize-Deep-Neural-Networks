@@ -92,3 +92,7 @@ ENV/
 # idea
 .idea
 .idea/*
+
+
+MNIST-data/
+MNIST-data/*
