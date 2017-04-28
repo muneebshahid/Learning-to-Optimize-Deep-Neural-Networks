@@ -51,17 +51,18 @@ class l2l(Meta_Optimizer):
             t_next = t + 1
             return t_next, loss, params_next, hidden_states_next
 
-        _, loss_final, self.problem.vars, self.hidden_states = tf.while_loop(
+        _, loss_final, vars_final, hidden_final = tf.while_loop(
             cond=lambda t, *_ : t < self.unroll_len,
             body=update,
             loop_vars=([0, tf.zeros([self.problem.batch_size, 1]), self.problem.vars, self.hidden_states]),
             parallel_iterations=1,
             swap_memory=True,
             name="unroll")
-
+        # self.problem.vars = vars_final
+        update_x = tf.assign(self.problem.vars, vars_final)
         loss_sum = tf.divide(tf.reduce_sum(loss_final), self.unroll_len)
         step = self.optimizer.minimize(loss_sum)
-        return loss_sum, step
+        return loss_sum, step, update_x
 
     def optimize(self):
         print 'optimize'
