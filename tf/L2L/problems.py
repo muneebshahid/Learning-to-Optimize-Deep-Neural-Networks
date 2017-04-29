@@ -9,15 +9,27 @@ class Problem():
     dims = None
     dtype = None
     vars = None
+    vars_flattened_shape = None
     const = None
     meta = None
+    variables = 'variables'
+    constants = 'constants'
 
     def __init__(self, args={'batch_size': 1, 'dims': 1, 'dtype': tf.float32}, meta=True):
         self.batch_size = args['batch_size']
         self.dims = args['dims']
         self.dtype = args['dtype']
         self.meta = meta
-    
+        self.vars = []
+        self.vars_flattened_shape = []
+
+    def create_variable(self, name, initializer):        
+        variable = tf.get_variable(name, shape=[self.batch_size, self.dims], dtype=self.dtype,
+                                   initializer=initializer, trainable=self.is_trainalbe)
+        self.vars.append(variable)
+        self.vars_flattened_shape.append(self.batch_size * self.dims)
+        return variable
+
     @property
     def is_trainalbe(self):
         return not self.meta
@@ -25,20 +37,34 @@ class Problem():
     def loss(self, vars):
         pass
 
-    def gradients(self, vars):
-        return tf.gradients(self.loss(vars), vars)[0]
+    def get_gradients(self, vars):
+        return tf.gradients(self.loss(vars), vars)
 
 
 class ElementwiseSquare(Problem):     
 
+    x = None
+
     def __init__(self, args, meta=True):
         super(ElementwiseSquare, self).__init__(args=args, meta=meta)
-        with tf.variable_scope('variables'):
-            self.vars = tf.get_variable('x', shape=[self.batch_size, self.dims], dtype=self.dtype,
-                                   initializer=tf.random_uniform_initializer(), trainable=self.is_trainalbe)
-    def loss(self, vars):
-        return tf.reduce_sum(tf.square(vars, name='var_squared'))
+        with tf.variable_scope(self.variables):
+            self.x = self.create_variable('x', tf.random_uniform_initializer())
 
+    def loss(self, vars):
+        return tf.reduce_sum(tf.square(vars[0], name='x_squared'))
+
+class TwoVars(Problem):
+
+    x, y = None, None
+
+    def __init__(self):
+        super(TwoVars, self).__init__()
+        with tf.variable_scope(self.variables):
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer())
+            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer())
+
+    def loss(self, vars):
+        return tf.add(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='sum')
 
 class Quadratic(Problem):
 
