@@ -1,5 +1,6 @@
 from abc import ABCMeta
 import tensorflow as tf
+import numpy as np
 
 
 class Problem():
@@ -8,26 +9,31 @@ class Problem():
     batch_size = None
     dims = None
     dtype = None
-    vars = None
-    vars_flattened_shape = None
-    const = None
+    variables = None
+    constants = None
+    variables_flattened_shape = None    
     meta = None
-    variables = 'variables'
-    constants = 'constants'
+    variable_scope = 'variables'
+    constant_scope = 'constants'
 
     def __init__(self, args={'batch_size': 1, 'dims': 1, 'dtype': tf.float32}, meta=True):
         self.batch_size = args['batch_size']
         self.dims = args['dims']
         self.dtype = args['dtype']
         self.meta = meta
-        self.vars = []
-        self.vars_flattened_shape = []
+        self.variables = []
+        self.constants = []
+        self.variables_flattened_shape = []
 
-    def create_variable(self, name, initializer):        
-        variable = tf.get_variable(name, shape=[self.batch_size, self.dims], dtype=self.dtype,
+    def create_variable(self, name, initializer, variable=True, dims=None):
+        shape = [self.batch_size, self.dims] if dims is None else dims
+        variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
                                    initializer=initializer, trainable=self.is_trainalbe)
-        self.vars.append(variable)
-        self.vars_flattened_shape.append(self.batch_size * self.dims)
+        if variable:
+            self.variables.append(variable)
+            self.variables_flattened_shape.append(np.multiply.reduce(shape))
+        else:
+            self.constants.append(variable)
         return variable
 
     @property
@@ -47,7 +53,7 @@ class ElementwiseSquare(Problem):
 
     def __init__(self, args, meta=True):
         super(ElementwiseSquare, self).__init__(args=args, meta=meta)
-        with tf.variable_scope(self.variables):
+        with tf.variable_scope(self.variable_scope):
             self.x = self.create_variable('x', tf.random_uniform_initializer())
 
     def loss(self, vars):
@@ -57,14 +63,32 @@ class TwoVars(Problem):
 
     x, y = None, None
 
-    def __init__(self):
-        super(TwoVars, self).__init__()
-        with tf.variable_scope(self.variables):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer())
-            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer())
+    def __init__(self, args):
+        super(TwoVars, self).__init__(args=args)
+        with tf.variable_scope(self.variable_scope):
+            self.x = self.create_variable('x', initializer=tf.random_normal_initializer())
+            self.y = self.create_variable('y', initializer=tf.random_normal_initializer())
 
     def loss(self, vars):
-        return tf.add(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='sum')
+        return tf.reduce_sum(tf.add(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='sum'))
+
+
+class FitW(Problem):
+
+    w, x, y = None, None, None
+
+    def __init__(self, args):
+        super(FitW, self).__init__(args=args)
+        with tf.variable_scope(self.variable_scope):
+            self.w = self.create_variable('w', initializer=tf.random_uniform_initializer(), shape=[self.dims, self.dims])
+
+        with tf.variable_scope(self.constant_scope):
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(), shape=[self.dims, 1], variable=False)
+            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(), shape=[self.dims, 1], variable=False)
+            
+
+    def loss(self, vars):
+        return tf.subtract(tf.matmul(vars[0], self.constants[0]), self.constants[1])
 
 class Quadratic(Problem):
 
@@ -76,7 +100,7 @@ class Quadratic(Problem):
         dtype = args['dtype']
 
         with tf.variable_scope('variables'):
-            self.vars = tf.get_variable("x", shape=[self.batch_size, self.dims], dtype=self.dtype,
+            self.variables = tf.get_variable("x", shape=[self.batch_size, self.dims], dtype=self.dtype,
                             initializer=tf.random_normal_initializer(stddev=stddev), trainable=self.is_trainalbe)
 
         with tf.variable_scope('constant'):
