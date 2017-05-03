@@ -5,8 +5,7 @@ import numpy as np
 
 class Problem():
     __metaclass__ = ABCMeta
-    
-    batch_size = None
+
     dims = None
     dtype = None
     variables = None
@@ -16,24 +15,23 @@ class Problem():
     variable_scope = 'variables'
     constant_scope = 'constants'
 
-    def __init__(self, args={'batch_size': 1, 'dims': 1, 'dtype': tf.float32}, meta=True):
-        self.batch_size = args['batch_size']
+    def __init__(self, args={'dims': 1, 'dtype': tf.float32}, meta=True):
         self.dims = args['dims']
         self.dtype = args['dtype']
-        self.meta = meta
+        self.meta = meta        
         self.variables = []
         self.constants = []
         self.variables_flattened_shape = []
 
-    def create_variable(self, name, initializer, variable=True, dims=None):
-        shape = [self.batch_size, self.dims] if dims is None else dims
+    def create_variable(self, name, initializer, constant=False, dims=None):
+        shape = [self.dims, 1] if dims is None else dims
         variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
                                    initializer=initializer, trainable=self.is_trainalbe)
-        if variable:
+        if constant:
+            self.constants.append(variable)
+        else:
             self.variables.append(variable)
             self.variables_flattened_shape.append(np.multiply.reduce(shape))
-        else:
-            self.constants.append(variable)
         return variable
 
     @property
@@ -44,7 +42,10 @@ class Problem():
         pass
 
     def get_gradients(self, vars):
-        return tf.gradients(self.loss(vars), vars)
+        gradients = tf.gradients(self.loss(vars), vars)
+        for i, gradient in enumerate(gradients):
+            gradients[i] = tf.reshape(gradients[i], [self.variables_flattened_shape[i], 1])
+        return gradients
 
 
 class ElementwiseSquare(Problem):     
@@ -57,7 +58,24 @@ class ElementwiseSquare(Problem):
             self.x = self.create_variable('x', tf.random_uniform_initializer())
 
     def loss(self, vars):
-        return tf.reduce_sum(tf.square(vars[0], name='x_squared'))
+        return tf.reduce_sum(tf.square(vars[0], name='x_squared'))        
+
+
+class FitX(Problem):
+
+    w, x, y = None, None, None
+
+    def __init__(self, args):
+        super(FitX, self).__init__(args=args)
+        with tf.variable_scope(self.variable_scope):
+            self.w = self.create_variable('w', initializer=tf.random_uniform_initializer(), dims=[self.dims, self.dims])
+
+        with tf.variable_scope(self.constant_scope):
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
+            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
+
+    def loss(self, vars):
+        return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(vars[0], self.x), self.y)))
 
 class TwoVars(Problem):
 
@@ -66,29 +84,11 @@ class TwoVars(Problem):
     def __init__(self, args):
         super(TwoVars, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.x = self.create_variable('x', initializer=tf.random_normal_initializer())
+            self.x = self.create_variable('x', initializer=tf.random_normal_initializer(), dims=[1, self.dims])
             self.y = self.create_variable('y', initializer=tf.random_normal_initializer())
 
     def loss(self, vars):
-        return tf.reduce_sum(tf.add(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='sum'))
-
-
-class FitW(Problem):
-
-    w, x, y = None, None, None
-
-    def __init__(self, args):
-        super(FitW, self).__init__(args=args)
-        with tf.variable_scope(self.variable_scope):
-            self.w = self.create_variable('w', initializer=tf.random_uniform_initializer(), shape=[self.dims, self.dims])
-
-        with tf.variable_scope(self.constant_scope):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(), shape=[self.dims, 1], variable=False)
-            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(), shape=[self.dims, 1], variable=False)
-            
-
-    def loss(self, vars):
-        return tf.subtract(tf.matmul(vars[0], self.constants[0]), self.constants[1])
+        return tf.reduce_sum(tf.matmul(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='matmul'))
 
 class Quadratic(Problem):
 

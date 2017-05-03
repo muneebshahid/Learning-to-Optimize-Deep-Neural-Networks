@@ -198,36 +198,44 @@ import numpy as np
 # # b = tf.get_variable('softmax_b', [dim])
 # # res = tf.add(tf.matmul(output, w), b)
 
-l2l = tf.Graph()
-with l2l.as_default():
-    lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
-    hidden_states = lstm_cell.zero_state(1, tf.float32)
-    x = tf.get_variable(
-            "x",
-            shape=[1, 1],
-            dtype=tf.float32,
-            initializer=tf.random_normal_initializer(), trainable=False)
-    def loss(x):
-        return tf.square(x, name='squared_loss')
-    output, hidden_state_next = lstm_cell(tf.gradients(loss(x), x)[0], hidden_states)
+# l2l = tf.Graph()
+# with l2l.as_default():
+tf.set_random_seed(100)
+lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
+hidden_states = lstm_cell.zero_state(2, tf.float32)
+x = tf.get_variable(
+        "x",
+        shape=[1, 2],
+        dtype=tf.float32,
+        initializer=tf.random_normal_initializer(), trainable=False)
+
+def loss(x):
+    return tf.reduce_sum(tf.square(x, name='squared_loss'))
+gradients = tf.reshape(tf.gradients(loss(x), x)[0], [2, 1])
+output, hidden_state_next = lstm_cell(gradients, hidden_states)
 
 
-    def update(t, x):
-        x_next = x + 1
-        # upd = tf.assign_add(x, [[1]])
-        # with l2l.control_dependencies([upd]):
-        t_next = t + 1, x_next
+def update(t, x):
+    x_next = x + 1
+    # upd = tf.assign_add(x, [[1]])
+    # with l2l.control_dependencies([upd]):
+    t_next = t + 1, x_next
 
-        return t_next
+    return t_next
 
-    t_final, y = tf.while_loop(
-        cond=lambda t, *_ : t < 10,
-        body=update,
-        loop_vars=([0, x]),
-        parallel_iterations=1,
-        swap_memory=True,
-        name="unroll")
+t_final, y = tf.while_loop(
+    cond=lambda t, *_ : t < 10,
+    body=update,
+    loop_vars=([0, x]),
+    parallel_iterations=1,
+    swap_memory=True,
+    name="unroll")
 
+iis = tf.InteractiveSession()
+iis.run(tf.global_variables_initializer())
+print iis.run(x)
+print iis.run(loss(x))
+print iis.run(gradients)
     # update_hidden_state = tf.assign(hidden_states[0], hidden_state_next[0])
     # with tf.Session() as sess:
     #     sess.run(tf.global_variables_initializer())
