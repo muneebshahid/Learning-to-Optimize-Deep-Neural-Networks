@@ -8,13 +8,14 @@ l2l = tf.Graph()
 with l2l.as_default():
     epochs = 10000
     dim = 50
-    tf.set_random_seed(10)
+    # tf.set_random_seed(10)
 
     
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
-    problem = problems.FitX(args={'dims': dim, 'dtype': tf.float32})
+    # problem = problems.FitX(args={'dims': dim, 'dtype': tf.float32})
+    problem = problems.Mnist(None)
     optimizer = meta_optimizer.l2l(problem, args={'state_size': 20, 'num_layers': 2, 'unroll_len': 20})
     loss_final, step, update = optimizer.step()
     
@@ -32,7 +33,7 @@ with l2l.as_default():
                 print 'Mean Log Loss: ', np.log10(loss / eval)
                 # print variables
                 print '-----\n'
-                with open('loss_file_upd', 'a') as log_file:
-                    log_file.write("{:.5f} ".format(np.log10(loss / eval)))
+                # with open('loss_file_upd', 'a') as log_file:
+                #     log_file.write("{:.5f} ".format(np.log10(loss / eval)))
                     # log_file.write(' {}\n'.format(variables))
                 loss = 0

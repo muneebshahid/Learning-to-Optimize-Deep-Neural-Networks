@@ -43,42 +43,42 @@ import numpy as np
 
 
 
-# l2l = tf.Graph()
-# with l2l.as_default():
-#     def problem():
-#         x = tf.get_variable('x', shape=[1,1], dtype=tf.float32, initializer=tf.ones_initializer(), trainable=False)
-#         def func(x):
-#             return tf.square(x, name='func')
-#         return x, func
-#
-#     state_size = 20
-#     num_layers = 1
-#
-#     x, func = problem()
-#
-#     def gradients(func, x):
-#         return tf.gradients(func(x), x, name='gradients_func')[0]
-#
-#     lstm_cell = tf.contrib.rnn.BasicLSTMCell(state_size)
-#     hidden_state = lstm_cell.zero_state(1, tf.float32)
-#
-#     # with tf.variable_scope('rnn'):
-#     #     lstm_cell(gradients(func, x), hidden_state)
-#     W = tf.get_variable('softmax_w', [state_size, 1])
-#     b = tf.get_variable('softmax_b', [1])
-#     # loss = 0
-#     optimizer = tf.train.AdamOptimizer(.01)
-#     output, hidden_state = lstm_cell(gradients(func, x), hidden_state)
-#     deltas = tf.add(tf.matmul(output, W, name='output_mult'), b, name='add_bias')
-#     x = tf.add(x, deltas, 'update_x')
-#     final_loss = func(x)
-#     step_optim = optimizer.minimize(final_loss)
-#
-#     with tf.Session() as sess:
-#         sess.run(tf.global_variables_initializer())
-#         writer = tf.summary.FileWriter('tf_log', sess.graph)
-#         for i in range(100):
-#             print sess.run([func(x), gradients(func, x), final_loss, W[0], step_optim])
+l2l = tf.Graph()
+with l2l.as_default():
+    def problem():
+        x = tf.get_variable('x', shape=[1, 1], dtype=tf.float32, initializer=tf.ones_initializer(), trainable=False)
+        def func(x):
+            return tf.square(x, name='func')
+        return x, func
+
+    state_size = 20
+    num_layers = 1
+
+    x, func = problem()
+
+    def gradients(func, x):
+        return tf.gradients(func(x), x, name='gradients_func')[0]
+
+    lstm_cell = tf.contrib.rnn.BasicLSTMCell(state_size)
+    hidden_state = lstm_cell.zero_state(1, tf.float32)
+
+    # with tf.variable_scope('rnn'):
+    #     lstm_cell(gradients(func, x), hidden_state)
+    W = tf.get_variable('softmax_w', [state_size, 1])
+    b = tf.get_variable('softmax_b', [1])
+    # loss = 0
+    optimizer = tf.train.AdamOptimizer(.01)
+    output, hidden_state = lstm_cell(gradients(func, x), hidden_state)
+    deltas = tf.add(tf.matmul(output, W, name='output_mult'), b, name='add_bias')
+    x = tf.add(x, deltas, 'update_x')
+    final_loss = func(x)
+    step_optim = optimizer.minimize(final_loss)
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        writer = tf.summary.FileWriter('tf_log', sess.graph)
+        for i in range(100):
+            print sess.run([func(x), gradients(func, x), final_loss, W[0], step_optim])
 
 
 
@@ -200,47 +200,71 @@ import numpy as np
 
 # l2l = tf.Graph()
 # with l2l.as_default():
-tf.set_random_seed(100)
-lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
-hidden_states = lstm_cell.zero_state(2, tf.float32)
-x = tf.get_variable(
-        "x",
-        shape=[1, 2],
-        dtype=tf.float32,
-        initializer=tf.random_normal_initializer(), trainable=False)
+# tf.set_random_seed(100)
 
-def loss(x):
-    return tf.reduce_sum(tf.square(x, name='squared_loss'))
-gradients = tf.reshape(tf.gradients(loss(x), x)[0], [2, 1])
-output, hidden_state_next = lstm_cell(gradients, hidden_states)
+# dim_1, dim_2 = 2, 2
+# flat = dim_1 * dim_2
+
+# lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
+# hidden_states = lstm_cell.zero_state(flat, tf.float32)
+# x = tf.get_variable(
+#         "x",
+#         shape=[dim_1, dim_2],
+#         dtype=tf.float32,
+#         initializer=tf.random_normal_initializer(), trainable=False)
+
+# def loss(x):
+#     return tf.reduce_sum(tf.matmul(x, x))
+
+# w = tf.get_variable('softmax_w', [10, 1])
+# b = tf.get_variable('softmax_b', [1])
+
+# gradients = tf.gradients(loss(x), x)[0]
+# gradients_reshaped = tf.reshape(gradients, [flat, 1])
+
+# with tf.variable_scope('rnn'):
+#     lstm_cell(gradients_reshaped, hidden_states)
+
+# def get_deltas(gradients):
+#     with tf.variable_scope('rnn', reuse=True):
+#         output, hidden_state_next = lstm_cell(gradients, hidden_states)
+#         deltas = tf.add(tf.matmul(output, w), b)
+#     return output, tf.reshape(deltas, [dim_1, dim_2]
+
+# deltas = get_deltas(gradients_reshaped)
+
+# y = x + deltas
 
 
-def update(t, x):
-    x_next = x + 1
-    # upd = tf.assign_add(x, [[1]])
-    # with l2l.control_dependencies([upd]):
-    t_next = t + 1, x_next
 
-    return t_next
 
-t_final, y = tf.while_loop(
-    cond=lambda t, *_ : t < 10,
-    body=update,
-    loop_vars=([0, x]),
-    parallel_iterations=1,
-    swap_memory=True,
-    name="unroll")
 
-iis = tf.InteractiveSession()
-iis.run(tf.global_variables_initializer())
-print iis.run(x)
-print iis.run(loss(x))
-print iis.run(gradients)
-    # update_hidden_state = tf.assign(hidden_states[0], hidden_state_next[0])
-    # with tf.Session() as sess:
-    #     sess.run(tf.global_variables_initializer())
-    #     writer = tf.summary.FileWriter('tf_log', sess.graph)
-    #     print sess.run(output, update_hidden_state)
+# def update(t, x):
+#     x_next = x + 1
+#     # upd = tf.assign_add(x, [[1]])
+#     # with l2l.control_dependencies([upd]):
+#     t_next = t + 1, x_next
+
+#     return t_next
+
+# t_final, y = tf.while_loop(
+#     cond=lambda t, *_ : t < 10,
+#     body=update,
+#     loop_vars=([0, x]),
+#     parallel_iterations=1,
+#     swap_memory=True,
+#     name="unroll")
+
+# iis = tf.InteractiveSession()
+# iis.run(tf.global_variables_initializer())
+# print iis.run(x)
+# print iis.run(loss(x))
+# # print iis.run(gradients)
+#     # update_hidden_state = tf.assign(hidden_states[0], hidden_state_next[0])
+#     # with tf.Session() as sess:
+#     #     sess.run(tf.global_variables_initializer())
+#     #     writer = tf.summary.FileWriter('tf_log', sess.graph)
+#     #     print sess.run(output, update_hidden_state)
 
 
 

@@ -39,8 +39,8 @@ class l2l(Meta_Optimizer):
         with tf.variable_scope('rnn'):
             self.W = tf.get_variable('softmax_w', [self.state_size, 1])
             self.b = tf.get_variable('softmax_b', [1])
-            lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.state_size)
-            self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([lstm_cell] * self.num_layers)
+            self.meta_optimizer = tf.contrib.rnn.BasicLSTMCell(self.state_size)
+            self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
             self.hidden_states = [self.meta_optimizer.zero_state(shape, tf.float32) for shape in self.problem.variables_flattened_shape]
             gradients = self.problem.get_gradients(self.problem.variables)[0]
             self.meta_optimizer(gradients, self.hidden_states[0])
