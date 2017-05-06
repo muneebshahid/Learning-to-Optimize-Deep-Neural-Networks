@@ -1,5 +1,6 @@
 from abc import ABCMeta
 import tensorflow as tf
+from tensorflow.python.util import nest
 
 class Meta_Optimizer():
 
@@ -46,35 +47,36 @@ class l2l(Meta_Optimizer):
             self.meta_optimizer(gradients, self.hidden_states[0])
 
     def step(self):
-        def update(t, loss, params, hidden_states):
-            gradients = self.problem.get_gradients(params)
+        def update(t, fx_array, params, hidden_states):
+            rnn_inputs = self.problem.get_gradients(params)
             with tf.variable_scope('rnn', reuse=True):
-                for i, (gradient, hidden_state) in enumerate(zip(gradients, hidden_states)):
-                    output, hidden_states[i] = self.meta_optimizer(gradient, hidden_state)
+                for i, (rnn_input, hidden_state) in enumerate(zip(rnn_inputs, hidden_states)):
+                    output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
                     deltas = tf.add(tf.matmul(output, self.W), self.b)
                     deltas = tf.reshape(deltas, self.problem.variables[i].get_shape())
                     params[i] = tf.add(params[i], deltas)
-            loss += self.problem.loss(params)
+            fx_array = fx_array.write(t, self.problem.loss(params))
             t_next = t + 1
-            return t_next, loss, params, hidden_states
+            return t_next, fx_array, params, hidden_states
 
-        _, loss_final, vars_final, self.hidden_states = tf.while_loop(
+        fx_array = tf.TensorArray(tf.float32, size=self.unroll_len,
+                              clear_after_read=False)
+        _, fx_array, vars_final, self.hidden_states = tf.while_loop(
             cond=lambda t, *_ : t < self.unroll_len,
             body=update,
-            loop_vars=([0, tf.zeros([1, 1]), self.problem.variables, self.hidden_states]),
+            loop_vars=([0, fx_array, self.problem.variables, self.hidden_states]),
             parallel_iterations=1,
             swap_memory=True,
             name="unroll")
 
         with tf.variable_scope('update_params'):
             update_params = [tf.assign(self.problem.variables[i], vars_final[i]) for i, (_, _) in enumerate(zip(self.problem.variables, vars_final))]
-
-
-        loss_sum = tf.divide(tf.reduce_sum(loss_final), self.unroll_len)
+        reset = fx_array.close()
+        loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
         # loss_sum = self.problem.loss(self.problem.variables)
         step = self.optimizer.minimize(loss_sum)
         # step = None
-        return loss_sum, step, update_params
+        return loss_sum, step, update_params, reset
 
     def optimize(self):
         print 'optimize'

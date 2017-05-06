@@ -149,10 +149,11 @@ class Mnist(Problem):
 
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
-                self.w_1 = self.create_variable('w_1', dims=[self.train_data['images'].get_shape()[1].value, 20])                  
-                self.b_1 = self.create_variable('b_1', dims=[1, 20])
-                self.w_out = self.create_variable('w_out', dims=[20, 10])
-                self.b_out = self.create_variable('b_out', dims=[1, 10])
+                self.w_1 = self.create_variable('w_1', dims=[self.train_data['images'].get_shape()[1].value, 20], \
+                                                initializer=tf.contrib.layers.xavier_initializer())
+                self.b_1 = self.create_variable('b_1', dims=[1, 20], initializer=tf.contrib.layers.xavier_initializer())
+                self.w_out = self.create_variable('w_out', dims=[20, 10], initializer=tf.contrib.layers.xavier_initializer())
+                self.b_out = self.create_variable('b_out', dims=[1, 10], initializer=tf.contrib.layers.xavier_initializer())
     
     def __xent_loss(self, output, labels):
         loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)
@@ -165,7 +166,7 @@ class Mnist(Problem):
 
     def get_batch(self):
         indices = tf.random_uniform([128], 0, self.train_data['images'].get_shape()[0].value, tf.int64)
-        # indices = tf.range(128)
+        # indices = tf.range(1)
         batch_images = tf.gather(self.train_data['images'], indices)
         batch_labels = tf.gather(self.train_data['labels'], indices)
         return batch_images, batch_labels
