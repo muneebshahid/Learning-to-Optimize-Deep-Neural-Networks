@@ -2,6 +2,7 @@ from abc import ABCMeta
 import tensorflow as tf
 import numpy as np
 from tensorflow.contrib.learn.python.learn.datasets import mnist as mnist_dataset
+import preprocess
 
 
 class Problem():
@@ -15,11 +16,12 @@ class Problem():
     meta = None
     variable_scope = 'variables'
     constant_scope = 'constants'
+    do_preprocessing = None
 
-    def __init__(self, args={'dims': 1, 'dtype': tf.float32}, meta=True):
-        self.dims = args['dims']
-        self.dtype = args['dtype']
-        self.meta = meta        
+    def __init__(self, args={}):
+        self.dims = args['dims'] if args.has_key('dims') else 1
+        self.dtype = args['dtype'] if args.has_key('dtype') else tf.float32
+        self.meta = args['meta'] if args.has_key('meta') else True
         self.variables = []
         self.constants = []
         self.variables_flattened_shape = []
@@ -27,7 +29,7 @@ class Problem():
     def create_variable(self, name, initializer=tf.random_normal_initializer(), constant=False, dims=None):
         shape = [self.dims, 1] if dims is None else dims
         variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
-                                   initializer=initializer, trainable=self.is_trainalbe)
+                                   initializer=initializer, trainable=self.is_trainable)
         if constant:
             self.constants.append(variable)
         else:
@@ -36,30 +38,36 @@ class Problem():
         return variable
 
     @property
-    def is_trainalbe(self):
+    def is_trainable(self):
         return not self.meta
 
-    def loss(self, vars):
+    def loss(self, variables):
         pass
 
-    def get_gradients(self, vars):
-        gradients = tf.gradients(self.loss(vars), vars)
+    def pre_process(self, gradients):
+        return gradients
+
+    def gradients(self, variables):
+        return tf.gradients(self.loss(variables), variables)
+
+    def get_gradients(self, variables):
+        gradients = self.gradients(variables)
         for i, gradient in enumerate(gradients):
-            gradients[i] = tf.reshape(gradients[i], [self.variables_flattened_shape[i], 1])
+            gradients[i] = self.pre_process(tf.reshape(gradients[i], [self.variables_flattened_shape[i], 1]))
         return gradients
 
 
-class ElementwiseSquare(Problem):     
+class ElementwiseSquare(Problem):
 
     x = None
 
-    def __init__(self, args, meta=True):
-        super(ElementwiseSquare, self).__init__(args=args, meta=meta)
+    def __init__(self, args):
+        super(ElementwiseSquare, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
             self.x = self.create_variable('x', tf.random_uniform_initializer())
 
-    def loss(self, vars):
-        return tf.reduce_sum(tf.square(vars[0], name='x_squared'))        
+    def loss(self, variables):
+        return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
 
 
 class FitX(Problem):
@@ -75,8 +83,8 @@ class FitX(Problem):
             self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
             self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
 
-    def loss(self, vars):
-        return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(vars[0], self.x), self.y)))
+    def loss(self, variables):
+        return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(variables[0], self.x), self.y)))
 
 class TwoVars(Problem):
 
@@ -88,48 +96,51 @@ class TwoVars(Problem):
             self.x = self.create_variable('x', initializer=tf.random_normal_initializer(), dims=[1, self.dims])
             self.y = self.create_variable('y', initializer=tf.random_normal_initializer())
 
-    def loss(self, vars):
-        return tf.reduce_sum(tf.matmul(tf.square(vars[0], name='x_square'), tf.square(vars[1], name='y_square'), name='matmul'))
+    def loss(self, variables):
+        return tf.reduce_sum(tf.matmul(tf.square(variables[0], name='x_square'), tf.square(variables[1], name='y_square'), name='matmul'))
 
 class Quadratic(Problem):
 
     W, Y = None, None
 
-    def __init__(self, args, meta=True):
-        super(Quadratic, self).__init__(args=args, meta=meta)
+    def __init__(self, args):
+        super(Quadratic, self).__init__(args=args)
         stddev = args['stddev']
         dtype = args['dtype']
 
         with tf.variable_scope('variables'):
             self.variables = tf.get_variable("x", shape=[self.batch_size, self.dims], dtype=self.dtype,
-                            initializer=tf.random_normal_initializer(stddev=stddev), trainable=self.is_trainalbe)
+                                             initializer=tf.random_normal_initializer(stddev=stddev), trainable=self.is_trainable)
 
         with tf.variable_scope('constant'):
             self.Y = tf.get_variable("Y", shape=[self.batch_size, self.dims], dtype=dtype,
-                            initializer=tf.random_uniform_initializer(), trainable=self.is_trainalbe)
+                                     initializer=tf.random_uniform_initializer(), trainable=self.is_trainable)
             self.W = tf.get_variable("W", shape=[self.batch_size, self.dims, self.dims], dtype=self.dtype,
-                        initializer=tf.random_uniform_initializer(), trainable=self.is_trainalbe)
+                                     initializer=tf.random_uniform_initializer(), trainable=self.is_trainable)
             self.const = [self.W, self.Y]
 
-    def loss(self, vars):
-        product = tf.squeeze(tf.matmul(self.W, tf.expand_dims(vars, -1)))
+    def loss(self, variables):
+        product = tf.squeeze(tf.matmul(self.W, tf.expand_dims(variables, -1)))
         return tf.reduce_mean(tf.reduce_sum((product - self.Y) ** 2, 1))
 
 class Mnist(Problem):
+
     train_data = None
     test_data = None
     w_1 = None
     w_out = None
     b_1 = None
     b_out = None
-    
-    def __init__(self, args, meta=True):
-        super(Mnist, self).__init__(meta=False)
+    pre = None
+    def __init__(self, args):
+        super(Mnist, self).__init__(args=args)
+        if args['preprocess']:
+            self.pre = preprocess.LogAndSign(args['p'])
         def get_data(data, mode):
             mode_data = getattr(data, mode)
             images = tf.constant(mode_data.images, dtype=tf.float32, name="MNIST_images_" + mode)
             # labels = tf.constant(mode_data.labels, dtype=tf.int64, name="MNIST_labels_" + mode)
-            labels = tf.one_hot(mode_data.labels, 10)
+            labels = tf.one_hot(mode_data.labels, 10, name="MNIST_labels_" + mode)
             return images, labels
         data = mnist_dataset.load_mnist()
         self.train_data = {}
@@ -147,21 +158,28 @@ class Mnist(Problem):
         loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)
         return tf.reduce_mean(loss)
 
-    def network(self, batch, vars):
-        layer_1 = tf.sigmoid(tf.add(tf.matmul(batch, vars[0]), vars[1]))
-        layer_out = tf.add(tf.matmul(layer_1, vars[2]), vars[3])
+    def network(self, batch, variables):
+        layer_1 = tf.sigmoid(tf.add(tf.matmul(batch, variables[0]), variables[1]))
+        layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
         return layer_out
-    
+
     def get_batch(self):
         indices = tf.random_uniform([128], 0, self.train_data['images'].get_shape()[0].value, tf.int64)
+        # indices = tf.range(128)
         batch_images = tf.gather(self.train_data['images'], indices)
         batch_labels = tf.gather(self.train_data['labels'], indices)
         return batch_images, batch_labels
     
-    def loss(self, vars):
+    def loss(self, variables):
         batch_images, batch_labels = self.get_batch()
-        output = self.network(batch_images, vars)
+        output = self.network(batch_images, variables)
         return self.__xent_loss(output, batch_labels)
+
+    def pre_process(self, gradients):
+        if self.pre is not None:
+            return self.pre.process(gradients)
+        else:
+            return gradients
 
 
             
