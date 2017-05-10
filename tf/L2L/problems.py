@@ -26,7 +26,7 @@ class Problem():
         self.constants = []
         self.variables_flattened_shape = []
 
-    def create_variable(self, name, initializer=tf.random_normal_initializer(), constant=False, dims=None):
+    def create_variable(self, name, initializer=tf.random_normal_initializer(mean=0, stddev=0.01), constant=False, dims=None):
         shape = [self.dims, 1] if dims is None else dims
         variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
                                    initializer=initializer, trainable=self.is_trainable)
@@ -149,11 +149,10 @@ class Mnist(Problem):
 
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
-                self.w_1 = self.create_variable('w_1', dims=[self.train_data['images'].get_shape()[1].value, 20], \
-                                                initializer=tf.contrib.layers.xavier_initializer())
-                self.b_1 = self.create_variable('b_1', dims=[1, 20], initializer=tf.contrib.layers.xavier_initializer())
-                self.w_out = self.create_variable('w_out', dims=[20, 10], initializer=tf.contrib.layers.xavier_initializer())
-                self.b_out = self.create_variable('b_out', dims=[1, 10], initializer=tf.contrib.layers.xavier_initializer())
+                self.w_1 = self.create_variable('w_1', dims=[self.train_data['images'].get_shape()[1].value, 20])
+                self.b_1 = self.create_variable('b_1', dims=[1, 20])
+                self.w_out = self.create_variable('w_out', dims=[20, 10])
+                self.b_out = self.create_variable('b_out', dims=[1, 10])
     
     def __xent_loss(self, output, labels):
         loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)

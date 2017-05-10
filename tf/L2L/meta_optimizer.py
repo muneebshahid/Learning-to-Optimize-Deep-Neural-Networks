@@ -34,15 +34,21 @@ class l2l(Meta_Optimizer):
         self.state_size = args['state_size']
         self.num_layers = args['num_layers']
         self.unroll_len = args['unroll_len']
-        self.optimizer = tf.train.AdamOptimizer(.01)
+        self.optimizer = tf.train.AdamOptimizer(.001)
 
-        # intialize for later use.
+        # initialize for later use.
         with tf.variable_scope('rnn'):
+            def get_states(batch_size):
+                state_variable = []
+                for state_c, state_h in self.meta_optimizer.zero_state(batch_size, tf.float32):
+                    state_variable.append(tf.contrib.rnn.LSTMStateTuple(tf.Variable(state_c, trainable=False),
+                                                                        tf.Variable(state_h, trainable=False)))
+                return tuple(state_variable)
             self.W = tf.get_variable('softmax_w', [self.state_size, 1])
             self.b = tf.get_variable('softmax_b', [1])
             self.meta_optimizer = tf.contrib.rnn.BasicLSTMCell(self.state_size)
             self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
-            self.hidden_states = [self.meta_optimizer.zero_state(shape, tf.float32) for shape in self.problem.variables_flattened_shape]
+            self.hidden_states = [get_states(shape) for shape in self.problem.variables_flattened_shape]
             gradients = self.problem.get_gradients(self.problem.variables)[0]
             self.meta_optimizer(gradients, self.hidden_states[0])
 
@@ -54,6 +60,7 @@ class l2l(Meta_Optimizer):
                     output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
                     deltas = tf.add(tf.matmul(output, self.W), self.b)
                     deltas = tf.reshape(deltas, self.problem.variables[i].get_shape())
+                    deltas = tf.multiply(deltas, .001)
                     params[i] = tf.add(params[i], deltas)
             fx_array = fx_array.write(t, self.problem.loss(params))
             t_next = t + 1
@@ -61,7 +68,7 @@ class l2l(Meta_Optimizer):
 
         fx_array = tf.TensorArray(tf.float32, size=self.unroll_len,
                               clear_after_read=False)
-        _, fx_array, vars_final, self.hidden_states = tf.while_loop(
+        _, fx_array, vars_final, hidden_states_final = tf.while_loop(
             cond=lambda t, *_ : t < self.unroll_len,
             body=update,
             loop_vars=([0, fx_array, self.problem.variables, self.hidden_states]),
@@ -69,9 +76,25 @@ class l2l(Meta_Optimizer):
             swap_memory=True,
             name="unroll")
 
-        with tf.variable_scope('update_params'):
-            update_params = [tf.assign(self.problem.variables[i], vars_final[i]) for i, (_, _) in enumerate(zip(self.problem.variables, vars_final))]
-        reset = fx_array.close()
+        with tf.name_scope('update_params'):
+            update_params = list()
+            update_params.append([tf.assign(variable, variable_final) for variable, variable_final in zip(self.problem.variables, vars_final)])
+            update_params.append([tf.assign(hidden_state, hidden_state_final) for hidden_state, hidden_state_final in zip(nest.flatten(self.hidden_states), nest.flatten(hidden_states_final))])
+            # update_params.append([tf.assign(self.problem.variables[i], vars_final[i]) for i, (_, _) in enumerate(zip(self.problem.variables, vars_final))])
+            # update_hidden_states = list()
+            # for i, _ in enumerate(self.hidden_states):
+            #     for j in range(self.num_layers):
+            #         for k in range(len(self.hidden_states[i][j])):
+            #             update_hidden_states.append(tf.assign(self.hidden_states[i][j][k], hidden_states_final[i][j][k]))
+            # update_params.append(update_hidden_states)
+
+        with tf.name_scope('reset_variables'):
+            reset = tf.variables_initializer(self.problem.variables + self.problem.constants + nest.flatten(self.hidden_states))
+            # reset.append(self.problem.constants)
+            # for i, _ in enumerate(self.hidden_states):
+            #     for j in range(self.num_layers):
+            #         reset.append(tf.variables_initializer(self.hidden_states[i][j]))
+
         loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
         # loss_sum = self.problem.loss(self.problem.variables)
         step = self.optimizer.minimize(loss_sum)
