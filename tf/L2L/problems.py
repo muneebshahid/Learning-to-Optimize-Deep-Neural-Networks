@@ -17,8 +17,10 @@ class Problem():
     variable_scope = 'variables'
     constant_scope = 'constants'
     do_preprocessing = None
+    allow_gradients_of_gradients = None
 
     def __init__(self, args={}):
+        self.allow_gradients_of_gradients = args['gog']
         self.dims = args['dims'] if args.has_key('dims') else 1
         self.dtype = args['dtype'] if args.has_key('dtype') else tf.float32
         self.meta = args['meta'] if args.has_key('meta') else True
@@ -47,11 +49,13 @@ class Problem():
     def pre_process(self, gradients):
         return gradients
 
-    def gradients(self, variables):
+    def gradients_raw(self, variables):
         return tf.gradients(self.loss(variables), variables)
 
     def get_gradients(self, variables):
-        gradients = self.gradients(variables)
+        gradients = self.gradients_raw(variables)
+        if not self.allow_gradients_of_gradients:
+            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
         for i, gradient in enumerate(gradients):
             gradients[i] = self.pre_process(tf.reshape(gradients[i], [self.variables_flattened_shape[i], 1]))
         return gradients
@@ -132,6 +136,7 @@ class Mnist(Problem):
     b_1 = None
     b_out = None
     pre = None
+
     def __init__(self, args):
         super(Mnist, self).__init__(args=args)
         if args['preprocess']:
@@ -139,8 +144,11 @@ class Mnist(Problem):
         def get_data(data, mode):
             mode_data = getattr(data, mode)
             images = tf.constant(mode_data.images, dtype=tf.float32, name="MNIST_images_" + mode)
-            # labels = tf.constant(mode_data.labels, dtype=tf.int64, name="MNIST_labels_" + mode)
-            labels = tf.one_hot(mode_data.labels, 10, name="MNIST_labels_" + mode)
+            if self.allow_gradients_of_gradients:
+                labels = tf.one_hot(mode_data.labels, 10, name="MNIST_labels_" + mode)
+            else:
+                labels = tf.constant(mode_data.labels, dtype=tf.int64, name="MNIST_labels_" + mode)
+
             return images, labels
         data = mnist_dataset.load_mnist()
         self.train_data = {}
@@ -155,7 +163,10 @@ class Mnist(Problem):
                 self.b_out = self.create_variable('b_out', dims=[1, 10])
     
     def __xent_loss(self, output, labels):
-        loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)
+        if self.allow_gradients_of_gradients:
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)
+        else:
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=output, labels=labels)
         return tf.reduce_mean(loss)
 
     def network(self, batch, variables):

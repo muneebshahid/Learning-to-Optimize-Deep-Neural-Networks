@@ -11,7 +11,6 @@ class Meta_Optimizer():
     optimizer = None
     hidden_states = None
     unroll_len = None
-    
 
     def __init__(self, problem):
         self.problem = problem
@@ -27,6 +26,7 @@ class l2l(Meta_Optimizer):
 
     state_size = None
     num_layers = None
+    learning_rate = None
     W, b = None, None
 
     def __init__(self, problem, args):
@@ -34,6 +34,7 @@ class l2l(Meta_Optimizer):
         self.state_size = args['state_size']
         self.num_layers = args['num_layers']
         self.unroll_len = args['unroll_len']
+        self.learning_rate = args['learning_rate']
         self.optimizer = tf.train.AdamOptimizer(.001)
 
         # initialize for later use.
@@ -60,7 +61,7 @@ class l2l(Meta_Optimizer):
                     output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
                     deltas = tf.add(tf.matmul(output, self.W), self.b)
                     deltas = tf.reshape(deltas, self.problem.variables[i].get_shape())
-                    deltas = tf.multiply(deltas, .001)
+                    deltas = tf.multiply(deltas, self.learning_rate)
                     params[i] = tf.add(params[i], deltas)
             fx_array = fx_array.write(t, self.problem.loss(params))
             t_next = t + 1
