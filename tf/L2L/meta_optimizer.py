@@ -35,7 +35,7 @@ class l2l(Meta_Optimizer):
         self.num_layers = args['num_layers']
         self.unroll_len = args['unroll_len']
         self.learning_rate = args['learning_rate']
-        self.optimizer = tf.train.AdamOptimizer(.001)
+        self.optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
 
         # initialize for later use.
         with tf.variable_scope('rnn'):
