@@ -21,10 +21,12 @@ with l2l.as_default():
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
-    problem = problems.Mnist(args={'gog': second_derivatives, 'preprocess': True, 'p': 5})
-    optimizer = meta_optimizer.l2l(problem, args={'state_size': 20, 'num_layers': 2, \
-                                                  'unroll_len': unroll_len, 'learning_rate': 0.001,\
-                                                  'meta_learning_rate': 0.001})
+
+    problem = problems.Mnist(args={'gog': second_derivatives})
+    optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                   args={'state_size': 20, 'num_layers': 2, \
+                                         'unroll_len': unroll_len, 'learning_rate': 0.001,\
+                                         'meta_learning_rate': 0.001})
     loss_final, step, update, reset = optimizer.step()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
     with ms.MonitoredSession() as sess:

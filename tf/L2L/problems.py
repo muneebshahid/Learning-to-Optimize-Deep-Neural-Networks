@@ -2,7 +2,6 @@ from abc import ABCMeta
 import tensorflow as tf
 import numpy as np
 from tensorflow.contrib.learn.python.learn.datasets import mnist as mnist_dataset
-import preprocess
 
 
 class Problem():
@@ -16,7 +15,6 @@ class Problem():
     meta = None
     variable_scope = 'variables'
     constant_scope = 'constants'
-    do_preprocessing = None
     allow_gradients_of_gradients = None
 
     def __init__(self, args={}):
@@ -45,20 +43,6 @@ class Problem():
 
     def loss(self, variables):
         pass
-
-    def pre_process(self, gradients):
-        return gradients
-
-    def gradients_raw(self, variables):
-        return tf.gradients(self.loss(variables), variables)
-
-    def get_gradients(self, variables):
-        gradients = self.gradients_raw(variables)
-        if not self.allow_gradients_of_gradients:
-            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
-        for i, gradient in enumerate(gradients):
-            gradients[i] = self.pre_process(tf.reshape(gradients[i], [self.variables_flattened_shape[i], 1]))
-        return gradients
 
 
 class ElementwiseSquare(Problem):
@@ -135,12 +119,9 @@ class Mnist(Problem):
     w_out = None
     b_1 = None
     b_out = None
-    pre = None
 
     def __init__(self, args):
         super(Mnist, self).__init__(args=args)
-        if args['preprocess']:
-            self.pre = preprocess.LogAndSign(args['p'])
         def get_data(data, mode):
             mode_data = getattr(data, mode)
             images = tf.constant(mode_data.images, dtype=tf.float32, name="MNIST_images_" + mode)
@@ -185,12 +166,6 @@ class Mnist(Problem):
         batch_images, batch_labels = self.get_batch()
         output = self.network(batch_images, variables)
         return self.__xent_loss(output, batch_labels)
-
-    def pre_process(self, gradients):
-        if self.pre is not None:
-            return self.pre.process(gradients)
-        else:
-            return gradients
 
 
             
