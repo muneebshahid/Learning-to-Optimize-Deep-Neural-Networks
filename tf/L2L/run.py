@@ -8,14 +8,14 @@ import util
 l2l = tf.Graph()
 with l2l.as_default():
     tf.set_random_seed(0)
-    epochs = 50000
+    epochs = 10000
     num_optim_steps_per_epoch = 100
     unroll_len = 20
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     second_derivatives = False
     epoch_interval = 10
     eval_epochs = 20
-    eval_interval = 100
+    eval_interval = 1000
     save_path = 'trained_models/rnn_model'
     restore_network = False
 
@@ -76,7 +76,7 @@ with l2l.as_default():
                 print 'LOSS: ', loss_eval_total
                 if loss_eval_total < best_evaluation:
                     print 'Better Loss Found'
-                    saver.save(sess, save_path)
+                    saver.save(sess, save_path + str(epoch))
                     np.save('best_eval', loss_eval_total)
                     print 'RNN Saved'
                     best_evaluation = loss_eval_total
