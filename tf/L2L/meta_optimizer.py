@@ -60,31 +60,41 @@ class l2l(Meta_Optimizer):
         self.optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
 
         # initialize for later use.
-        with tf.variable_scope('rnn'):
+        with tf.variable_scope('rnn_core'):
+
+            # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
                 state_variable = []
                 for state_c, state_h in self.meta_optimizer.zero_state(batch_size, tf.float32):
                     state_variable.append(tf.contrib.rnn.LSTMStateTuple(tf.Variable(state_c, trainable=False),
                                                                         tf.Variable(state_h, trainable=False)))
                 return tuple(state_variable)
-            self.W = tf.get_variable('softmax_w', [self.state_size, 1])
-            self.b = tf.get_variable('softmax_b', [1])
+
             self.meta_optimizer = tf.contrib.rnn.BasicLSTMCell(self.state_size)
             self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
-            self.hidden_states = [get_states(shape) for shape in self.problem.variables_flattened_shape]
             gradients = self.get_gradients(self.problem.variables)[0]
-            self.meta_optimizer(gradients, self.hidden_states[0])
+
+            with tf.variable_scope('hidden_states'):
+                self.hidden_states = [get_states(shape) for shape in self.problem.variables_flattened_shape]
+
+            with tf.variable_scope('rnn_init'):
+                self.meta_optimizer(gradients, self.hidden_states[0])
+
+            with tf.variable_scope('rnn_linear'):
+                self.W = tf.get_variable('softmax_w', [self.state_size, 1])
+                self.b = tf.get_variable('softmax_b', [1])
 
     def step(self):
         def update(t, fx_array, params, hidden_states):
             rnn_inputs = self.get_gradients(params)
-            with tf.variable_scope('rnn', reuse=True):
+            with tf.variable_scope('rnn_core'):
                 for i, (rnn_input, hidden_state) in enumerate(zip(rnn_inputs, hidden_states)):
-                    output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
-                    deltas = tf.add(tf.matmul(output, self.W), self.b)
-                    deltas = tf.reshape(deltas, self.problem.variables[i].get_shape())
-                    deltas = tf.multiply(deltas, self.learning_rate)
-                    params[i] = tf.add(params[i], deltas)
+                    with tf.variable_scope('rnn_init', reuse=True):
+                        output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
+                    deltas = tf.add(tf.matmul(output, self.W, name='output_matmul'), self.b, name='add_bias')
+                    deltas = tf.reshape(deltas, self.problem.variables[i].get_shape(), name='reshape_deltas')
+                    deltas = tf.multiply(deltas, self.learning_rate, 'multiply_deltas')
+                    params[i] = tf.add(params[i], deltas, 'add_deltas_params')
             fx_array = fx_array.write(t, self.problem.loss(params))
             t_next = t + 1
             return t_next, fx_array, params, hidden_states

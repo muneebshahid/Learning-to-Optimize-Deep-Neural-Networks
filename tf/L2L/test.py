@@ -152,36 +152,36 @@ def ele():
     return x, loss
 
 
-def quadratic(batch_size=1, num_dims=2, stddev=0.01, dtype=tf.float32):
-    """Quadratic problem: f(x) = ||Wx - y||."""
-    # Trainable variable.
-    x = tf.get_variable(
-        "x",
-        shape=[batch_size, num_dims],
-        dtype=dtype,
-        initializer=tf.random_normal_initializer(stddev=stddev), trainable=False)
-
-    # Non-trainable variables.
-    W = tf.get_variable("w",
-                        shape=[1, num_dims, num_dims],
-                        dtype=dtype,
-                        initializer=tf.random_uniform_initializer(),
-                        trainable=False)
-    Y = tf.get_variable("Y",
-                        shape=[1, num_dims],
-                        dtype=dtype,
-                        initializer=tf.random_uniform_initializer(),
-                        trainable=False)
-
-    def loss(x):
-        """Builds loss graph."""
-        product = tf.squeeze(tf.matmul(W, tf.expand_dims(x, -1)))
-        return tf.reduce_mean(tf.reduce_sum((product - Y) ** 2, 1))
-
-    def update(x_):
-    	return x_.assign_add([[1]])
-
-    return x, W, loss
+# def quadratic(batch_size=1, num_dims=2, stddev=0.01, dtype=tf.float32):
+#     """Quadratic problem: f(x) = ||Wx - y||."""
+#     # Trainable variable.
+#     x = tf.get_variable(
+#         "x",
+#         shape=[batch_size, num_dims],
+#         dtype=dtype,
+#         initializer=tf.random_normal_initializer(stddev=stddev), trainable=False)
+#
+#     # Non-trainable variables.
+#     W = tf.get_variable("w",
+#                         shape=[1, num_dims, num_dims],
+#                         dtype=dtype,
+#                         initializer=tf.random_uniform_initializer(),
+#                         trainable=False)
+#     Y = tf.get_variable("Y",
+#                         shape=[1, num_dims],
+#                         dtype=dtype,
+#                         initializer=tf.random_uniform_initializer(),
+#                         trainable=False)
+#
+#     def loss(x):
+#         """Builds loss graph."""
+#         product = tf.squeeze(tf.matmul(W, tf.expand_dims(x, -1)))
+#         return tf.reduce_mean(tf.reduce_sum((product - Y) ** 2, 1))
+#
+#     def update(x_):
+#     	return x_.assign_add([[1]])
+#
+#     return x, W, loss
 
 # x, w, loss = quadratic()
 
@@ -202,38 +202,36 @@ def quadratic(batch_size=1, num_dims=2, stddev=0.01, dtype=tf.float32):
 # with l2l.as_default():
 # tf.set_random_seed(100)
 
-# dim_1, dim_2 = 2, 2
-# flat = dim_1 * dim_2
+dim_1, dim_2 = 2, 2
+flat = dim_1 * dim_2
 
-# lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
-# hidden_states = lstm_cell.zero_state(flat, tf.float32)
-# x = tf.get_variable(
-#         "x",
-#         shape=[dim_1, dim_2],
-#         dtype=tf.float32,
-#         initializer=tf.random_normal_initializer(), trainable=False)
+lstm_cell = tf.contrib.rnn.BasicLSTMCell(10)
+hidden_states = lstm_cell.zero_state(flat, tf.float32)
+x = tf.get_variable(
+        "x",
+        shape=[dim_1, dim_2],
+        dtype=tf.float32,
+        initializer=tf.random_normal_initializer(), trainable=False)
 
-# def loss(x):
-#     return tf.reduce_sum(tf.matmul(x, x))
+def loss(x):
+    return tf.reduce_sum(tf.matmul(x, x))
 
-# w = tf.get_variable('softmax_w', [10, 1])
-# b = tf.get_variable('softmax_b', [1])
+w = tf.get_variable('softmax_w', [10, 1])
+b = tf.get_variable('softmax_b', [1])
 
-# gradients = tf.gradients(loss(x), x)[0]
-# gradients_reshaped = tf.reshape(gradients, [flat, 1])
+gradients = tf.gradients(loss(x), x)[0]
+gradients_reshaped = tf.reshape(gradients, [flat, 1])
 
-# with tf.variable_scope('rnn'):
-#     lstm_cell(gradients_reshaped, hidden_states)
+with tf.variable_scope('rnn'):
+    lstm_cell(gradients_reshaped, hidden_states)
 
-# def get_deltas(gradients):
-#     with tf.variable_scope('rnn', reuse=True):
-#         output, hidden_state_next = lstm_cell(gradients, hidden_states)
-#         deltas = tf.add(tf.matmul(output, w), b)
-#     return output, tf.reshape(deltas, [dim_1, dim_2]
+def get_deltas(gradients, hidden_states):
+    with tf.variable_scope('rnn', reuse=True):
+        output, hidden_state_next = lstm_cell(gradients, hidden_states)
+        deltas = tf.add(tf.matmul(output, w), b)
+    return tf.reshape(deltas, [dim_1, dim_2]), hidden_state_next
 
-# deltas = get_deltas(gradients_reshaped)
-
-# y = x + deltas
+deltas, hidden_states_next = get_deltas(gradients_reshaped, hidden_states)
 
 
 
@@ -255,16 +253,34 @@ def quadratic(batch_size=1, num_dims=2, stddev=0.01, dtype=tf.float32):
 #     swap_memory=True,
 #     name="unroll")
 
-# iis = tf.InteractiveSession()
-# iis.run(tf.global_variables_initializer())
-# print iis.run(x)
-# print iis.run(loss(x))
-# # print iis.run(gradients)
-#     # update_hidden_state = tf.assign(hidden_states[0], hidden_state_next[0])
-#     # with tf.Session() as sess:
-#     #     sess.run(tf.global_variables_initializer())
-#     #     writer = tf.summary.FileWriter('tf_log', sess.graph)
-#     #     print sess.run(output, update_hidden_state)
+iis = tf.InteractiveSession()
+iis.run(tf.global_variables_initializer())
+iis.run(x)
+iis.run(deltas)
+lstm_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='rnn')
+
+print 'default;'
+print x.eval(), lstm_vars[-1].eval()
+saver = tf.train.Saver(lstm_vars)
+
+saver.save(iis, 'model_rnn')
+iis.run(tf.assign(lstm_vars[-1], tf.random_normal(shape=[40])))
+iis.run(tf.assign(x, tf.random_normal(shape=[dim_1, dim_2])))
+
+print 'ass;'
+print x.eval(), lstm_vars[-1].eval()
+
+print 'restored'
+saver.restore(iis, 'model_rnn')
+print x.eval(), lstm_vars[-1].eval()
+
+
+# print iis.run(gradients)
+    # update_hidden_state = tf.assign(hidden_states[0], hidden_state_next[0])
+    # with tf.Session() as sess:
+    #     sess.run(tf.global_variables_initializer())
+    #     writer = tf.summary.FileWriter('tf_log', sess.graph)
+    #     print sess.run(output, update_hidden_state)
 
 
 
