@@ -7,7 +7,7 @@ import util
 #
 l2l = tf.Graph()
 with l2l.as_default():
-    # tf.set_random_seed(20)
+    tf.set_random_seed(0)
     epochs = 50000
     num_optim_steps_per_epoch = 100
     unroll_len = 20
@@ -15,7 +15,9 @@ with l2l.as_default():
     second_derivatives = False
     epoch_interval = 10
     eval_epochs = 20
-    eval_interval = 1000
+    eval_interval = 100
+    save_path = 'trained_models/rnn_model'
+    restore_network = False
 
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
@@ -29,7 +31,9 @@ with l2l.as_default():
                                          'meta_learning_rate': 0.01})
     loss_final, step, update, reset = optimizer.step()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
-    saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+    trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+    saver = tf.train.Saver(trainable_variables)
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         l2l.finalize()
@@ -37,8 +41,16 @@ with l2l.as_default():
         total_time = 0
         time = 0
 
-        mean_mats_values_list = list()
         best_evaluation = float("inf")
+        if restore_network:
+            print 'Resotring Optimizer'
+            saver.restore(sess, save_path)
+            best_evaluation = np.load('best_eval.npy')
+            print 'Best Eval loaded', best_evaluation
+
+        mean_mats_values_list = list()
+
+        print 'Starting Training...'
         for epoch in range(epochs):
             mean_mats_values = sess.run(mean_mats)
             # print mean_mats_values
@@ -55,13 +67,16 @@ with l2l.as_default():
                 mean_mats_values_list = list()
 
             if (epoch + 1) % eval_interval == 0:
+                print 'EVALUATION'
                 loss_eval_total = 0
                 for eval_epoch in range(eval_epochs):
                     time_eval, loss_eval = util.run_epoch(sess, loss_final, [update], reset, num_unrolls_per_epoch)
                     loss_eval_total += loss_eval
-                print 'EVALUATION'
+                loss_eval_total = np.log10(loss_eval_total)
                 print 'LOSS: ', loss_eval_total
                 if loss_eval_total < best_evaluation:
-                    print 'Saving RNN'
-                    saver.save(sess, 'rnn_model')
+                    print 'Better Loss Found'
+                    saver.save(sess, save_path)
+                    np.save('best_eval', loss_eval_total)
+                    print 'RNN Saved'
                     best_evaluation = loss_eval_total
