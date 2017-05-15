@@ -72,7 +72,7 @@ with l2l.as_default():
                 for eval_epoch in range(eval_epochs):
                     time_eval, loss_eval = util.run_epoch(sess, loss_final, [update], reset, num_unrolls_per_epoch)
                     loss_eval_total += loss_eval
-                loss_eval_total = np.log10(loss_eval_total)
+                loss_eval_total = np.log10(loss_eval_total / eval_interval)
                 print 'LOSS: ', loss_eval_total
                 if loss_eval_total < best_evaluation:
                     print 'Better Loss Found'
