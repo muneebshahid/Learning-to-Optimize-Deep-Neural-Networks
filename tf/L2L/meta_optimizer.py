@@ -128,6 +128,50 @@ class l2l(Meta_Optimizer):
 
 
 
+class mlp(Meta_Optimizer):
+
+    w_1, b_1, w_out, b_out = None, None, None, None
+
+    def meta_optimizer(self, input):
+        layer_activations = tf.sigmoid(tf.add(tf.matmul(input, self.w_1), self.b_1))
+        output = tf.tanh(tf.add(tf.matmul(layer_activations, self.w_out), self.b_out))
+        return output * self.learning_rate
+
+    def __init__(self, problem, processing_constant, second_derivatives, args):
+        super(mlp, self).__init__(problem, processing_constant, second_derivatives)
+        self.num_layers = args['num_layers']
+        self.learning_rate = args['learning_rate']
+        self.optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+        # init = tf.contrib.layers.xavier_initializer()
+        init = tf.random_normal_initializer(mean=0)
+        self.w_1 = tf.get_variable('w_1', shape=[2, 20], initializer=init)
+        self.b_1 = tf.get_variable('b_1', shape=[1, 20], initializer=init)
+        self.w_out = tf.get_variable('w_out', shape=[20, 1], initializer=init)
+        self.b_out = tf.get_variable('b_out', shape=[1, 1], initializer=init)
+
+    def meta_loss(self):
+        updated_vars = []
+        gradients = self.get_gradients(self.problem.variables)
+        for i, (variable, gradient) in enumerate(zip(self.problem.variables, gradients)):
+            deltas = self.meta_optimizer(gradient)
+            deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
+            updated_vars.append(tf.add(variable, deltas))
+        loss = self.problem.loss(updated_vars)
+        #reset = tf.variables_initializer([self.w_1, self.b_1, self.w_out, self.b_out])
+        reset = None
+        update_params = [tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, updated_vars)]
+        return [loss, update_params, reset]
+
+    def meta_minimize(self):
+        info = self.meta_loss()
+        step = self.optimizer.minimize(info[0])
+        info.append(step)
+        return info
+
+
+
+
+
 
 
 

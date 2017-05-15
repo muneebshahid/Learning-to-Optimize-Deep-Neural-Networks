@@ -1,12 +1,14 @@
 from timeit import default_timer as timer
 
 def run_epoch(sess, loss, ops, reset, num_unrolls):
-      """Runs one optimization epoch."""
-      start = timer()
-      sess.run(reset)
-      for _ in xrange(num_unrolls):
-        cost = sess.run([loss] + ops)[0]
-      return timer() - start, cost
+    """Runs one optimization epoch."""
+    start = timer()
+    if reset is not None:
+        sess.run(reset)
+    cost = 0
+    for _ in xrange(num_unrolls):
+        cost += sess.run([loss] + ops)[0]
+    return timer() - start, cost / num_unrolls
 
 
 def print_update(epoch, epochs, loss, epoch_interval, time):
