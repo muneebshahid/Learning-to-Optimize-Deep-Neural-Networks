@@ -9,9 +9,8 @@ with l2l.as_default():
     tf.set_random_seed(0)
     epochs = 100
     num_optim_steps_per_epoch = 100
-    unroll_len = 20
-    num_unrolls_per_epoch = num_optim_steps_per_epoch
-    eval_interval = 1000
+    unroll_len = 1
+    num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     load_path = 'trained_models/rnn_model'
     second_derivatives = False
 
@@ -41,6 +40,8 @@ with l2l.as_default():
 
             total_time += time
             total_loss += loss
+            print 'Epoch: ', np.log10(loss)
+            print 'loss: ', np.log10(loss)
         total_loss = np.log10(total_loss / epochs)
         print 'Final Loss: ', total_loss
 
