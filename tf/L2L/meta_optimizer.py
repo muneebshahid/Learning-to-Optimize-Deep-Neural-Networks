@@ -21,10 +21,10 @@ class Meta_Optimizer():
             self.preprocessor = preprocess.LogAndSign(processing_constant)
         self.second_derivatives = second_derivatives
 
-    def step(self):
+    def meta_loss(self):
         pass
 
-    def optimize(self):
+    def meta_minimize(self):
         pass
 
     def pre_process_gradients(self, gradients):
@@ -84,7 +84,7 @@ class l2l(Meta_Optimizer):
                 self.W = tf.get_variable('softmax_w', [self.state_size, 1])
                 self.b = tf.get_variable('softmax_b', [1])
 
-    def step(self):
+    def meta_loss(self):
         def update(t, fx_array, params, hidden_states):
             rnn_inputs = self.get_gradients(params)
             with tf.variable_scope('rnn_core'):
@@ -118,11 +118,13 @@ class l2l(Meta_Optimizer):
             reset = tf.variables_initializer(self.problem.variables + self.problem.constants + nest.flatten(self.hidden_states))
 
         loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
-        step = self.optimizer.minimize(loss_sum)
-        return loss_sum, step, update_params, reset
+        return [loss_sum, update_params, reset]
 
-    def optimize(self):
-        print 'optimize'
+    def meta_minimize(self):
+        info = self.meta_loss()
+        step = self.optimizer.minimize(info[0])
+        info.append(step)
+        return info
 
 
 

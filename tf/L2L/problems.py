@@ -113,7 +113,7 @@ class Quadratic(Problem):
 
 class Mnist(Problem):
 
-    train_data = None
+    data = None
     test_data = None
     w_1 = None
     w_out = None
@@ -132,13 +132,13 @@ class Mnist(Problem):
 
             return images, labels
         data = mnist_dataset.load_mnist()
-        self.train_data = {}
-        self.train_data['images'], self.train_data['labels'] = get_data(data, 'train')
+        self.data = dict()
+        self.data['images'], self.data['labels'] = get_data(data, args['mode'])
         # self.test_data['images'], self.test_data['labels'] = get_data(data, 'test')
 
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
-                self.w_1 = self.create_variable('w_1', dims=[self.train_data['images'].get_shape()[1].value, 20])
+                self.w_1 = self.create_variable('w_1', dims=[self.data['images'].get_shape()[1].value, 20])
                 self.b_1 = self.create_variable('b_1', dims=[1, 20])
                 self.w_out = self.create_variable('w_out', dims=[20, 10])
                 self.b_out = self.create_variable('b_out', dims=[1, 10])
@@ -156,10 +156,10 @@ class Mnist(Problem):
         return layer_out
 
     def get_batch(self):
-        indices = tf.random_uniform([128], 0, self.train_data['images'].get_shape()[0].value, tf.int64)
+        indices = tf.random_uniform([128], 0, self.data['images'].get_shape()[0].value, tf.int64)
         # indices = tf.range(1)
-        batch_images = tf.gather(self.train_data['images'], indices)
-        batch_labels = tf.gather(self.train_data['labels'], indices)
+        batch_images = tf.gather(self.data['images'], indices)
+        batch_labels = tf.gather(self.data['labels'], indices)
         return batch_images, batch_labels
     
     def loss(self, variables):
