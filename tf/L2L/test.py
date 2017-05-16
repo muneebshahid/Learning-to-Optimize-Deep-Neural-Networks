@@ -13,16 +13,26 @@ with l2l.as_default():
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     load_path = 'trained_models/rnn_model'
     second_derivatives = False
-    meta_learning_rate = 0.001
-    meta = False
+    meta_learning_rate = 0.01
+
+    optim = 'L2L'
+    meta = True
+
     problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'test'})
 
     if meta:
-        optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                   args={'state_size': 20, 'num_layers': 2, \
-                                         'unroll_len': unroll_len, 'learning_rate': 0.001,\
-                                         'meta_learning_rate': meta_learning_rate})
-        loss_final, update, reset = optimizer.meta_loss()
+        if optim == 'L2L':
+            optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                       args={'state_size': 20, 'num_layers': 2, \
+                                             'unroll_len': unroll_len, 'learning_rate': 0.001,\
+                                             'meta_learning_rate': meta_learning_rate})
+            loss_final, update, reset = optimizer.meta_loss()
+
+        elif optim == 'MLP':
+            optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                       args={'num_layers': 2, 'learning_rate': 0.0001,\
+                                             'meta_learning_rate': meta_learning_rate})
+            loss_final, update, reset = optimizer.meta_loss()
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
         slot_names = optimizer.get_slot_names()
