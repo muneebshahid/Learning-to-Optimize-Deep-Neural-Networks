@@ -157,8 +157,7 @@ class mlp(Meta_Optimizer):
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
-        #reset = tf.variables_initializer([self.w_1, self.b_1, self.w_out, self.b_out])
-        reset = None
+        reset = tf.variables_initializer(self.problem.variable + self.problem.constants)
         update_params = [tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, updated_vars)]
         return [loss, update_params, reset]
 
