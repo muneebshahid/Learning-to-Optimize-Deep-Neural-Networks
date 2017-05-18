@@ -11,7 +11,7 @@ with l2l.as_default():
     num_optim_steps_per_epoch = 100
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-    load_path = 'trained_models/rnn_model'
+    load_path = 'trained_models/model_'
     second_derivatives = False
     meta_learning_rate = 0.01
 

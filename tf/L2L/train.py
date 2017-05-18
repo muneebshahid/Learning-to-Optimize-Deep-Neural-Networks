@@ -10,7 +10,8 @@ with l2l.as_default():
     tf.set_random_seed(20)
     second_derivatives = False
 
-    save_path = 'trained_models/rnn_model'
+    save_path = 'trained_models/model_'
+    load_path = 'trained_models/model_'
     restore_network = False
     optim = 'MLP'
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
@@ -51,7 +52,7 @@ with l2l.as_default():
     loss_final, update, reset, step = optimizer.meta_minimize()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-    saver = tf.train.Saver(trainable_variables)
+    saver = tf.train.Saver(trainable_variables, max_to_keep=100)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -63,7 +64,7 @@ with l2l.as_default():
         best_evaluation = float("inf")
         if restore_network:
             print 'Resotring Optimizer'
-            saver.restore(sess, save_path)
+            saver.restore(sess, load_path)
             best_evaluation = np.load('best_eval.npy')
             print 'Best Eval loaded', best_evaluation
 
