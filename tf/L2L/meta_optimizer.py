@@ -60,7 +60,7 @@ class l2l(Meta_Optimizer):
         self.num_layers = args['num_layers']
         self.unroll_len = args['unroll_len']
         self.learning_rate = args['learning_rate']
-        self.optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+        self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
 
         # initialize for later use.
         with tf.variable_scope('rnn_core'):
@@ -68,20 +68,20 @@ class l2l(Meta_Optimizer):
             # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
                 state_variable = []
-                for state_c, state_h in self.meta_optimizer.zero_state(batch_size, tf.float32):
+                for state_c, state_h in self.optimizer.zero_state(batch_size, tf.float32):
                     state_variable.append(tf.contrib.rnn.LSTMStateTuple(tf.Variable(state_c, trainable=False),
                                                                         tf.Variable(state_h, trainable=False)))
                 return tuple(state_variable)
 
-            self.meta_optimizer = tf.contrib.rnn.BasicLSTMCell(self.state_size)
-            self.meta_optimizer = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
+            self.optimizer = tf.contrib.rnn.BasicLSTMCell(self.state_size)
+            self.optimizer = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
             gradients = self.get_processed_gradients(self.problem.variables)[0]
 
             with tf.variable_scope('hidden_states'):
                 self.hidden_states = [get_states(shape) for shape in self.problem.variables_flattened_shape]
 
             with tf.variable_scope('rnn_init'):
-                self.meta_optimizer(gradients, self.hidden_states[0])
+                self.optimizer(gradients, self.hidden_states[0])
 
             with tf.variable_scope('rnn_linear'):
                 self.W = tf.get_variable('softmax_w', [self.state_size, 1])
@@ -93,7 +93,7 @@ class l2l(Meta_Optimizer):
             with tf.variable_scope('rnn_core'):
                 for i, (rnn_input, hidden_state) in enumerate(zip(rnn_inputs, hidden_states)):
                     with tf.variable_scope('rnn_init', reuse=True):
-                        output, hidden_states[i] = self.meta_optimizer(rnn_input, hidden_state)
+                        output, hidden_states[i] = self.optimizer(rnn_input, hidden_state)
                     deltas = tf.add(tf.matmul(output, self.W, name='output_matmul'), self.b, name='add_bias')
                     deltas = tf.reshape(deltas, self.problem.variables[i].get_shape(), name='reshape_deltas')
                     deltas = tf.multiply(deltas, self.learning_rate, 'multiply_deltas')
@@ -125,7 +125,7 @@ class l2l(Meta_Optimizer):
 
     def meta_minimize(self):
         info = self.meta_loss()
-        step = self.optimizer.minimize(info[0])
+        step = self.meta_optimizer.minimize(info[0])
         info.append(step)
         return info
 
@@ -134,8 +134,10 @@ class l2l(Meta_Optimizer):
 class mlp(Meta_Optimizer):
 
     w_1, b_1, w_out, b_out = None, None, None, None
-    avg_gradients, beta_1 = None, None
-    def meta_optimizer(self, input):
+
+    enable_momentum, avg_gradients, beta_1 = None, None, None
+
+    def optimizer(self, input):
         layer_activations = tf.sigmoid(tf.add(tf.matmul(input, self.w_1), self.b_1))
         output = tf.tanh(tf.add(tf.matmul(layer_activations, self.w_out), self.b_out))
         return output * self.learning_rate
@@ -144,51 +146,64 @@ class mlp(Meta_Optimizer):
         super(mlp, self).__init__(problem, processing_constant, second_derivatives)
         self.num_layers = args['num_layers']
         self.learning_rate = args['learning_rate']
-        self.optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+        self.enable_momentum = args.has_key('momentum') and args['momentum']
+        self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
         # init = tf.contrib.layers.xavier_initializer()
-        init = tf.random_normal_initializer(mean=0)
-        self.w_1 = tf.get_variable('w_1', shape=[4, 20], initializer=init)
-        self.b_1 = tf.get_variable('b_1', shape=[1, 20], initializer=init)
-        self.w_out = tf.get_variable('w_out', shape=[20, 2], initializer=init)
-        self.b_out = tf.get_variable('b_out', shape=[1, 2], initializer=init)
-        self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
-                       for i, shape in enumerate(self.problem.variables_flattened_shape)]
-        self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
-                              for i, shape in enumerate(self.problem.variables_flattened_shape)]
+        with tf.variable_scope('meta_optimizer_core'):
+            init = tf.random_normal_initializer(mean=0)
+            input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
+            self.w_1 = tf.get_variable('w_1', shape=[input_dim, 20], initializer=init)
+            self.b_1 = tf.get_variable('b_1', shape=[1, 20], initializer=init)
+            self.w_out = tf.get_variable('w_out', shape=[20, output_dim], initializer=init)
+            self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
+
+        if self.enable_momentum:
+            self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
+                           for i, shape in enumerate(self.problem.variables_flattened_shape)]
+            self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
+                                  for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
     def meta_loss(self):
         update_params = list()
         updated_vars = list()
-        beta_1_new_list = list()
+        if self.enable_momentum:
+            beta_1_new_list = list()
 
         # prepare optimizer inputs
         flat_gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(self.get_gradients(self.problem.variables))]
         preprocessed_gradients = [self.preprocess_input(flat_gradient) for flat_gradient in flat_gradients]
-        avg_gradients_pre_processed = [self.preprocess_input(avg_gradient) for avg_gradient in self.avg_gradients]
-        optimizer_inputs = [tf.concat([gradient_pre_processed, avg_gradient_pre_processed], 1)
-                        for gradient_pre_processed, avg_gradient_pre_processed in
-                         zip(preprocessed_gradients, avg_gradients_pre_processed)]
-        
+        if self.enable_momentum:
+            avg_gradients_pre_processed = [self.preprocess_input(avg_gradient) for avg_gradient in self.avg_gradients]
+            optimizer_inputs = [tf.concat([gradient_pre_processed, avg_gradient_pre_processed], 1)
+                                for gradient_pre_processed, avg_gradient_pre_processed in
+                                zip(preprocessed_gradients, avg_gradients_pre_processed)]
+        else:
+            optimizer_inputs = preprocessed_gradients
+
         for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
-            output = self.meta_optimizer(optim_input)
-            deltas = tf.slice(output, [0, 0], [-1, 1], name='deltas')
-            beta_1_new = tf.slice(output, [0, 1], [-1, 1], name='beta_1_new')
-            beta_1_new_list.append(beta_1_new)
+            output = self.optimizer(optim_input)
+            if self.enable_momentum:
+                deltas = tf.slice(output, [0, 0], [-1, 1], name='deltas')
+                beta_1_new = tf.slice(output, [0, 1], [-1, 1], name='beta_1_new')
+                beta_1_new_list.append(beta_1_new)
+            else:
+                deltas = output
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
         # reset = tf.variables_initializer(self.problem.variable + self.problem.constants)
         reset = None
         update_params.append([tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, updated_vars)])
-        update_params.append([tf.assign(avg_gradient, avg_gradient * tf.sigmoid(beta_1_t) + (1 - tf.sigmoid(beta_1_t)) * gradient)
-                              for gradient, avg_gradient, beta_1_t in
-                              zip(flat_gradients, self.avg_gradients, self.beta_1)])
-        update_params.append([tf.assign(beta_1_old, beta_1_new) for beta_1_old, beta_1_new in zip(self.beta_1, beta_1_new_list)])
+        if self.enable_momentum:
+            update_params.append([tf.assign(avg_gradient, avg_gradient * tf.sigmoid(beta_1_t) + (1 - tf.sigmoid(beta_1_t)) * gradient)
+                                  for gradient, avg_gradient, beta_1_t in
+                                  zip(flat_gradients, self.avg_gradients, self.beta_1)])
+            update_params.append([tf.assign(beta_1_old, beta_1_new) for beta_1_old, beta_1_new in zip(self.beta_1, beta_1_new_list)])
         return [loss, update_params, reset]
 
     def meta_minimize(self):
         info = self.meta_loss()
-        step = self.optimizer.minimize(info[0])
+        step = self.meta_optimizer.minimize(info[0])
         info.append(step)
         return info
 
