@@ -19,8 +19,8 @@ with l2l.as_default():
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
 
-    problem = problems.Mnist(args={'gog': second_derivatives, 'mode': 'train'})
-
+    problem = problems.Mnist(args={'gog': second_derivatives})
+    test_loss = problem.loss(problem.variables, 'test')
     if optim == 'L2L':
         print 'Using L2L'
         epochs = 10000
@@ -91,6 +91,7 @@ with l2l.as_default():
                 loss_eval_total = 0
                 for eval_epoch in range(eval_epochs):
                     time_eval, loss_eval = util.run_epoch(sess, loss_final, [update], reset, num_unrolls_per_epoch)
+                    print sess.run(test_loss)
                     loss_eval_total += loss_eval
                 loss_eval_total = np.log10(loss_eval_total / eval_epochs)
                 print 'LOSS: ', loss_eval_total
