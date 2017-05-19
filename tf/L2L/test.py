@@ -15,7 +15,7 @@ with l2l.as_default():
     second_derivatives = False
     meta_learning_rate = 0.01
 
-    optim = 'L2L'
+    optim = 'MLP'
     meta = True
 
     problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'test'})
