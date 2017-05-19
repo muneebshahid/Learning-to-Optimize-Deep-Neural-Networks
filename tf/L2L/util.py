@@ -1,13 +1,19 @@
 from timeit import default_timer as timer
 
+
 def run_epoch(sess, loss, ops, reset, num_unrolls):
     """Runs one optimization epoch."""
+    cost = 0
+    final_ops = list()
+    final_ops.append(loss)
+    if ops is not None:
+        final_ops = final_ops + ops
+
     start = timer()
     if reset is not None:
         sess.run(reset)
-    cost = 0
     for _ in xrange(num_unrolls):
-        cost += sess.run([loss] + ops)[0]
+        cost += sess.run(final_ops)[0]
     return timer() - start, cost / num_unrolls
 
 
