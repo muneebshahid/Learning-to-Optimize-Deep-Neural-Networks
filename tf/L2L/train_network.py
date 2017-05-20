@@ -7,7 +7,7 @@ import util
 #
 l2l = tf.Graph()
 with l2l.as_default():
-    tf.set_random_seed(20)
+    tf.set_random_seed(50)
     second_derivatives = False
 
     save_path = 'trained_models/model_'
@@ -93,7 +93,7 @@ with l2l.as_default():
                 print 'VALIDATION LOSS: ', loss_eval_total
 
                 print 'TEST'
-                loss_eval_total = 0
+                loss_test_total = 0
                 for eval_epoch in range(test_epochs):
                     time_test, loss_test = util.run_epoch(sess, eval_loss, None, None, num_unrolls_per_epoch)
                     loss_test_total += loss_test
