@@ -7,7 +7,7 @@ import util
 #
 l2l = tf.Graph()
 with l2l.as_default():
-    tf.set_random_seed(50)
+    tf.set_random_seed(0)
     second_derivatives = False
 
     save_path = 'trained_models/model_'
@@ -43,7 +43,7 @@ with l2l.as_default():
         test_epochs = 500
         eval_interval = 10000
         optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                   args={'num_layers': 2, 'learning_rate': 0.001, 'meta_learning_rate': 0.01,
+                                   args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                          'momentum': True})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
@@ -70,7 +70,7 @@ with l2l.as_default():
         print 'Starting Training...'
         for epoch in range(epochs):
             mean_mats_values = sess.run(mean_mats)
-            # print mean_mats_values
+            #print mean_mats_values
             mean_mats_values_list.append(mean_mats_values)
             time, loss = util.run_epoch(sess, loss_final, [step, update], None, num_unrolls_per_epoch)
             total_loss += loss

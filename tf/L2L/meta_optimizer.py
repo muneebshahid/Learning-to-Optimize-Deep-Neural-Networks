@@ -158,9 +158,9 @@ class mlp(Meta_Optimizer):
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
 
         if self.enable_momentum:
-            self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
+            self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
                            for i, shape in enumerate(self.problem.variables_flattened_shape)]
-            self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
+            self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
                                   for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
     def meta_loss(self):
