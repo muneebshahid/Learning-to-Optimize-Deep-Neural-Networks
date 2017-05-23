@@ -139,7 +139,7 @@ class mlp(Meta_Optimizer):
 
     def optimizer(self, input):
         layer_activations = tf.sigmoid(tf.add(tf.matmul(input, self.w_1), self.b_1))
-        output = tf.tanh(tf.add(tf.matmul(layer_activations, self.w_out), self.b_out))
+        output = tf.add(tf.matmul(layer_activations, self.w_out), self.b_out)
         return output * self.learning_rate
 
     def __init__(self, problem, processing_constant, second_derivatives, args):
@@ -148,9 +148,8 @@ class mlp(Meta_Optimizer):
         self.learning_rate = args['learning_rate']
         self.enable_momentum = args.has_key('momentum') and args['momentum']
         self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
-        # init = tf.contrib.layers.xavier_initializer()
         with tf.variable_scope('meta_optimizer_core'):
-            init = tf.random_normal_initializer(mean=0)
+            init = tf.contrib.layers.xavier_initializer()
             input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, 20], initializer=init)
             self.b_1 = tf.get_variable('b_1', shape=[1, 20], initializer=init)

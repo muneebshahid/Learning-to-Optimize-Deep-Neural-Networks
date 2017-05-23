@@ -14,6 +14,10 @@ with l2l.as_default():
     load_path = 'trained_models/model_'
     restore_network = False
     optim = 'MLP'
+    # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
+    # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
+    # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
+    # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
     problem = problems.Mnist(args={'gog': second_derivatives})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
@@ -44,7 +48,7 @@ with l2l.as_default():
         eval_interval = 10000
         optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
                                    args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
-                                         'momentum': True})
+                                         'momentum': False})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
@@ -95,7 +99,7 @@ with l2l.as_default():
                 print 'TEST'
                 loss_test_total = 0
                 for eval_epoch in range(test_epochs):
-                    time_test, loss_test = util.run_epoch(sess, eval_loss, None, None, num_unrolls_per_epoch)
+                    time_test, loss_test = util.run_epoch(sess, test_loss, None, None, num_unrolls_per_epoch)
                     loss_test_total += loss_test
                 loss_test_total = np.log10(loss_test_total / test_epochs)
                 print 'TEST LOSS: ', loss_eval_total

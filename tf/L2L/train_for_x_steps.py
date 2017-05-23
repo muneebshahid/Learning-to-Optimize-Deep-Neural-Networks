@@ -7,7 +7,7 @@ import util
 #
 l2l = tf.Graph()
 with l2l.as_default():
-    tf.set_random_seed(20)
+    tf.set_random_seed(0)
     second_derivatives = False
 
     save_path = 'trained_models/model_'
@@ -46,8 +46,8 @@ with l2l.as_default():
         eval_epochs = 2000
         eval_interval = 10000
         optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                   args={'num_layers': 2, 'learning_rate': 0.001, 'meta_learning_rate': 0.01,
-                                         'momentum': True})
+                                   args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
+                                         'momentum': False})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
