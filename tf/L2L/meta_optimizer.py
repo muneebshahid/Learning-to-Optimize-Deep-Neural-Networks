@@ -137,24 +137,29 @@ class mlp(Meta_Optimizer):
 
     enable_momentum, avg_gradients, beta_1 = None, None, None
 
+    layer_width = None
+
     def optimizer(self, input):
-        layer_activations = tf.sigmoid(tf.add(tf.matmul(input, self.w_1), self.b_1))
-        output = tf.add(tf.matmul(layer_activations, self.w_out), self.b_out)
-        return output * self.learning_rate
+        layer_1_activations = tf.sigmoid(tf.add(tf.matmul(input, self.w_1), self.b_1), name='layer_1_activation')
+        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
+        return tf.multiply(output, self.learning_rate, name='apply_learning_rate')
 
     def __init__(self, problem, processing_constant, second_derivatives, args):
         super(mlp, self).__init__(problem, processing_constant, second_derivatives)
         self.num_layers = args['num_layers']
         self.learning_rate = args['learning_rate']
+        self.layer_width = args['layer_width']
         self.enable_momentum = args.has_key('momentum') and args['momentum']
         self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+
         with tf.variable_scope('meta_optimizer_core'):
             init = tf.contrib.layers.xavier_initializer()
             input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
-            self.w_1 = tf.get_variable('w_1', shape=[input_dim, 20], initializer=init)
-            self.b_1 = tf.get_variable('b_1', shape=[1, 20], initializer=init)
-            self.w_out = tf.get_variable('w_out', shape=[20, output_dim], initializer=init)
+            self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
+            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=init)
+            self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
+            # self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(.0001, dtype=tf.float32))
 
         if self.enable_momentum:
             self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
@@ -190,8 +195,8 @@ class mlp(Meta_Optimizer):
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
-        # reset = tf.variables_initializer(self.problem.variable + self.problem.constants)
-        reset = None
+        reset = tf.variables_initializer(self.problem.variables + self.problem.constants)
+        # reset = None
         update_params.append([tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, updated_vars)])
         if self.enable_momentum:
             update_params.append([tf.assign(avg_gradient, avg_gradient * tf.sigmoid(beta_1_t) + (1 - tf.sigmoid(beta_1_t)) * gradient)

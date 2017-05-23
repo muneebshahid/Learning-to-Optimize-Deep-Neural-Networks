@@ -7,7 +7,7 @@ import util
 #
 l2l = tf.Graph()
 with l2l.as_default():
-    tf.set_random_seed(0)
+    tf.set_random_seed(20)
     second_derivatives = False
 
     save_path = 'trained_models/model_'
@@ -48,10 +48,11 @@ with l2l.as_default():
         eval_interval = 10000
         optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
                                    args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
-                                         'momentum': False})
+                                         'momentum': False, 'layer_width': 10})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
-    mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
+    mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
+    mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out), tf.reduce_mean(optimizer.b_1) , optimizer.b_out[0][0]]
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
     saver = tf.train.Saver(trainable_variables, max_to_keep=100)
 
@@ -73,13 +74,14 @@ with l2l.as_default():
 
         print 'Starting Training...'
         for epoch in range(epochs):
-            mean_mats_values = sess.run(mean_mats)
-            #print mean_mats_values
+            mean_mats_values = sess.run(mean_problem_variables)
             mean_mats_values_list.append(mean_mats_values)
             time, loss = util.run_epoch(sess, loss_final, [step, update], None, num_unrolls_per_epoch)
             total_loss += loss
             total_time += time
             if (epoch + 1) % epoch_interval == 0:
+                print mean_mats_values
+                print sess.run(mean_optim_variables)
                 log10loss = np.log10(total_loss / epoch_interval)
                 util.print_update(epoch, epochs, log10loss, epoch_interval, total_time)
                 util.write_update(log10loss, total_time, mean_mats_values_list)
