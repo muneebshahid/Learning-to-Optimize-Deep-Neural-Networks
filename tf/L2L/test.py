@@ -6,14 +6,16 @@ import util
 
 l2l = tf.Graph()
 with l2l.as_default():
+
     tf.set_random_seed(0)
     epochs = 100
-    num_optim_steps_per_epoch = 100
+    num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     load_path = 'trained_models/model_'
-    second_derivatives = False
+    second_derivatives = True
     meta_learning_rate = 0.01
+    debug = True
 
     optim = 'MLP'
     meta = True
@@ -31,7 +33,7 @@ with l2l.as_default():
         elif optim == 'MLP':
             optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
                                        args={'num_layers': 2, 'learning_rate': 0.0001,\
-                                             'meta_learning_rate': meta_learning_rate})
+                                             'meta_learning_rate': meta_learning_rate, 'layer_width': 10, 'momentum': False})
             loss_final, update, reset = optimizer.meta_loss()
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
@@ -51,20 +53,34 @@ with l2l.as_default():
         total_loss = 0
         total_time = 0
         time = 0
-
+        flat_grads_list, pre_pro_grads_list, deltas_list = list(), list(), list()
         if meta:
             print 'Resotring Optimizer'
             saver.restore(sess, load_path)
 
         print 'Starting Evaluation'
         for epoch in range(epochs):
-            time, loss = util.run_epoch(sess, loss_final, [update], reset, num_unrolls_per_epoch)
-
+            time, loss = util.run_epoch(sess, loss_final, [update], None, num_unrolls_per_epoch)
+            if meta and debug and epoch == 0:
+                flat_grads, pre_pro_grads, deltas = sess.run(optimizer.debug_info)
+                flatten = lambda mat_array: [element for mat in mat_array for element in mat]
+                flat_grads_list.extend(flatten(flat_grads[1:]))
+                pre_pro_grads_list.extend(flatten(pre_pro_grads[1:]))
+                deltas_list.extend(flatten(deltas[1:]))
             total_time += time
             total_loss += loss
             print 'Epoch: ', epoch
             print 'loss: ', np.log10(loss)
         total_loss = np.log10(total_loss / epochs)
         print 'Final Loss: ', total_loss
+        if meta and debug:
+            pre_pro_grads_array = np.array(pre_pro_grads_list)
+            flat_grads_array = np.array(flat_grads_list)
+            deltas_array = np.array(deltas_list)
+            print pre_pro_grads_array.shape
+            print flat_grads_array.shape
+            print deltas_array.shape
+            final_debug_array = np.hstack((np.hstack((pre_pro_grads_array, np.array(flat_grads_array))), np.array(deltas_array)))
+            np.savetxt('debug.txt', final_debug_array, fmt='%5f')
 
 

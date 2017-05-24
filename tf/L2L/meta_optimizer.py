@@ -14,12 +14,14 @@ class Meta_Optimizer():
     unroll_len = None
     second_derivatives = None
     preprocessor = None
+    debug_info = None
 
     def __init__(self, problem, processing_constant=None, second_derivatives=False):
         self.problem = problem
         if processing_constant is not None:
             self.preprocessor = preprocess.LogAndSign(processing_constant)
         self.second_derivatives = second_derivatives
+        self.debug_info = []
 
     def meta_loss(self):
         pass
@@ -61,6 +63,7 @@ class l2l(Meta_Optimizer):
         self.unroll_len = args['unroll_len']
         self.learning_rate = args['learning_rate']
         self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+
 
         # initialize for later use.
         with tf.variable_scope('rnn_core'):
@@ -183,16 +186,17 @@ class mlp(Meta_Optimizer):
                                 zip(preprocessed_gradients, avg_gradients_pre_processed)]
         else:
             optimizer_inputs = preprocessed_gradients
-
+        deltas_list = list()
         for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
             output = self.optimizer(optim_input)
             if self.enable_momentum:
-                deltas = tf.slice(output, [0, 0], [-1, 1], name='deltas')
+                deltas_output = tf.slice(output, [0, 0], [-1, 1], name='deltas')
                 beta_1_new = tf.slice(output, [0, 1], [-1, 1], name='beta_1_new')
                 beta_1_new_list.append(beta_1_new)
             else:
-                deltas = output
-            deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
+                deltas_output = output
+            deltas_list.append(deltas_output)
+            deltas = tf.reshape(deltas_output, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
         reset = tf.variables_initializer(self.problem.variables + self.problem.constants)
@@ -203,6 +207,7 @@ class mlp(Meta_Optimizer):
                                   for gradient, avg_gradient, beta_1_t in
                                   zip(flat_gradients, self.avg_gradients, self.beta_1)])
             update_params.append([tf.assign(beta_1_old, beta_1_new) for beta_1_old, beta_1_new in zip(self.beta_1, beta_1_new_list)])
+        self.debug_info = [flat_gradients, preprocessed_gradients, deltas_list]
         return [loss, update_params, reset]
 
     def meta_minimize(self):
