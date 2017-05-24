@@ -3,6 +3,7 @@ import numpy as np
 import problems
 import meta_optimizer
 import util
+from preprocess import Preprocess
 
 #
 l2l = tf.Graph()
@@ -18,6 +19,9 @@ with l2l.as_default():
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
+
+    preprocess = [Preprocess.log_sign, {'k': 5}]
+
     problem = problems.Mnist(args={'gog': second_derivatives})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
@@ -30,10 +34,11 @@ with l2l.as_default():
         eval_epochs = 20
         eval_interval = 1000
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                       args={'state_size': 20, 'num_layers': 2, \
-                                             'unroll_len': unroll_len, 'learning_rate': 0.001,\
-                                             'meta_learning_rate': 0.01})
+        optimizer = meta_optimizer.l2l(args={'problem': problem, 'second_derivatives': second_derivatives,
+                                             'state_size': 20, 'num_layers': 2, 'unroll_len': unroll_len,
+                                             'learning_rate': 0.001,\
+                                             'meta_learning_rate': 0.01,
+                                             'preprocess': preprocess})
     else:
         # multiply by 100 to get the same number of epochs
         print 'Using MLP'
@@ -46,9 +51,9 @@ with l2l.as_default():
         validation_epochs = 500
         test_epochs = 500
         eval_interval = 10000
-        optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                   args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
-                                         'momentum': False, 'layer_width': 10})
+        optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
+                                             'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
+                                             'momentum': False, 'layer_width': 10, 'preprocess': preprocess})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
     mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]

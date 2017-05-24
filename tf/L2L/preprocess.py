@@ -3,37 +3,28 @@ import numpy as np
 from abc import ABCMeta
 
 class Preprocess():
-    __metaclass__ = ABCMeta
 
-    def process(self, gradients):
-        pass
-
-
-class LogAndSign(Preprocess):
-
-    __p = None
-
-    def __init__(self, k):
-        self.__p = k
-
-    def __clamp(self, gradients, min_value=None, max_value=None):
+    @staticmethod
+    def clamp(inputs, args):
+        min_value = args['min'] if args.has_key('min') else None
+        max_value = args['max'] if args.has_key('max') else None
         if min_value is not None:
-            gradients = tf.maximum(gradients, min_value)
+            outputs = tf.maximum(inputs, min_value)
         if max_value is not None:
-            gradients = tf.minimum(gradients, max_value)
-        return gradients
+            outputs = tf.minimum(inputs, max_value)
+        return outputs
 
-    def process(self, gradients):
+    @staticmethod
+    def log_sign(inputs, args):
         # eps = np.finfo(gradients.dtype.as_numpy_dtype).eps
         # cond1_indices = tf.squeeze(tf.slice(tf.where(tf.greater_equal(tf.abs(gradients), tf.exp(-self.__k))), [0, 0], [-1, 1]))
         # cond2_indices = tf.squeeze(tf.slice(tf.where(tf.less(tf.abs(gradients), tf.exp(-self.__k))), [0, 0], [-1, 1]))
 
-        eps = np.finfo(gradients.dtype.as_numpy_dtype).eps
-        ndims = gradients.get_shape().ndims
-        log = tf.log(tf.abs(gradients) + eps)
-        clamped_log = self.__clamp(log / self.__p, min_value=-1.0)
-        sign = self.__clamp(gradients * np.exp(self.__p), min_value=-1.0, max_value=1.0)
-
+        eps = np.finfo(inputs.dtype.as_numpy_dtype).eps
+        ndims = inputs.get_shape().ndims
+        log = tf.log(tf.abs(inputs) + eps)
+        clamped_log = Preprocess.clamp(log / args['k'], args={'min': -1.0})
+        sign = Preprocess.clamp(inputs * np.exp(args['k']), args={'min': -1.0, 'max': 1.0})
         return tf.concat([clamped_log, sign], ndims - 1)
 
 

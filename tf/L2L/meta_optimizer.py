@@ -14,13 +14,15 @@ class Meta_Optimizer():
     unroll_len = None
     second_derivatives = None
     preprocessor = None
+    preprocessor_args = None
     debug_info = None
 
-    def __init__(self, problem, processing_constant=None, second_derivatives=False):
-        self.problem = problem
-        if processing_constant is not None:
-            self.preprocessor = preprocess.LogAndSign(processing_constant)
-        self.second_derivatives = second_derivatives
+    def __init__(self, args):
+        self.problem = args['problem']
+        if args.has_key('preprocess') is not None:
+            self.preprocessor = args['preprocess'][0]
+            self.preprocessor_args = args['preprocess'][1]
+        self.second_derivatives = args['second_derivatives']
         self.debug_info = []
 
     def meta_loss(self):
@@ -31,7 +33,7 @@ class Meta_Optimizer():
 
     def preprocess_input(self, inputs):
         if self.preprocessor is not None:
-            return self.preprocessor.process(inputs)
+            return self.preprocessor(inputs, self.preprocessor_args)
         else:
             return inputs
     
@@ -56,8 +58,8 @@ class l2l(Meta_Optimizer):
     learning_rate = None
     W, b = None, None
 
-    def __init__(self, problem, processing_constant, second_derivatives, args):
-        super(l2l, self).__init__(problem, processing_constant, second_derivatives)
+    def __init__(self, args):
+        super(l2l, self).__init__(args)
         self.state_size = args['state_size']
         self.num_layers = args['num_layers']
         self.unroll_len = args['unroll_len']
@@ -147,8 +149,8 @@ class mlp(Meta_Optimizer):
         output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
         return tf.multiply(output, self.learning_rate, name='apply_learning_rate')
 
-    def __init__(self, problem, processing_constant, second_derivatives, args):
-        super(mlp, self).__init__(problem, processing_constant, second_derivatives)
+    def __init__(self, args):
+        super(mlp, self).__init__(args)
         self.num_layers = args['num_layers']
         self.learning_rate = args['learning_rate']
         self.layer_width = args['layer_width']

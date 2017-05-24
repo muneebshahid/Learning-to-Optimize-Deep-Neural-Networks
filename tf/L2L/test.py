@@ -24,15 +24,13 @@ with l2l.as_default():
 
     if meta:
         if optim == 'L2L':
-            optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                       args={'state_size': 20, 'num_layers': 2, \
+            optimizer = meta_optimizer.l2l(args={'state_size': 20, 'num_layers': 2, \
                                              'unroll_len': unroll_len, 'learning_rate': 0.001,\
                                              'meta_learning_rate': meta_learning_rate})
             loss_final, update, reset = optimizer.meta_loss()
 
         elif optim == 'MLP':
-            optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                       args={'num_layers': 2, 'learning_rate': 0.0001,\
+            optimizer = meta_optimizer.mlp(args={'num_layers': 2, 'learning_rate': 0.0001,\
                                              'meta_learning_rate': meta_learning_rate, 'layer_width': 10, 'momentum': False})
             loss_final, update, reset = optimizer.meta_loss()
     else:
