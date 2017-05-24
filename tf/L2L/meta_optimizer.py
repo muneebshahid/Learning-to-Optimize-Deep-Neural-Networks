@@ -195,7 +195,7 @@ class mlp(Meta_Optimizer):
                 beta_1_new_list.append(beta_1_new)
             else:
                 deltas_output = output
-            deltas_list.append(deltas_output)
+            deltas_list.append(deltas_output / self.learning_rate)
             deltas = tf.reshape(deltas_output, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)

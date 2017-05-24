@@ -12,7 +12,7 @@ with l2l.as_default():
     num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-    load_path = 'trained_models/model_'
+    load_path = 'trained_models/model_120000'
     second_derivatives = True
     meta_learning_rate = 0.01
     debug = True
@@ -37,6 +37,7 @@ with l2l.as_default():
             loss_final, update, reset = optimizer.meta_loss()
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
+        optimizer = tf.train.GradientDescentOptimizer(meta_learning_rate)
         slot_names = optimizer.get_slot_names()
         optimizer_reset = tf.variables_initializer(slot_names)
         problem_reset = tf.variables_initializer(problem.variables + problem.constants)
@@ -64,9 +65,9 @@ with l2l.as_default():
             if meta and debug and epoch == 0:
                 flat_grads, pre_pro_grads, deltas = sess.run(optimizer.debug_info)
                 flatten = lambda mat_array: [element for mat in mat_array for element in mat]
-                flat_grads_list.extend(flatten(flat_grads[1:]))
-                pre_pro_grads_list.extend(flatten(pre_pro_grads[1:]))
-                deltas_list.extend(flatten(deltas[1:]))
+                flat_grads_list.extend(flatten(flat_grads))
+                pre_pro_grads_list.extend(flatten(pre_pro_grads))
+                deltas_list.extend(flatten(deltas))
             total_time += time
             total_loss += loss
             print 'Epoch: ', epoch
