@@ -106,3 +106,4 @@ tf_log/*
 /tf/L2L/loss_file_upd
 /tf/L2L/mean_var_upd
 /tf/L2L/trained_models/*
+/tf/L2L/debug_log/*
