@@ -4,6 +4,9 @@ from abc import ABCMeta
 
 class Preprocess():
 
+    def __init__(self):
+        pass
+
     @staticmethod
     def clamp(inputs, args):
         min_value = args['min'] if args.has_key('min') else None
