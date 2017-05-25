@@ -94,14 +94,13 @@ class Quadratic(Problem):
     def __init__(self, args):
         super(Quadratic, self).__init__(args=args)
         stddev = args['stddev']
-        dtype = args['dtype']
 
         with tf.variable_scope('variables'):
             self.variables = tf.get_variable("x", shape=[self.batch_size, self.dims], dtype=self.dtype,
                                              initializer=tf.random_normal_initializer(stddev=stddev), trainable=self.is_trainable)
 
         with tf.variable_scope('constant'):
-            self.Y = tf.get_variable("Y", shape=[self.batch_size, self.dims], dtype=dtype,
+            self.Y = tf.get_variable("Y", shape=[self.batch_size, self.dims], dtype=self.dtype,
                                      initializer=tf.random_uniform_initializer(), trainable=self.is_trainable)
             self.W = tf.get_variable("W", shape=[self.batch_size, self.dims, self.dims], dtype=self.dtype,
                                      initializer=tf.random_uniform_initializer(), trainable=self.is_trainable)
