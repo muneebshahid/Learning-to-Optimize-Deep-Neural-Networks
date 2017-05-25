@@ -53,7 +53,7 @@ with l2l.as_default():
         eval_interval = 10000
         optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
                                              'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
-                                             'momentum': False, 'layer_width': 10, 'preprocess': preprocess})
+                                             'momentum': True, 'layer_width': 10, 'preprocess': preprocess})
 
     loss_final, update, reset, step = optimizer.meta_minimize()
     mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
@@ -118,3 +118,6 @@ with l2l.as_default():
                     np.save('best_eval', record)
                     print 'Network Saved'
                     best_evaluation = loss_eval_total
+        saver.save(sess, save_path + str(epochs) + 'FINAL')
+        print 'Final Network Saved'
+
