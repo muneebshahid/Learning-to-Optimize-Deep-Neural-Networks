@@ -3,6 +3,7 @@ import numpy as np
 import problems
 import meta_optimizer
 import util
+from preprocess import Preprocess
 
 l2l = tf.Graph()
 with l2l.as_default():
@@ -12,7 +13,8 @@ with l2l.as_default():
     num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-    load_path = 'trained_models/model_120000'
+    model_number = '1000'
+    load_path = 'trained_models/model_' + model_number
     second_derivatives = True
     meta_learning_rate = 0.01
     debug = True
@@ -21,6 +23,7 @@ with l2l.as_default():
     meta = True
 
     problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'test'})
+    preprocess = [Preprocess.log_sign, {'k': 5}]
 
     if meta:
         if optim == 'L2L':
@@ -30,8 +33,9 @@ with l2l.as_default():
             loss_final, update, reset = optimizer.meta_loss()
 
         elif optim == 'MLP':
-            optimizer = meta_optimizer.mlp(args={'num_layers': 2, 'learning_rate': 0.0001,\
-                                             'meta_learning_rate': meta_learning_rate, 'layer_width': 10, 'momentum': False})
+            optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
+                                                 'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
+                                                 'momentum': False, 'layer_width': 10, 'preprocess': preprocess})
             loss_final, update, reset = optimizer.meta_loss()
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
@@ -80,6 +84,6 @@ with l2l.as_default():
             print flat_grads_array.shape
             print deltas_array.shape
             final_debug_array = np.hstack((np.hstack((pre_pro_grads_array, np.array(flat_grads_array))), np.array(deltas_array)))
-            np.savetxt('debug.txt', final_debug_array, fmt='%5f')
+            np.savetxt('debug_' + model_number + '.txt', final_debug_array, fmt='%5f')
 
 
