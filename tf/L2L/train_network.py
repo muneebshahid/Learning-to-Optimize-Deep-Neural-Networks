@@ -85,8 +85,8 @@ with l2l.as_default():
             total_loss += loss
             total_time += time
             if (epoch + 1) % epoch_interval == 0:
-                print mean_mats_values
-                print sess.run(mean_optim_variables)
+                print 'Problem Vars: ', mean_mats_values
+                print 'Optim Vars: ', sess.run(mean_optim_variables)
                 log10loss = np.log10(total_loss / epoch_interval)
                 util.print_update(epoch, epochs, log10loss, epoch_interval, total_time)
                 util.write_update(log10loss, total_time, mean_mats_values_list)

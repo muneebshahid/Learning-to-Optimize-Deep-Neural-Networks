@@ -39,7 +39,7 @@ with l2l.as_default():
             loss_final, update, reset = optimizer.meta_loss()
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
-        optimizer = tf.train.GradientDescentOptimizer(meta_learning_rate)
+        # optimizer = tf.train.GradientDescentOptimizer(meta_learning_rate)
         slot_names = optimizer.get_slot_names()
         optimizer_reset = tf.variables_initializer(slot_names)
         problem_reset = tf.variables_initializer(problem.variables + problem.constants)
