@@ -8,21 +8,24 @@ from preprocess import Preprocess
 l2l = tf.Graph()
 with l2l.as_default():
 
-    tf.set_random_seed(0)
-    epochs = 100
+    tf.set_random_seed(20)
+    epochs = 10000
+    epoch_interval = 1000
     num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     model_number = '1000'
     load_path = 'trained_models/model_' + model_number
-    second_derivatives = True
+    second_derivatives = False
     meta_learning_rate = 0.01
     debug = True
 
     optim = 'MLP'
     meta = True
 
-    problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'test'})
+    problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'train'})
+    eval_loss = problem.loss(problem.variables, 'validation')
+    test_loss = problem.loss(problem.variables, 'test')
     preprocess = [Preprocess.log_sign, {'k': 5}]
 
     if meta:
@@ -36,7 +39,8 @@ with l2l.as_default():
             optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
                                                  'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                                  'momentum': False, 'layer_width': 10, 'preprocess': preprocess})
-            loss_final, update, reset = optimizer.meta_loss()
+            loss_final, update, reset, step = optimizer.meta_minimize()
+            final_step = [update, step]
     else:
         optimizer = tf.train.AdamOptimizer(meta_learning_rate)
         # optimizer = tf.train.GradientDescentOptimizer(meta_learning_rate)
@@ -49,10 +53,14 @@ with l2l.as_default():
 
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
     saver = tf.train.Saver(trainable_variables)
+    mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
+    mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
+                            tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         l2l.finalize()
+        total_loss_final = 0
         total_loss = 0
         total_time = 0
         time = 0
@@ -63,19 +71,26 @@ with l2l.as_default():
 
         print 'Starting Evaluation'
         for epoch in range(epochs):
-            time, loss = util.run_epoch(sess, loss_final, [update], None, num_unrolls_per_epoch)
+            time, loss = util.run_epoch(sess, loss_final, final_step, None, num_unrolls_per_epoch)
+            total_time += time
+            total_loss += loss
+            total_loss_final += loss
+            if (epoch + 1) % epoch_interval == 0:
+                print 'Problem Vars: ', sess.run(mean_problem_variables)
+                print 'Optim Vars: ', sess.run(mean_optim_variables)
+                log10loss = np.log10(total_loss / epoch_interval)
+                util.print_update(epoch, epochs, log10loss, epoch_interval, total_time)
+                total_loss = 0
+                total_time = 0
+                mean_mats_values_list = list()
             if meta and debug and epoch == 0:
                 flat_grads, pre_pro_grads, deltas = sess.run(optimizer.debug_info)
                 flatten = lambda mat_array: [element for mat in mat_array for element in mat]
                 flat_grads_list.extend(flatten(flat_grads))
                 pre_pro_grads_list.extend(flatten(pre_pro_grads))
                 deltas_list.extend(flatten(deltas))
-            total_time += time
-            total_loss += loss
-            print 'Epoch: ', epoch
-            print 'loss: ', np.log10(loss)
-        total_loss = np.log10(total_loss / epochs)
-        print 'Final Loss: ', total_loss
+        total_loss_final = np.log10(total_loss_final / epochs)
+        print 'Final Loss: ', total_loss_final
         if meta and debug:
             pre_pro_grads_array = np.array(pre_pro_grads_list)
             flat_grads_array = np.array(flat_grads_list)
