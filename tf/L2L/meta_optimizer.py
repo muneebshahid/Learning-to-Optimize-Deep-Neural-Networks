@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow.python.util import nest
 import pickle
 from preprocess import Preprocess
+import copy
 
 class Meta_Optimizer():
 
@@ -20,8 +21,8 @@ class Meta_Optimizer():
     preprocessor_args = None
     debug_info = None
     best_eval = None
-    variables = None
-    constants = None
+    trainable = None
+    untrainable = None
 
     def __init__(self, problem, path, args):
         if path is not None:
@@ -36,8 +37,8 @@ class Meta_Optimizer():
             self.preprocessor_args = self.global_args['preprocess'][1]
         self.second_derivatives = self.global_args['second_derivatives']
         self.debug_info = []
-        self.variables = []
-        self.constants = []
+        self.trainable = []
+        self.untrainable = []
 
     def meta_loss(self):
         pass
@@ -65,24 +66,25 @@ class Meta_Optimizer():
             gradients[i] = self.preprocess_input(self.flatten_input(i, gradient))
         return gradients
 
-    def create_variable(self, name,  shape, initializer=tf.random_normal_initializer(mean=0, stddev=0.01), constant=False):
-        x = tf.get_variable(name, shape=shape, dtype=tf.float32,
-                                   initializer=initializer, trainable=not constant)
-        if constant:
-            self.constants.append(x)
-        else:
-            self.variables.append(x)
-        return x
+    def __init_trainable_vars_list(self):
+        self.trainable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+
+    def __init_io_handle(self):
+        self.io_handle = tf.train.Saver(self.trainable, max_to_keep=100)
+
+    def end_init(self):
+        self.__init_trainable_vars_list()
+        self.__init_io_handle()
 
     def load_args(self, path):
-        pickle_ready_args = pickle.load(open(path + '_config.p', 'rb'))
-        pickle_ready_args['preprocess'][0] = getattr(Preprocess, pickle_ready_args['preprocess'][0])
-        return pickle_ready_args
+        pickled_args = pickle.load(open(path + '_config.p', 'rb'))
+        pickled_args['preprocess'][0] = getattr(Preprocess, pickled_args['preprocess'][0])
+        return pickled_args
 
     def save_args(self, path):
-        pickle_ready_args = dict(self.global_args)
-        pickle_ready_args['preprocess'][0] = pickle_ready_args['preprocess'][0].func_name
-        pickle.dump(pickle_ready_args, open(path + '_config.p', 'wb'))
+        self.global_args['preprocess'][0] = self.global_args['preprocess'][0].func_name
+        pickle.dump(self.global_args, open(path + '_config.p', 'wb'))
+        self.global_args['preprocess'][0] = getattr(Preprocess, self.global_args['preprocess'][0])
 
     def load(self, sess, path):
         self.io_handle.restore(sess, path)
@@ -135,6 +137,8 @@ class l2l(Meta_Optimizer):
             with tf.variable_scope('rnn_linear'):
                 self.W = tf.get_variable('softmax_w', [self.state_size, 1])
                 self.b = tf.get_variable('softmax_b', [1])
+
+        self.end_init()
 
     def meta_loss(self):
         def update(t, fx_array, params, hidden_states):
@@ -204,10 +208,10 @@ class mlp(Meta_Optimizer):
         with tf.variable_scope('meta_optimizer_core'):
             init = tf.contrib.layers.xavier_initializer()
             input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
-            self.w_1 = self.create_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
-            self.b_1 = self.create_variable('b_1', shape=[1, self.layer_width], initializer=init)
-            self.w_out = self.create_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
-            self.b_out = self.create_variable('b_out', shape=[1, output_dim], initializer=init)
+            self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
+            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=init)
+            self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
+            self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
             # self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(.0001, dtype=tf.float32))
 
             if self.enable_momentum:
@@ -216,8 +220,8 @@ class mlp(Meta_Optimizer):
                 self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
                                       for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
-            # trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            self.io_handle = tf.train.Saver(self.variables, max_to_keep=100)
+        self.end_init()
+
 
 
     def meta_loss(self):
