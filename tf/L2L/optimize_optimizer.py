@@ -12,10 +12,11 @@ with l2l.as_default():
     second_derivatives = False
 
     restore_network = False
+    save_network = False
     save_path = 'trained_models/model_'
     load_path = 'trained_models/model_10000' if restore_network else None
 
-    optim = 'MLP'
+    flag_optimizer = 'L2L'
 
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
@@ -27,36 +28,36 @@ with l2l.as_default():
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
 
-    if optim == 'L2L':
+    if flag_optimizer == 'L2L':
         print 'Using L2L'
-        epochs = 10
-        num_optim_steps_per_epoch = 20
+        epochs = 10000
+        num_optim_steps_per_epoch = 100
         unroll_len = 20
-        epoch_interval = 1
-        eval_epochs = 20
-        eval_interval = 5
-        validation_epochs = 20
+        epoch_interval = 1000
+        eval_interval = 10000
+        validation_epochs = 5
+        test_epochs = 5
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
-                                             'state_size': 20, 'num_layers': 2, 'unroll_len': unroll_len,
+                                             'state_size': 5, 'num_layers': 2, 'unroll_len': unroll_len,
                                              'learning_rate': 0.001,\
                                              'meta_learning_rate': 0.01,
                                              'preprocess': preprocess})
         loss_final, update, reset, step = optimizer.meta_minimize()
+        reset = None
     else:
         print 'Using MLP'
-        epochs = 100
-
-        # used for running epoch
-        num_unrolls_per_epoch = 1
-
-        epoch_interval = 1
-        validation_epochs = 5
+        epochs = 500000
+        num_optim_steps_per_epoch = 1
+        unroll_len = 1
+        epoch_interval = 1000
+        eval_interval = 10000
+        validation_epochs = 500
         test_epochs = 500
-        eval_interval = 10
+        num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
         optimizer = meta_optimizer.mlp(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                              'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
-                                             'momentum': True, 'layer_width': 10, 'preprocess': preprocess})
+                                             'momentum': False, 'layer_width': 10, 'preprocess': preprocess})
         loss_final, update, reset, step = optimizer.meta_minimize()
         reset = None
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
@@ -115,11 +116,13 @@ with l2l.as_default():
                 loss_test_total = np.log10(loss_test_total / test_epochs)
                 print 'TEST LOSS: ', loss_eval_total
 
-                if loss_eval_total < best_evaluation:
+                if save_network and loss_eval_total < best_evaluation:
                     print 'Better Loss Found'
                     optimizer.save(sess, save_path + str(epoch + 1))
                     print 'Network Saved'
                     best_evaluation = loss_eval_total
-        optimizer.save(sess, save_path + str(epochs) + '_FINAL')
-        print 'Final Network Saved'
+        if save_network:
+            optimizer.save(sess, save_path + str(epochs) + '_FINAL')
+            print 'Final Network Saved'
+        print flag_optimizer + ' optimized.'
 
