@@ -12,7 +12,7 @@ with l2l.as_default():
     second_derivatives = False
 
     restore_network = False
-    save_network = False
+    save_network = True
     save_path = 'trained_models/model_'
     load_path = 'trained_models/model_10000' if restore_network else None
 
@@ -39,7 +39,7 @@ with l2l.as_default():
         test_epochs = 5
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
-                                             'state_size': 5, 'num_layers': 2, 'unroll_len': unroll_len,
+                                             'state_size': 20, 'num_layers': 2, 'unroll_len': unroll_len,
                                              'learning_rate': 0.001,\
                                              'meta_learning_rate': 0.01,
                                              'preprocess': preprocess})
