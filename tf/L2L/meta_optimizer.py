@@ -20,6 +20,8 @@ class Meta_Optimizer():
     preprocessor_args = None
     debug_info = None
     best_eval = None
+    variables = None
+    constants = None
 
     def __init__(self, problem, path, args):
         if path is not None:
@@ -34,6 +36,8 @@ class Meta_Optimizer():
             self.preprocessor_args = self.global_args['preprocess'][1]
         self.second_derivatives = self.global_args['second_derivatives']
         self.debug_info = []
+        self.variables = []
+        self.constants = []
 
     def meta_loss(self):
         pass
@@ -60,6 +64,15 @@ class Meta_Optimizer():
         for i, gradient in enumerate(gradients):
             gradients[i] = self.preprocess_input(self.flatten_input(i, gradient))
         return gradients
+
+    def create_variable(self, name,  shape, initializer=tf.random_normal_initializer(mean=0, stddev=0.01), constant=False):
+        x = tf.get_variable(name, shape=shape, dtype=tf.float32,
+                                   initializer=initializer, trainable=not constant)
+        if constant:
+            self.constants.append(x)
+        else:
+            self.variables.append(x)
+        return x
 
     def load_args(self, path):
         pickle_ready_args = pickle.load(open(path + '_config.p', 'rb'))
@@ -191,10 +204,10 @@ class mlp(Meta_Optimizer):
         with tf.variable_scope('meta_optimizer_core'):
             init = tf.contrib.layers.xavier_initializer()
             input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
-            self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
-            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=init)
-            self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
-            self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
+            self.w_1 = self.create_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
+            self.b_1 = self.create_variable('b_1', shape=[1, self.layer_width], initializer=init)
+            self.w_out = self.create_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
+            self.b_out = self.create_variable('b_out', shape=[1, output_dim], initializer=init)
             # self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(.0001, dtype=tf.float32))
 
             if self.enable_momentum:
@@ -203,8 +216,8 @@ class mlp(Meta_Optimizer):
                 self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
                                       for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
-            trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            self.io_handle = tf.train.Saver(trainable_variables, max_to_keep=100)
+            # trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            self.io_handle = tf.train.Saver(self.variables, max_to_keep=100)
 
 
     def meta_loss(self):

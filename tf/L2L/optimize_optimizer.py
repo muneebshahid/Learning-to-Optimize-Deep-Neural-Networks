@@ -42,8 +42,6 @@ with l2l.as_default():
                                              'meta_learning_rate': 0.01,
                                              'preprocess': preprocess})
     else:
-        # multiply by 100 to get the same number of epochs
-
         print 'Using MLP'
         epochs = 10000
 
@@ -57,9 +55,8 @@ with l2l.as_default():
         optimizer = meta_optimizer.mlp(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                              'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                              'momentum': True, 'layer_width': 10, 'preprocess': preprocess})
+
     loss_final, update, reset, step = optimizer.meta_minimize()
-
-
     mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
     mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out), tf.reduce_mean(optimizer.b_1) , optimizer.b_out[0][0]]
 
@@ -117,6 +114,6 @@ with l2l.as_default():
                     optimizer.save(sess, save_path + str(epoch + 1))
                     print 'Network Saved'
                     best_evaluation = loss_eval_total
-        optimizer.save(sess, save_path + str(epochs) + '_FINAL')
+        # optimizer.save(sess, save_path + str(epochs) + '_FINAL')
         print 'Final Network Saved'
 
