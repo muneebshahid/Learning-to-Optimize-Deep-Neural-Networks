@@ -11,17 +11,18 @@ with l2l.as_default():
     tf.set_random_seed(20)
     second_derivatives = False
 
+    restore_network = True
     save_path = 'trained_models/model_'
-    load_path = 'trained_models/model_'
-    restore_network = False
+    load_path = 'trained_models/model_10000' if restore_network else None
+
     optim = 'MLP'
+
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
 
-    preprocess = [Preprocess.log_sign, {'k': 5}]
-
+    preprocess = [Preprocess.log_sign, {'k': 10}]
     problem = problems.Mnist(args={'gog': second_derivatives})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
@@ -35,7 +36,7 @@ with l2l.as_default():
         eval_epochs = 20
         eval_interval = 1000
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        optimizer = meta_optimizer.l2l(args={'problem': problem, 'second_derivatives': second_derivatives,
+        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
                                              'state_size': 20, 'num_layers': 2, 'unroll_len': unroll_len,
                                              'learning_rate': 0.001,\
                                              'meta_learning_rate': 0.01,
@@ -53,23 +54,21 @@ with l2l.as_default():
         validation_epochs = 500
         test_epochs = 500
         eval_interval = 10000
-        optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
+        optimizer = meta_optimizer.mlp(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                              'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                              'momentum': True, 'layer_width': 10, 'preprocess': preprocess})
-
-
     loss_final, update, reset, step = optimizer.meta_minimize()
-    trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+
 
     mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
     mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out), tf.reduce_mean(optimizer.b_1) , optimizer.b_out[0][0]]
-
-    saver = tf.train.Saver(trainable_variables, max_to_keep=100)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         l2l.finalize()
         print '---- Starting Training ----'
+        if restore_network:
+            optimizer.load(sess, load_path)
         print 'Init Problem Vars: ', sess.run(mean_problem_variables)
         print 'Init Optim Vars: ', sess.run(mean_optim_variables)
         total_loss = 0
@@ -77,12 +76,6 @@ with l2l.as_default():
         time = 0
 
         best_evaluation = float("inf")
-        if restore_network:
-            print 'Resotring Optimizer'
-            saver.restore(sess, load_path)
-            record = np.load('best_eval.npy')
-            print 'Best Eval loaded: ', record[0], 'Epoch: ', record[1]
-
         mean_mats_values_list = list()
 
         print '---------------------------------\n'
@@ -121,11 +114,9 @@ with l2l.as_default():
 
                 if loss_eval_total < best_evaluation:
                     print 'Better Loss Found'
-                    saver.save(sess, save_path + str(epoch + 1))
-                    record = [loss_eval_total, epoch + 1]
-                    np.save('best_eval', record)
+                    optimizer.save(sess, save_path + str(epoch + 1))
                     print 'Network Saved'
                     best_evaluation = loss_eval_total
-        saver.save(sess, save_path + str(epochs) + 'FINAL')
+        optimizer.save(sess, save_path + str(epochs) + '_FINAL')
         print 'Final Network Saved'
 

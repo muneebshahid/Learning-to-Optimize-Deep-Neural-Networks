@@ -1,12 +1,15 @@
 from abc import ABCMeta
 import tensorflow as tf
 from tensorflow.python.util import nest
-import preprocess
+import pickle
+from preprocess import Preprocess
 
 class Meta_Optimizer():
 
     __metaclass__ = ABCMeta
 
+    global_args = None
+    io_handle = None
     problem = None
     meta_optimizer = None
     optimizer = None
@@ -16,13 +19,20 @@ class Meta_Optimizer():
     preprocessor = None
     preprocessor_args = None
     debug_info = None
+    best_eval = None
 
-    def __init__(self, args):
-        self.problem = args['problem']
-        if args.has_key('preprocess') is not None:
-            self.preprocessor = args['preprocess'][0]
-            self.preprocessor_args = args['preprocess'][1]
-        self.second_derivatives = args['second_derivatives']
+    def __init__(self, problem, path, args):
+        if path is not None:
+            print 'Loading optimizer args, ignoring provided args...'
+            self.global_args = self.load_args(path)
+            print 'Args Loaded, call load_optimizer with session to restore the optimizer graph.'
+        else:
+            self.global_args = args
+        self.problem = problem
+        if self.global_args.has_key('preprocess') and self.global_args['preprocess'] is not None:
+            self.preprocessor = self.global_args['preprocess'][0]
+            self.preprocessor_args = self.global_args['preprocess'][1]
+        self.second_derivatives = self.global_args['second_derivatives']
         self.debug_info = []
 
     def meta_loss(self):
@@ -51,6 +61,27 @@ class Meta_Optimizer():
             gradients[i] = self.preprocess_input(self.flatten_input(i, gradient))
         return gradients
 
+    def load_args(self, path):
+        pickle_ready_args = pickle.load(open(path + '_config.p', 'rb'))
+        pickle_ready_args['preprocess'][0] = getattr(Preprocess, pickle_ready_args['preprocess'][0])
+        return pickle_ready_args
+
+    def save_args(self, path):
+        pickle_ready_args = dict(self.global_args)
+        pickle_ready_args['preprocess'][0] = pickle_ready_args['preprocess'][0].func_name
+        pickle.dump(pickle_ready_args, open(path + '_config.p', 'wb'))
+
+    def load(self, sess, path):
+        self.io_handle.restore(sess, path)
+        print 'Optimizer Restored'
+
+    def save(self, sess, path):
+        print 'Saving optimizer'
+        self.io_handle.save(sess, path)
+        self.save_args(path)
+
+
+
 class l2l(Meta_Optimizer):
 
     state_size = None
@@ -58,13 +89,13 @@ class l2l(Meta_Optimizer):
     learning_rate = None
     W, b = None, None
 
-    def __init__(self, args):
-        super(l2l, self).__init__(args)
-        self.state_size = args['state_size']
-        self.num_layers = args['num_layers']
-        self.unroll_len = args['unroll_len']
-        self.learning_rate = args['learning_rate']
-        self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+    def __init__(self, problem, path, args):
+        super(l2l, self).__init__(problem, path, args)
+        self.state_size = self.global_args['state_size']
+        self.num_layers = self.global_args['num_layers']
+        self.unroll_len = self.global_args['unroll_len']
+        self.learning_rate = self.global_args['learning_rate']
+        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
 
 
         # initialize for later use.
@@ -149,13 +180,13 @@ class mlp(Meta_Optimizer):
         output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
         return tf.multiply(output, self.learning_rate, name='apply_learning_rate')
 
-    def __init__(self, args):
-        super(mlp, self).__init__(args)
-        self.num_layers = args['num_layers']
-        self.learning_rate = args['learning_rate']
-        self.layer_width = args['layer_width']
-        self.enable_momentum = args.has_key('momentum') and args['momentum']
-        self.meta_optimizer = tf.train.AdamOptimizer(args['meta_learning_rate'])
+    def __init__(self, problem, path, args):
+        super(mlp, self).__init__(problem, path, args)
+        self.num_layers = self.global_args['num_layers']
+        self.learning_rate = self.global_args['learning_rate']
+        self.layer_width = self.global_args['layer_width']
+        self.enable_momentum = self.global_args.has_key('momentum') and self.global_args['momentum']
+        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
 
         with tf.variable_scope('meta_optimizer_core'):
             init = tf.contrib.layers.xavier_initializer()
@@ -166,11 +197,15 @@ class mlp(Meta_Optimizer):
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
             # self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(.0001, dtype=tf.float32))
 
-        if self.enable_momentum:
-            self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
-                           for i, shape in enumerate(self.problem.variables_flattened_shape)]
-            self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
-                                  for i, shape in enumerate(self.problem.variables_flattened_shape)]
+            if self.enable_momentum:
+                self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
+                               for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                self.avg_gradients = [tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(), trainable=False)
+                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
+
+            trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            self.io_handle = tf.train.Saver(trainable_variables, max_to_keep=100)
+
 
     def meta_loss(self):
         update_params = list()
