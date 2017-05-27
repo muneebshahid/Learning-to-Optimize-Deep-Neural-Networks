@@ -11,7 +11,7 @@ with l2l.as_default():
     tf.set_random_seed(20)
     second_derivatives = False
 
-    restore_network = True
+    restore_network = False
     save_path = 'trained_models/model_'
     load_path = 'trained_models/model_10000' if restore_network else None
 

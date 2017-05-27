@@ -14,7 +14,7 @@ with l2l.as_default():
     num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-    model_number = '120000'
+    model_number = '10000'
     load_path = 'trained_models/model_' + model_number
     second_derivatives = False
     meta_learning_rate = 0.01
@@ -29,6 +29,7 @@ with l2l.as_default():
 
     preprocess = [Preprocess.log_sign, {'k': 10}]
     mean_optim_variables = None
+    optimizer = None
     if meta:
         if optim == 'L2L':
             optimizer = meta_optimizer.l2l(args={'state_size': 20, 'num_layers': 2, \
@@ -37,7 +38,7 @@ with l2l.as_default():
             loss_final, update, reset = optimizer.meta_loss()
 
         elif optim == 'MLP':
-            optimizer = meta_optimizer.mlp(args={'problem': problem, 'second_derivatives': second_derivatives,
+            optimizer = meta_optimizer.mlp(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                                  'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                                  'momentum': False, 'layer_width': 1, 'preprocess': preprocess})
             loss_final, update, reset, step = optimizer.meta_minimize()
@@ -54,9 +55,6 @@ with l2l.as_default():
         final_step = [optimizer.minimize(loss_final)]
         reset = [problem_reset, optimizer_reset]
 
-
-    trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-    saver = tf.train.Saver(trainable_variables)
     mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
 
 
@@ -64,6 +62,9 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         l2l.finalize()
         print '---- Starting Evaluation ----'
+        if meta:
+            print 'Resotring Optimizer'
+            optimizer.load(sess, load_path)
         print 'Init Problem Vars: ', sess.run(mean_problem_variables)
         if mean_optim_variables is not None:
             print 'Init Optim Vars: ', sess.run(mean_optim_variables)
@@ -72,9 +73,7 @@ with l2l.as_default():
         total_time = 0
         time = 0
         flat_grads_list, pre_pro_grads_list, deltas_list = list(), list(), list()
-        if meta:
-            print 'Resotring Optimizer'
-            # saver.restore(sess, load_path)
+
 
         print '---------------------------------\n'
         for epoch in range(epochs):
