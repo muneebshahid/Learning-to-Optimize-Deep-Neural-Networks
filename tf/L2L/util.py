@@ -1,4 +1,6 @@
+from __future__ import print_function
 from timeit import default_timer as timer
+
 
 
 def run_epoch(sess, loss, ops, reset, num_unrolls):
@@ -18,10 +20,10 @@ def run_epoch(sess, loss, ops, reset, num_unrolls):
 
 
 def print_update(epoch, epochs, loss, epoch_interval, time):
-    print 'Epoch/Total Epocs: ', epoch + 1, '/', epochs
-    print 'Mean Log Loss: ', loss
-    print 'Mean Epoch Time: ', time / epoch_interval
-    print '--------------------------------------------------------------------\n'
+    print('Epoch/Total Epocs: ', epoch + 1, '/', epochs)
+    print('Mean Log Loss: ', loss)
+    print('Mean Epoch Time: ', time / epoch_interval)
+    print('--------------------------------------------------------------------\n')
 
 
 def write_update(loss, time, mean_mats_values_list):
