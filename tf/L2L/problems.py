@@ -157,6 +157,7 @@ class Mnist(Problem):
         return layer_out
 
     def get_batch(self, mode='train'):
+        data_holder = None
         if mode == 'train':
             data_holder = self.training_data
         elif mode == 'validation':
