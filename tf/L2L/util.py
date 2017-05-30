@@ -34,3 +34,17 @@ def write_update(loss, time, mean_mats_values_list):
             for value in mean_vars:
                 log_file.write(str(value) + ' ')
             log_file.write('\n')
+
+
+def get_model_path(flag_optimizer, model_id, preprocess_args=None, learning_rate=None, num_layer=None, layer_width=None, momentum=None, second_derivative=None):
+    path = 'results/' + flag_optimizer + '_model_' + model_id
+    if preprocess_args is not None:
+        path += ('_' + preprocess_args[0].func_name)
+        for key in preprocess_args[1]:
+            path += ('_' + str(key) + '_' + str(preprocess_args[1][key]))
+    path += (('_lr_' + str(learning_rate)) if learning_rate is not None else '')
+    path += (('_nl_' + str(num_layer)) if num_layer is not None else '')
+    path += (('_lw_' + str(layer_width)) if layer_width is not None else '')
+    path += (('_mom_' + str(momentum)) if momentum is not None else '')
+    path += (('_secdev_' + str(second_derivative)) if second_derivative is not None else '')
+    return path
