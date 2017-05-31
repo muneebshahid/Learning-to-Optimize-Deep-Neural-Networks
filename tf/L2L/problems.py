@@ -52,7 +52,7 @@ class ElementwiseSquare(Problem):
     def __init__(self, args):
         super(ElementwiseSquare, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.x = self.create_variable('x', tf.random_uniform_initializer())
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=args['dims'])
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
