@@ -35,7 +35,7 @@ with l2l.as_default():
                                                                           'unroll_len': unroll_len,
                                                                           'learning_rate': 0.001,
                                                                           'meta_learning_rate': meta_learning_rate})
-            loss_final, update, reset = optimizer.meta_step()
+            loss_final, update, reset = optimizer.step()
             final_step = [update]
 
         elif flag_optimizer == 'MLP':
@@ -44,7 +44,7 @@ with l2l.as_default():
                                                                           'meta_learning_rate': 0.01,
                                                                           'momentum': False, 'layer_width': 1,
                                                                           'preprocess': preprocess})
-            loss_final, update, reset, step = optimizer.meta_minimize()
+            loss_final, update, reset, step = optimizer.minimize()
             final_step = [update, step]
             mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                     tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
