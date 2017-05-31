@@ -49,7 +49,7 @@ with l2l.as_default():
                                    args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                          'momentum': False})
 
-    loss_final, update, reset, step = optimizer.meta_minimize()
+    loss_final, update, reset, step = optimizer.minimize()
     mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
     saver = tf.train.Saver(trainable_variables, max_to_keep=100)

@@ -39,10 +39,10 @@ class Meta_Optimizer():
         self.trainable = []
         self.untrainable = []
 
-    def meta_loss(self):
+    def step(self):
         pass
 
-    def meta_minimize(self):
+    def minimize(self):
         pass
 
     def preprocess_input(self, inputs):
@@ -65,7 +65,7 @@ class Meta_Optimizer():
             gradients[i] = self.preprocess_input(self.flatten_input(i, gradient))
         return gradients
 
-    def step(self, inputs):
+    def core(self, inputs):
         pass
 
     @property
@@ -129,7 +129,7 @@ class l2l(Meta_Optimizer):
             input['hidden_state'] = hidden_state
         return inputs
 
-    def step(self, inputs):
+    def core(self, inputs):
         with tf.variable_scope('rnn_core/rnn_init', reuse=True):
             lstm_output, hidden_state = self.lstm(inputs['preprocessed_gradient'], inputs['hidden_state'])
         deltas = tf.add(tf.matmul(lstm_output, self.W, name='output_matmul'), self.b, name='add_bias')
@@ -170,11 +170,11 @@ class l2l(Meta_Optimizer):
 
         self.end_init()
 
-    def meta_loss(self):
+    def step(self):
         def update(t, fx_array, params, hidden_states):
             rnn_inputs = self.get_processed_gradients(params)
             for i, (rnn_input, hidden_state) in enumerate(zip(rnn_inputs, hidden_states)):
-                deltas, hidden_states[i] = self.step({'preprocessed_gradient': rnn_input, 'hidden_state': hidden_state})
+                deltas, hidden_states[i] = self.core({'preprocessed_gradient': rnn_input, 'hidden_state': hidden_state})
                 deltas = tf.reshape(deltas, self.problem.variables[i].get_shape(), name='reshape_deltas')
                 deltas = tf.multiply(deltas, self.learning_rate, 'multiply_deltas')
                 params[i] = tf.add(params[i], deltas, 'add_deltas_params')
@@ -206,8 +206,8 @@ class l2l(Meta_Optimizer):
         loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
         return [loss_sum, update_params, reset]
 
-    def meta_minimize(self):
-        info = self.meta_loss()
+    def minimize(self):
+        info = self.step()
         step = self.meta_optimizer.minimize(info[0])
         info.append(step)
         return info
@@ -219,11 +219,6 @@ class mlp(Meta_Optimizer):
     enable_momentum, avg_gradients, beta_1 = None, None, None
 
     layer_width = None
-
-    def step(self, inputs):
-        layer_1_activations = tf.sigmoid(tf.add(tf.matmul(inputs, self.w_1), self.b_1), name='layer_1_activation')
-        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
-        return [output]
 
     def __init__(self, problem, path, args):
         super(mlp, self).__init__(problem, path, args)
@@ -253,10 +248,16 @@ class mlp(Meta_Optimizer):
 
         self.end_init()
 
-    def meta_loss(self):
+    def core(self, inputs):
+        layer_1_activations = tf.sigmoid(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1), name='layer_1_activation')
+        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
+        return [output]
+
+    def step(self):
         update_params = list()
         updated_vars = list()
         beta_1_new_list = None
+        deltas_list = []
         if self.enable_momentum:
             beta_1_new_list = list()
 
@@ -273,13 +274,14 @@ class mlp(Meta_Optimizer):
         else:
             optimizer_inputs = preprocessed_gradients
         for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
-            output = self.step(optim_input)[0]
+            output = self.core({'preprocessed_gradient': optim_input})[0]
             if self.enable_momentum:
                 deltas = tf.slice(output, [0, 0], [-1, 1], name='deltas')
                 beta_1_new = tf.slice(output, [0, 1], [-1, 1], name='beta_1_new')
                 beta_1_new_list.append(beta_1_new)
             else:
                 deltas = output
+            deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
@@ -294,10 +296,11 @@ class mlp(Meta_Optimizer):
                  zip(flat_gradients, self.avg_gradients, self.beta_1)])
             update_params.append(
                 [tf.assign(beta_1_old, beta_1_new) for beta_1_old, beta_1_new in zip(self.beta_1, beta_1_new_list)])
+        self.debug_info = [flat_gradients, preprocessed_gradients, deltas_list]
         return [loss, update_params, reset]
 
-    def meta_minimize(self):
-        info = self.meta_loss()
+    def minimize(self):
+        info = self.step()
         step = self.meta_optimizer.minimize(info[0])
         info.append(step)
         return info
