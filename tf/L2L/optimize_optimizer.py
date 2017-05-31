@@ -82,10 +82,10 @@ with l2l.as_default():
         #########################
 
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id,
-                                      preprocess_args=preprocess,
-                                      learning_rate=learning_rate, layer_width=layer_width,
-                                      momentum=momentum) if restore_network else None
+        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
+                                      # preprocess_args=preprocess,
+                                      # learning_rate=learning_rate, layer_width=layer_width,
+                                      # momentum=momentum) if restore_network else None
         optimizer = meta_optimizer.mlp(problem, path=io_path, args={'second_derivatives': second_derivatives,
                                                                       'num_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.01,
@@ -149,19 +149,19 @@ with l2l.as_default():
 
                 if save_network and loss_eval_total < best_evaluation:
                     print('Better Loss Found')
-                    save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1),
-                                                    preprocess_args=preprocess,
-                                                    learning_rate=learning_rate, layer_width=layer_width,
-                                                    momentum=momentum, second_derivative=second_derivatives)
+                    save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
+                                                    # preprocess_args=preprocess,
+                                                    # learning_rate=learning_rate, layer_width=layer_width,
+                                                    # momentum=momentum, second_derivative=second_derivatives)
                     print(save_path)
                     optimizer.save(sess, save_path)
                     print('Network Saved')
                     best_evaluation = loss_eval_total
         if save_network:
-            save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epochs) + '_FINAL',
-                                            preprocess_args=preprocess,
-                                            learning_rate=learning_rate, layer_width=layer_width,
-                                            momentum=momentum, second_derivative=second_derivatives)
+            save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epochs) + '_FINAL')
+                                            # preprocess_args=preprocess,
+                                            # learning_rate=learning_rate, layer_width=layer_width,
+                                            # momentum=momentum, second_derivative=second_derivatives)
             print(save_path)
             optimizer.save(sess, save_path)
             print('Final Network Saved')
