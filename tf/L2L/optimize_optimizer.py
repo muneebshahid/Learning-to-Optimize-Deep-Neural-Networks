@@ -53,10 +53,11 @@ with l2l.as_default():
         test_epochs = 5
         #########################
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id,
-                                      preprocess_args=preprocess,
-                                      learning_rate=learning_rate, layer_width=layer_width,
-                                      momentum=momentum, second_derivative=second_derivatives) if restore_network else None
+        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
+                                      # preprocess_args=preprocess,
+                                      # learning_rate=learning_rate, layer_width=layer_width,
+                                      # momentum=momentum, second_derivative=second_derivatives)
+
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,

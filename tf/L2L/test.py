@@ -15,7 +15,7 @@ with l2l.as_default():
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
     flag_optimizer = 'L2L'
-    model_id = 'model_1000000'
+    model_id = '1000000'
     model_id += '_FINAL'
     load_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
     second_derivatives = False
