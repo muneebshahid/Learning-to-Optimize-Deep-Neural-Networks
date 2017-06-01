@@ -68,6 +68,9 @@ class Meta_Optimizer():
     def core(self, inputs):
         pass
 
+    def reset_optimizer(self):
+        pass
+
     @property
     def stacked_optimizer_inputs(self):
         variables = self.problem.variables
@@ -128,6 +131,9 @@ class l2l(Meta_Optimizer):
         for (input, hidden_state) in zip(inputs, self.hidden_states):
             input['hidden_state'] = hidden_state
         return inputs
+
+    def reset_optimizer(self):
+        return
 
     def core(self, inputs):
         with tf.variable_scope('rnn_core/rnn_init', reuse=True):
@@ -247,6 +253,8 @@ class mlp(Meta_Optimizer):
                     for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
         self.end_init()
+    def reset_optimizer(self):
+        return tf.variables_initializer([self.w_1, self.b_1, self.w_out, self.b_out])
 
     def core(self, inputs):
         layer_1_activations = tf.sigmoid(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1), name='layer_1_activation')
