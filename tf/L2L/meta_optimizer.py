@@ -13,15 +13,11 @@ class Meta_Optimizer():
     io_handle = None
     problem = None
     meta_optimizer = None
-    hidden_states = None
-    unroll_len = None
     second_derivatives = None
     preprocessor = None
     preprocessor_args = None
     debug_info = None
-    best_eval = None
-    trainable = None
-    untrainable = None
+    trainable_variables = None
 
     def __init__(self, problem, path, args):
         if path is not None:
@@ -35,9 +31,11 @@ class Meta_Optimizer():
             self.preprocessor = self.global_args['preprocess'][0]
             self.preprocessor_args = self.global_args['preprocess'][1]
         self.second_derivatives = self.global_args['second_derivatives']
+        self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(self.global_args['learning_rate'],
+                                                                                      dtype=tf.float32), trainable=False)
+        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
         self.debug_info = []
-        self.trainable = []
-        self.untrainable = []
+        self.trainable_variables = []
 
     def step(self):
         pass
@@ -88,10 +86,10 @@ class Meta_Optimizer():
         return stacked_inputs
 
     def __init_trainable_vars_list(self):
-        self.trainable = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        self.trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
     def __init_io_handle(self):
-        self.io_handle = tf.train.Saver(self.trainable, max_to_keep=100)
+        self.io_handle = tf.train.Saver(self.trainable_variables, max_to_keep=100)
 
     def end_init(self):
         self.__init_trainable_vars_list()
@@ -146,7 +144,6 @@ class l2l(Meta_Optimizer):
         self.state_size = self.global_args['state_size']
         self.num_layers = self.global_args['num_layers']
         self.unroll_len = self.global_args['unroll_len']
-        self.learning_rate = self.global_args['learning_rate']
         self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
 
         # initialize for later use.
@@ -210,6 +207,7 @@ class l2l(Meta_Optimizer):
                 self.problem.variables + self.problem.constants + nest.flatten(self.hidden_states))
 
         loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
+        self.debug_info = [[], [], []]
         return [loss_sum, update_params, reset]
 
     def minimize(self):
@@ -229,10 +227,8 @@ class mlp(Meta_Optimizer):
     def __init__(self, problem, path, args):
         super(mlp, self).__init__(problem, path, args)
         self.num_layers = self.global_args['num_layers']
-        self.learning_rate = self.global_args['learning_rate']
         self.layer_width = self.global_args['layer_width']
         self.enable_momentum = self.global_args.has_key('momentum') and self.global_args['momentum']
-        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
 
         with tf.variable_scope('meta_optimizer_core'):
             init = tf.contrib.layers.xavier_initializer()
@@ -241,7 +237,6 @@ class mlp(Meta_Optimizer):
             self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=init)
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
-            # self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(.0001, dtype=tf.float32))
 
             if self.enable_momentum:
                 self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
