@@ -19,6 +19,10 @@ class Preprocess():
         return outputs
 
     @staticmethod
+    def sep_sign(inputs, args):
+        return tf.concat([tf.abs(inputs), tf.sign(inputs)], 1)
+
+    @staticmethod
     def log_sign(inputs, args):
         # eps = np.finfo(gradients.dtype.as_numpy_dtype).eps
         # cond1_indices = tf.squeeze(tf.slice(tf.where(tf.greater_equal(tf.abs(gradients), tf.exp(-self.__k))), [0, 0], [-1, 1]))
