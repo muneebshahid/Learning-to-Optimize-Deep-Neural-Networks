@@ -18,13 +18,13 @@ eval_interval = 10
 validation_epochs = 50
 test_epochs = 500
 #########################
-learning_rate = .1
-meta_learning_rate = 0.01
+learning_rate = .0001
+meta_learning_rate = .01
 layer_width = 20
 momentum = False
 #########################
 meta = True
-flag_optim = 'Adsam'
+flag_optim = 'mlp'
 
 problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':10, 'gog': second_derivatives})
 if meta:
@@ -47,7 +47,9 @@ if meta:
     reset_optim = optimizer.reset_optimizer()
     flat_grads, prep_grads, deltas = optimizer.debug_info
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optimizer.trainable_variables]
+    norm_optim_variables = [tf.norm(variable) for variable in optimizer.trainable_variables]
     mean_deltas = [tf.reduce_mean(delta) for delta in deltas]
+    norm_deltas = [tf.norm(delta) for delta in deltas]
 
 else:
     if flag_optim == 'Adam':
@@ -59,8 +61,10 @@ else:
     update = []
 
 mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
+norm_problem_variables = [tf.norm(variable) for variable in problem.variables]
 grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 mean_grads = [tf.reduce_mean(grad) for grad in grads]
+norm_grads = [tf.norm(grad) for grad in grads]
 
 
 
@@ -93,12 +97,12 @@ def itr(itr, print_interval=1000, reset_interval=None):
         loss_final += l
         if (i + 1) % print_interval == 0:
             print(i + 1)
-            print('probl: ', iis.run(mean_problem_variables))
+            print('norm_probl: ', iis.run(norm_problem_variables))
             if meta:
-                print('optim: ', iis.run(mean_optim_variables))
-                print('delta: ', iis.run(mean_deltas))
-                print('lrate:' , iis.run(optimizer.learning_rate))
-            print('grads: ', iis.run(mean_grads))
+                print('norm_optim: ', iis.run(norm_optim_variables))
+                print('norm_delta: ', iis.run(norm_deltas))
+                # print('lrate:' , iis.run(optimizer.learning_rate))
+            print('norm_grads: ', iis.run(norm_grads))
             print('loss: ', np.log10(loss_final / print_interval), np.log10(l))
             loss_final = 0
 
