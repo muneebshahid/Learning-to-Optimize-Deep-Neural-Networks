@@ -26,7 +26,7 @@ with l2l.as_default():
     layer_width = None
     momentum = None
 
-    flag_optimizer = 'MLP'
+    flag_optimizer = 'L2L'
 
     model_id = '10'
 
@@ -69,21 +69,19 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 500
-        num_optim_steps_per_epoch = 1
-        unroll_len = 1
+        epochs = 100000
         epoch_interval = 1000
-        eval_interval = 10
+        eval_interval = 50000
         validation_epochs = 50
         test_epochs = 500
         #########################
         learning_rate = 0.0001
-        layer_width = 10
+        layer_width = 20
         momentum = False
         #########################
 
-        num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
+        num_unrolls_per_epoch = 1
+        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
