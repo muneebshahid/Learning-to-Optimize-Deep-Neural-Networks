@@ -12,42 +12,41 @@ preprocess = [Preprocess.log_sign, {'k': 10}]
 second_derivatives = False
 #########################
 epochs = 500
-num_optim_steps_per_epoch = 1
-unroll_len = 1
+unroll_len = 20
 epoch_interval = 1000
 eval_interval = 10
 validation_epochs = 50
 test_epochs = 500
 #########################
-learning_rate = 0.0001
+learning_rate = .1
 meta_learning_rate = 0.01
 layer_width = 20
 momentum = False
 #########################
 meta = True
-flag_optim = 'Adam'
+flag_optim = 'Adsam'
 
 problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':10, 'gog': second_derivatives})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
-    optimizer = meta_optimizer.mlp(problem, path=io_path, args={'second_derivatives': second_derivatives,
-                                                                          'num_layers': 1, 'learning_rate': learning_rate,
-                                                                          'meta_learning_rate': meta_learning_rate,
-                                                                          'momentum': momentum, 'layer_width': layer_width,
-                                                                          'preprocess': preprocess})
-    # optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
-    #                                                          'state_size': 20, 'num_layers': 2,
-    #                                                          'unroll_len': unroll_len,
-    #                                                          'learning_rate': 0.001,
-    #                                                          'meta_learning_rate': 0.01,
-    #                                                          'preprocess': preprocess})
+    if flag_optim == 'mlp':
+        optimizer = meta_optimizer.mlp(problem, path=io_path, args={'second_derivatives': second_derivatives,
+                                                                              'num_layers': 1, 'learning_rate': learning_rate,
+                                                                              'meta_learning_rate': meta_learning_rate,
+                                                                              'momentum': momentum, 'layer_width': layer_width,
+                                                                              'preprocess': preprocess})
+    else:
+        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
+                                                                 'state_size': 5, 'num_layers': 2,
+                                                                 'unroll_len': unroll_len,
+                                                                 'learning_rate': 0.01,
+                                                                 'meta_learning_rate': 0.01,
+                                                                 'preprocess': preprocess})
 
     loss, update, reset, min = optimizer.minimize()
     reset_optim = optimizer.reset_optimizer()
     flat_grads, prep_grads, deltas = optimizer.debug_info
-    optimizer_variables = [optimizer.w_1, optimizer.b_1, optimizer.w_out, optimizer.b_out]
-    mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.b_1),
-                            tf.reduce_mean(optimizer.w_out), optimizer.b_out[0][0]]
+    mean_optim_variables = [tf.reduce_mean(variable) for variable in optimizer.trainable_variables]
     mean_deltas = [tf.reduce_mean(delta) for delta in deltas]
 
 else:
@@ -63,23 +62,25 @@ mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.varia
 grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 mean_grads = [tf.reduce_mean(grad) for grad in grads]
 
-def p(i):
-    f, u, l, d, m = iis.run([flat_grads, update, loss, deltas, min])
-    return f[i][-20:], u[0][i][-20:], l, d[i][-20:]
+
 
 
 iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
-def print_min_max():
-    shape = len()
-    mat = np.zeros((flat_grads, deltas))
-    mat[:, 1::2] = 1000
-    for i, (grad, delta) in zip(flat_grads, deltas):
-        g, d = iis.run([grad, delta])
-        min_g = np.min(g)
-        max_g = np.max(g)
-        min_d = np.min(d)
-        max_d = np.max(d)
+
+# def p(i):
+#     f, u, l, d, m = iis.run([flat_grads, update, loss, deltas, min])
+#     return f[i][-20:], u[0][i][-20:], l, d[i][-20:]
+# def print_min_max():
+#     shape = len()
+#     mat = np.zeros((flat_grads, deltas))
+#     mat[:, 1::2] = 1000
+#     for i, (grad, delta) in zip(flat_grads, deltas):
+#         g, d = iis.run([grad, delta])
+#         min_g = np.min(g)
+#         max_g = np.max(g)
+#         min_d = np.min(d)
+#         max_d = np.max(d)
 
 
 def itr(itr, print_interval=1000, reset_interval=None):
@@ -96,6 +97,7 @@ def itr(itr, print_interval=1000, reset_interval=None):
             if meta:
                 print('optim: ', iis.run(mean_optim_variables))
                 print('delta: ', iis.run(mean_deltas))
+                print('lrate:' , iis.run(optimizer.learning_rate))
             print('grads: ', iis.run(mean_grads))
             print('loss: ', np.log10(loss_final / print_interval), np.log10(l))
             loss_final = 0
