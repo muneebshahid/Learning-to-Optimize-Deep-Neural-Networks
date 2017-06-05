@@ -152,7 +152,7 @@ class Mnist(Problem):
         return tf.reduce_mean(loss)
 
     def network(self, batch, variables):
-        layer_1 = tf.sigmoid(tf.add(tf.matmul(batch, variables[0]), variables[1]))
+        layer_1 = tf.nn.relu(tf.add(tf.matmul(batch, variables[0]), variables[1]))
         layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
         return layer_out
 
