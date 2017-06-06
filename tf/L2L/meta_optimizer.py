@@ -231,12 +231,16 @@ class mlp(Meta_Optimizer):
         self.enable_momentum = self.global_args.has_key('momentum') and self.global_args['momentum']
 
         with tf.variable_scope('meta_optimizer_core'):
-            init = tf.contrib.layers.xavier_initializer()
-            input_dim, output_dim = (4, 2) if self.enable_momentum else (2, 1)
+            init = tf.random_normal_initializer(mean=0.0, stddev=.1)
+            input_dim, output_dim = (1, 1)
+            if self.preprocessor is not None:
+                input_dim += 1
+            if self.enable_momentum:
+                input_dim, output_dim = (4, 2)
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
-            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=init)
+            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
-            self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=init)
+            self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=tf.zeros_initializer)
 
             if self.enable_momentum:
                 self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
@@ -252,7 +256,7 @@ class mlp(Meta_Optimizer):
         return tf.variables_initializer([self.w_1, self.b_1, self.w_out, self.b_out])
 
     def core(self, inputs):
-        layer_1_activations = tf.sigmoid(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1), name='layer_1_activation')
+        layer_1_activations = tf.nn.softplus(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
         output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
         return [output]
 
@@ -284,8 +288,13 @@ class mlp(Meta_Optimizer):
                 beta_1_new_list.append(beta_1_new)
             else:
                 deltas = output
+
             deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
+            # grad_mag = tf.slice(optim_input, [0, 0], [-1, 1])
+            # flat_var = self.flatten_input(i, self.problem.variables[i])
+            # deltas = tf.multiply(self.learning_rate * tf.sign(deltas), tf.minimum(tf.minimum(tf.abs(optim_input), tf.abs(deltas)), tf.abs(flat_var)),
+            #                      name='apply_learning_rate')
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
