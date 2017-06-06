@@ -37,9 +37,9 @@ if meta:
                                                                               'preprocess': preprocess})
     else:
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
-                                                                 'state_size': 5, 'num_layers': 2,
+                                                                 'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
-                                                                 'learning_rate': 0.01,
+                                                                 'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                  'preprocess': preprocess})
 
