@@ -134,7 +134,7 @@ class l2l(Meta_Optimizer):
         return
 
     def core(self, inputs):
-        with tf.variable_scope('rnn_core/rnn_init', reuse=True):
+        with tf.variable_scope('optimizer_core/rnn_init', reuse=True):
             lstm_output, hidden_state = self.lstm(inputs['preprocessed_gradient'], inputs['hidden_state'])
         deltas = tf.add(tf.matmul(lstm_output, self.W, name='output_matmul'), self.b, name='add_bias')
         return [deltas, hidden_state]
@@ -147,7 +147,7 @@ class l2l(Meta_Optimizer):
         self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
 
         # initialize for later use.
-        with tf.variable_scope('rnn_core'):
+        with tf.variable_scope('optimizer_core'):
             # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
                 state_variable = []
@@ -230,13 +230,15 @@ class mlp(Meta_Optimizer):
         self.layer_width = self.global_args['layer_width']
         self.enable_momentum = self.global_args.has_key('momentum') and self.global_args['momentum']
 
-        with tf.variable_scope('meta_optimizer_core'):
+        with tf.variable_scope('optimizer_core'):
             init = tf.random_normal_initializer(mean=0.0, stddev=.1)
             input_dim, output_dim = (1, 1)
             if self.preprocessor is not None:
                 input_dim = 2
             if self.enable_momentum:
                 input_dim = 4
+                
+
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
             self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
