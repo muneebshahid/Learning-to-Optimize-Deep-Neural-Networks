@@ -1,7 +1,14 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from abc import ABCMeta
 import tensorflow as tf
 import numpy as np
 from tensorflow.contrib.learn.python.learn.datasets import mnist as mnist_dataset
+import os, tarfile
+import six.moves
+from six.moves import urllib, xrange
 
 
 class Problem():
@@ -18,7 +25,7 @@ class Problem():
     allow_gradients_of_gradients = None
 
     def __init__(self, args={}):
-        self.allow_gradients_of_gradients = args['gog']
+        self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
         self.dims = args['dims'] if args.has_key('dims') else 1
         self.dtype = args['dtype'] if args.has_key('dtype') else tf.float32
         self.meta = args['meta'] if args.has_key('meta') else True
@@ -176,8 +183,100 @@ class Mnist(Problem):
 
 
             
+class cifar10(Problem):
 
-                
+    def __init__(self, args):
+        CIFAR10_URL = "http://www.cs.toronto.edu/~kriz"
+        CIFAR10_FILE = "cifar-10-binary.tar.gz"
+        CIFAR10_FOLDER = "cifar-10-batches-bin"
+        def maybe_download_cifar10(path):
+            """Download and extract the tarball from Alex's website."""
+            if not os.path.exists(path):
+                os.makedirs(path)
+            filepath = os.path.join(path, CIFAR10_FILE)
+            if not os.path.exists(filepath):
+                print("Downloading CIFAR10 dataset to {}".format(filepath))
+                url = os.path.join(CIFAR10_URL, CIFAR10_FILE)
+                filepath, _ = urllib.request.urlretrieve(url, filepath)
+                statinfo = os.stat(filepath)
+                print("Successfully downloaded {} bytes".format(statinfo.st_size))
+                tarfile.open(filepath, "r:gz").extractall(path)
+        path = args['path']
+        maybe_download_cifar10(path)
+        super(cifar10, self).__init__(args)
+
+        self.w1 = self.create_variable('w1', dims=[5, 5, 3, 16])
+        self.b1 = self.create_variable('b1', dims=[16])
+        self.w2 = self.create_variable('w2', dims=[5, 5, 16, 16])
+        self.b2 = self.create_variable('b2', dims=[16])
+        self.w3 = self.create_variable('w3', dims=[5, 5, 16, 16])
+        self.b3 = self.create_variable('b3', dims=[16])
+        self.w4 = self.create_variable('w4', dims=[1024, 32])
+        self.b4 = self.create_variable('b4', dims=[32])
+        self.w5 = self.create_variable('w5', dims=[32, 10])
+        self.b5 = self.create_variable('b5', dims=[10])
+        # Read images and labels from disk.
+        filenames = [os.path.join(path, CIFAR10_FOLDER, "data_batch_{}.bin".format(i)) for i in xrange(1, 6)]
+
+        for f in filenames:
+            if not tf.gfile.Exists(f):
+                raise ValueError('Failed to find file: ' + f)
+
+        depth = 3
+        height = 32
+        width = 32
+        label_bytes = 1
+        image_bytes = depth * height * width
+        record_bytes = label_bytes + image_bytes
+        reader = tf.FixedLengthRecordReader(record_bytes=record_bytes)
+        _, record = reader.read(tf.train.string_input_producer(filenames))
+        record_bytes = tf.decode_raw(record, tf.uint8)
+
+        label = tf.cast(tf.slice(record_bytes, [0], [label_bytes]), tf.int32)
+        raw_image = tf.slice(record_bytes, [label_bytes], [image_bytes])
+        image = tf.cast(tf.reshape(raw_image, [depth, height, width]), tf.float32)
+        # height x width x depth.
+        image = tf.transpose(image, [1, 2, 0])
+        image = tf.div(image, 255)
+
+        self.queue = tf.RandomShuffleQueue(capacity=1000 + 3 * 128,
+                                      min_after_dequeue=1000,
+                                      dtypes=[tf.float32, tf.int32],
+                                      shapes=[image.get_shape(), label.get_shape()])
+        enqueue_ops = [self.queue.enqueue([image, label]) for _ in xrange(4)]
+        tf.train.add_queue_runner(tf.train.QueueRunner(self.queue, enqueue_ops))
+
+
+
+    def network(self, batch, variables):
+        def conv_activation(x):
+            return tf.nn.max_pool(tf.nn.relu(x),
+                                  ksize=[1, 2, 2, 1],
+                                  strides=[1, 2, 2, 1],
+                                  padding="SAME")
+        conv1 = conv_activation(tf.nn.bias_add(tf.nn.conv2d(batch, variables[0], [1, 1, 1, 1], padding='SAME'), variables[1]))
+        conv2 = conv_activation(
+            tf.nn.bias_add(tf.nn.conv2d(conv1, variables[2], [1, 1, 1, 1], padding='SAME'), variables[3]))
+        conv3 = conv_activation(
+            tf.nn.bias_add(tf.nn.conv2d(conv1, variables[4], [1, 1, 1, 1], padding='SAME'), variables[5]))
+        reshaped_conv3 = tf.reshape(conv3, [batch.shape[0].value, -1])
+        linear = tf.nn.relu(tf.nn.bias_add(tf.matmul(reshaped_conv3, variables[6]), variables[7]))
+        out = tf.nn.bias_add(tf.matmul(linear, variables[8]), variables[9])
+        return out
+
+    def loss(self, variables, mode='train'):
+        def xent_loss(output, labels):
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=output,
+                                                                  labels=labels)
+            return tf.reduce_mean(loss)
+        image_batch, label_batch = self.queue.dequeue_many(128)
+        label_batch = tf.reshape(label_batch, [128])
+        output = self.network(image_batch, variables)
+        return xent_loss(output, label_batch)
+
+
+
+
 
 
 
