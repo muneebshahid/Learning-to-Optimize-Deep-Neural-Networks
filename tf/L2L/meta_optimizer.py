@@ -234,17 +234,16 @@ class mlp(Meta_Optimizer):
             init = tf.random_normal_initializer(mean=0.0, stddev=.1)
             input_dim, output_dim = (1, 1)
             if self.preprocessor is not None:
-                input_dim += 1
+                input_dim = 2
             if self.enable_momentum:
-                input_dim, output_dim = (4, 2)
+                input_dim = 4
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
             self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=tf.zeros_initializer)
 
             if self.enable_momentum:
-                self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
-                                               trainable=False)
+                self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
                                for i, shape in enumerate(self.problem.variables_flattened_shape)]
                 self.avg_gradients = [
                     tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
@@ -281,20 +280,9 @@ class mlp(Meta_Optimizer):
         else:
             optimizer_inputs = preprocessed_gradients
         for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
-            output = self.core({'preprocessed_gradient': optim_input})[0]
-            if self.enable_momentum:
-                deltas = tf.slice(output, [0, 0], [-1, 1], name='deltas')
-                beta_1_new = tf.slice(output, [0, 1], [-1, 1], name='beta_1_new')
-                beta_1_new_list.append(beta_1_new)
-            else:
-                deltas = output
-
+            deltas = self.core({'preprocessed_gradient': optim_input})[0]
             deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
-            # grad_mag = tf.slice(optim_input, [0, 0], [-1, 1])
-            # flat_var = self.flatten_input(i, self.problem.variables[i])
-            # deltas = tf.multiply(self.learning_rate * tf.sign(deltas), tf.minimum(tf.minimum(tf.abs(optim_input), tf.abs(deltas)), tf.abs(flat_var)),
-            #                      name='apply_learning_rate')
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
             updated_vars.append(tf.add(variable, deltas))
         loss = self.problem.loss(updated_vars)
@@ -306,8 +294,6 @@ class mlp(Meta_Optimizer):
                 [tf.assign(avg_gradient, avg_gradient * tf.sigmoid(beta_1_t) + (1 - tf.sigmoid(beta_1_t)) * gradient)
                  for gradient, avg_gradient, beta_1_t in
                  zip(flat_gradients, self.avg_gradients, self.beta_1)])
-            update_params.append(
-                [tf.assign(beta_1_old, beta_1_new) for beta_1_old, beta_1_new in zip(self.beta_1, beta_1_new_list)])
         self.debug_info = [flat_gradients, preprocessed_gradients, deltas_list]
         return [loss, update_params, reset]
 
