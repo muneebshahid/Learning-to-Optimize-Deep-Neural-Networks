@@ -26,30 +26,28 @@ momentum = False
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':10, 'gog': second_derivatives})
+problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':10, 'gog': True})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizer.mlp(problem, path=io_path, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizer.MlpMovingAverage(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'momentum': momentum, 'layer_width': layer_width,
-                                                                              'preprocess': preprocess})
+                                                                                 'preprocess': preprocess})
     else:
-        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                  'preprocess': preprocess})
 
-    loss, update, reset, min = optimizer.minimize()
-    reset_optim = optimizer.reset_optimizer()
-    flat_grads, prep_grads, deltas = optimizer.debug_info
+    step, updates, loss, meta_step, reset = optimizer.build()
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optimizer.trainable_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optimizer.trainable_variables]
-    mean_deltas = [tf.reduce_mean(delta) for delta in deltas]
-    norm_deltas = [tf.norm(delta) for delta in deltas]
+    mean_deltas = [tf.reduce_mean(delta) for delta in step['deltas']]
+    norm_deltas = [tf.norm(delta) for delta in step['deltas']]
 
 else:
     if flag_optim == 'Adam':
@@ -66,26 +64,8 @@ grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 mean_grads = [tf.reduce_mean(grad) for grad in grads]
 norm_grads = [tf.norm(grad) for grad in grads]
 
-
-
-
 iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
-
-# def p(i):
-#     f, u, l, d, m = iis.run([flat_grads, update, loss, deltas, min])
-#     return f[i][-20:], u[0][i][-20:], l, d[i][-20:]
-# def print_min_max():
-#     shape = len()
-#     mat = np.zeros((flat_grads, deltas))
-#     mat[:, 1::2] = 1000
-#     for i, (grad, delta) in zip(flat_grads, deltas):
-#         g, d = iis.run([grad, delta])
-#         min_g = np.min(g)
-#         max_g = np.max(g)
-#         min_d = np.min(d)
-#         max_d = np.max(d)
-
 
 def itr(itr, print_interval=1000, reset_interval=None):
     loss_final = 0
@@ -93,7 +73,7 @@ def itr(itr, print_interval=1000, reset_interval=None):
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             iis.run(reset)
-        _, l, _ = iis.run([update, loss, min])
+        _, l, _ = iis.run([updates, loss, meta_step])
         loss_final += l
         if (i + 1) % print_interval == 0:
             print(i + 1)
@@ -101,7 +81,7 @@ def itr(itr, print_interval=1000, reset_interval=None):
             if meta:
                 print('norm_optim: ', iis.run(norm_optim_variables))
                 print('norm_delta: ', iis.run(norm_deltas))
-                # print('lrate:' , iis.run(optimizer.learning_rate))
+                print('lrate:' , iis.run(optimizer.learning_rate))
             print('norm_grads: ', iis.run(norm_grads))
             print('loss: ', np.log10(loss_final / print_interval), np.log10(l))
             loss_final = 0

@@ -45,8 +45,8 @@ with l2l.as_default():
         epoch_interval = 1000
         eval_epochs = 2000
         eval_interval = 10000
-        optimizer = meta_optimizer.mlp(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                   args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
+        optimizer = meta_optimizer.MlpMovingAverage(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                                    args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                          'momentum': False})
 
     loss_final, update, reset, step = optimizer.minimize()

@@ -14,7 +14,7 @@ def run_epoch(sess, loss, ops, reset, num_unrolls):
     start = timer()
     if reset is not None:
         sess.run(reset)
-    for _ in xrange(num_unrolls):
+    for _ in range(num_unrolls):
         cost += sess.run(final_ops)[0]
     return timer() - start, cost / num_unrolls
 

@@ -26,7 +26,7 @@ with l2l.as_default():
     layer_width = None
     momentum = None
 
-    flag_optimizer = 'L2L'
+    flag_optimizer = 'MLP'
 
     model_id = '10'
 
@@ -64,7 +64,7 @@ with l2l.as_default():
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                  'preprocess': preprocess})
-        loss_final, update, reset, step = optimizer.minimize()
+        step, updates, loss, meta_step, reset = optimizer.build()
         reset = None
     else:
         print('Using MLP')
@@ -85,12 +85,12 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optimizer = meta_optimizer.mlp(problem, path=io_path, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizer.MlpSimple(problem, path=io_path, args={'second_derivatives': second_derivatives,
                                                                       'num_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.01,
                                                                       'momentum': momentum, 'layer_width': layer_width,
                                                                       'preprocess': preprocess})
-        loss_final, update, reset, step = optimizer.minimize()
+        step, updates, loss, meta_step, reset = optimizer.build()
         reset = None
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                 tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
@@ -116,8 +116,8 @@ with l2l.as_default():
         for epoch in range(epochs):
             mean_mats_values = sess.run(mean_problem_variables)
             mean_mats_values_list.append(mean_mats_values)
-            time, loss = util.run_epoch(sess, loss_final, [step, update], reset, num_unrolls_per_epoch)
-            total_loss += loss
+            time, loss_value = util.run_epoch(sess, loss, [meta_step, updates], reset, num_unrolls_per_epoch)
+            total_loss += loss_value
             total_time += time
             if (epoch + 1) % epoch_interval == 0:
                 print('Problem Vars: ', mean_mats_values)

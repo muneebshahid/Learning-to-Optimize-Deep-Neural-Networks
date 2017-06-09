@@ -15,26 +15,26 @@ problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 
 
 model_id = '1000000'
 model_id += '_FINAL'
-load_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
+load_path = None#util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
 
 epochs = 1
 num_optim_steps_per_epoch = 1
 unroll_len = 1
 mean_optim_variables = None
 if flag_optimizer == 'MLP':
-    optimizer = meta_optimizer.mlp(problem, path=load_path, args={})
+    optimizer = meta_optimizer.MlpSimple(problem, path=load_path, args={'preprocess': preprocess})
     mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                             tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 else:
     optimizer = meta_optimizer.l2l(problem, path=load_path, args={})
 
-optimizer_inputs = optimizer.stacked_optimizer_inputs
+optimizer_inputs = optimizer.optimizer_input_stack
 mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
 
 flat_gradients, preprocessed_gradients, deltas_list = [], [], []
 iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
-optimizer.load(iis, load_path)
+# optimizer.load(iis, load_path)
 
 print('Init Problem Vars: ', iis.run(mean_problem_variables))
 if mean_optim_variables is not None:
@@ -48,9 +48,6 @@ for gradient in optimizer_inputs:
     flat_gradients.append(gradient['flat_gradient'])
     preprocessed_gradients.append(gradient['preprocessed_gradient'])
 flat_gradients, preprocessed_gradients, deltas = iis.run([flat_gradients, preprocessed_gradients, deltas_list])
-flat_gradients = np.array(flatten(flat_gradients))
-preprocessed_gradients = np.array(flatten(preprocessed_gradients))
-deltas = np.array(flatten(deltas))
 final_array = np.hstack((np.hstack((flat_gradients, preprocessed_gradients)), deltas))
 np.savetxt(load_path + '_optim_io.txt', final_array, fmt='%7f')
 print('Results Dumped')

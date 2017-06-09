@@ -14,7 +14,7 @@ with l2l.as_default():
     num_optim_steps_per_epoch = 1
     unroll_len = 1
     num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-    flag_optimizer = 'L2L'
+    flag_optimizer = 'MLP'
     model_id = '1000000'
     model_id += '_FINAL'
     load_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
@@ -27,25 +27,27 @@ with l2l.as_default():
     test_loss = problem.loss(problem.variables, 'test')
 
     preprocess = [Preprocess.log_sign, {'k': 10}]
+    final_step = []
     mean_optim_variables = None
     optimizer = None
+    loss = None
     if meta:
         if flag_optimizer == 'L2L':
             optimizer = meta_optimizer.l2l(problem, path=load_path, args={'state_size': 20, 'num_layers': 2,
                                                                           'unroll_len': unroll_len,
                                                                           'learning_rate': 0.001,
                                                                           'meta_learning_rate': meta_learning_rate})
-            loss_final, update, reset = optimizer.step()
-            final_step = [update]
+            step, updates, loss, meta_step, reset = optimizer.build()
+            final_step = [updates]
 
         elif flag_optimizer == 'MLP':
-            optimizer = meta_optimizer.mlp(problem, path=load_path, args={'second_derivatives': second_derivatives,
+            optimizer = meta_optimizer.MlpSimple(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                                                           'num_layers': 2, 'learning_rate': 0.0001,
                                                                           'meta_learning_rate': 0.01,
                                                                           'momentum': False, 'layer_width': 1,
                                                                           'preprocess': preprocess})
-            loss_final, update, reset, step = optimizer.minimize()
-            final_step = [update, step]
+            step, updates, loss, meta_step, reset = optimizer.build()
+            final_step = [updates, meta_step]
             mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                     tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
     else:
@@ -54,8 +56,8 @@ with l2l.as_default():
         slot_names = optimizer.get_slot_names()
         optimizer_reset = tf.variables_initializer(slot_names)
         problem_reset = tf.variables_initializer(problem.variables + problem.constants)
-        loss_final = problem.loss(problem.variables)
-        final_step = [optimizer.minimize(loss_final)]
+        loss = problem.loss(problem.variables)
+        final_step = [optimizer.minimize(loss)]
         reset = [problem_reset, optimizer_reset]
 
     mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
@@ -78,10 +80,10 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss = util.run_epoch(sess, loss_final, final_step, None, num_unrolls_per_epoch)
+            time, loss_value = util.run_epoch(sess, loss, final_step, None, num_unrolls_per_epoch)
             total_time += time
-            total_loss += loss
-            total_loss_final += loss
+            total_loss += loss_value
+            total_loss_final += loss_value
             if (epoch + 1) % epoch_interval == 0:
                 print('Problem Vars: ', sess.run(mean_problem_variables))
                 if mean_optim_variables is not None:

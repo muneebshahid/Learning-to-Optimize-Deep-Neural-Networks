@@ -30,60 +30,15 @@ class Meta_Optimizer():
         if 'preprocess' in self.global_args and self.global_args['preprocess'] is not None:
             self.preprocessor = self.global_args['preprocess'][0]
             self.preprocessor_args = self.global_args['preprocess'][1]
-        self.second_derivatives = self.global_args['second_derivatives']
-        self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(self.global_args['learning_rate'],
+        self.second_derivatives = self.global_args['second_derivatives'] if 'second_derivatives' in self.global_args else False
+        self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(self.global_args['learning_rate']
+                                                                                      if 'learning_rate' in self.global_args
+                                                                                      else .0001,
                                                                                       dtype=tf.float32), trainable=False)
-        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
+        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
+                                                                                               self.global_args else .01)
         self.debug_info = []
         self.trainable_variables = []
-
-    def step(self):
-        pass
-
-    def minimize(self):
-        pass
-
-    def preprocess_input(self, inputs):
-        if self.preprocessor is not None:
-            return self.preprocessor(inputs, self.preprocessor_args)
-        else:
-            return inputs
-
-    def flatten_input(self, i, inputs):
-        return tf.reshape(inputs, [self.problem.variables_flattened_shape[i], 1])
-
-    def get_gradients(self, variables):
-        return tf.gradients(self.problem.loss(variables), variables)
-
-    def get_processed_gradients(self, variables):
-        gradients = self.get_gradients(variables)
-        if not self.second_derivatives:
-            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
-        for i, gradient in enumerate(gradients):
-            gradients[i] = self.preprocess_input(self.flatten_input(i, gradient))
-        return gradients
-
-    def core(self, inputs):
-        pass
-
-    def reset_optimizer(self):
-        pass
-
-    @property
-    def stacked_optimizer_inputs(self):
-        variables = self.problem.variables
-        gradients = self.get_gradients(variables)
-        flat_gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
-        preprocessed_gradients = [self.preprocess_input(flat_gradient) for flat_gradient in flat_gradients]
-        stacked_inputs = [{
-            'x': variable,
-            'gradient_raw': gradient,
-            'flat_gradient': flat_gradient,
-            'preprocessed_gradient': preprocessed_gradient
-        }
-            for (variable, gradient, flat_gradient, preprocessed_gradient) in
-            zip(variables, gradients, flat_gradients, preprocessed_gradients)]
-        return stacked_inputs
 
     def __init_trainable_vars_list(self):
         self.trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -94,6 +49,65 @@ class Meta_Optimizer():
     def end_init(self):
         self.__init_trainable_vars_list()
         self.__init_io_handle()
+
+    def preprocess_input(self, inputs):
+        if self.preprocessor is not None:
+            return self.preprocessor(inputs, self.preprocessor_args)
+        else:
+            return inputs
+
+    def flatten_input(self, i, inputs):
+        return tf.reshape(inputs, [self.problem.variables_flattened_shape[i], 1])
+
+    def get_gradients_raw(self, variables):
+        return tf.gradients(self.problem.loss(variables), variables)
+
+    def get_gradients(self, variables):
+        gradients = self.get_gradients_raw(variables)
+        if not self.second_derivatives:
+            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
+        gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
+        return gradients
+
+    @property
+    def optimizer_input_stack(self):
+        variables = self.problem.variables
+        gradients_raw = self.get_gradients_raw(variables)
+        flat_gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients_raw)]
+        preprocessed_gradients = [self.preprocess_input(gradient) for gradient in flat_gradients]
+        stacked_inputs = [{
+            'x': variable,
+            'gradient_raw': gradients_raw,
+            'flat_gradient': flat_gradient,
+            'preprocessed_gradient': preprocessed_gradient
+        }
+            for (variable, gradient_raw, flat_gradient, preprocessed_gradient) in
+            zip(variables, gradients_raw, flat_gradients, preprocessed_gradients)]
+        return stacked_inputs
+
+    def updates(self, args):
+        pass
+
+    def core(self, inputs):
+        pass
+
+    def loss(self, variables):
+        pass
+
+    def step(self):
+        pass
+
+    def minimize(self, loss):
+        return self.meta_optimizer.minimize(loss)
+
+    def build(self):
+        pass
+
+    def reset_optimizer(self):
+        return [tf.variables_initializer(self.trainable_variables)]
+
+    def reset_problem(self):
+        return [tf.variables_initializer(self.problem.variables + self.problem.constants)]
 
     @staticmethod
     def load_args(path):
@@ -116,28 +130,20 @@ class Meta_Optimizer():
         self.save_args(path)
 
 
+
 class l2l(Meta_Optimizer):
+
     state_size = None
-    num_layers = None
-    learning_rate = None
     W, b = None, None
     lstm = None
+    fx_array = None
 
     @property
-    def stacked_optimizer_inputs(self):
-        inputs = super(l2l, self).stacked_optimizer_inputs
+    def optimizer_input_stack(self):
+        inputs = super(l2l, self).optimizer_input_stack
         for (input, hidden_state) in zip(inputs, self.hidden_states):
             input['hidden_state'] = hidden_state
         return inputs
-
-    def reset_optimizer(self):
-        return
-
-    def core(self, inputs):
-        with tf.variable_scope('optimizer_core/rnn_init', reuse=True):
-            lstm_output, hidden_state = self.lstm(inputs['preprocessed_gradient'], inputs['hidden_state'])
-        deltas = tf.add(tf.matmul(lstm_output, self.W, name='output_matmul'), self.b, name='add_bias')
-        return [deltas, hidden_state]
 
     def __init__(self, problem, path, args):
         super(l2l, self).__init__(problem, path, args)
@@ -145,6 +151,7 @@ class l2l(Meta_Optimizer):
         self.num_layers = self.global_args['num_layers']
         self.unroll_len = self.global_args['unroll_len']
         self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
+        self.fx_array = tf.TensorArray(tf.float32, size=self.unroll_len, clear_after_read=False)
 
         # initialize for later use.
         with tf.variable_scope('optimizer_core'):
@@ -159,7 +166,7 @@ class l2l(Meta_Optimizer):
             self.lstm = tf.contrib.rnn.BasicLSTMCell(self.state_size)
             self.lstm = tf.contrib.rnn.MultiRNNCell(
                 [tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
-            gradients = self.get_processed_gradients(self.problem.variables)[0]
+            gradients = self.preprocess_input(self.get_gradients(self.problem.variables)[0])
 
             with tf.variable_scope('hidden_states'):
                 self.hidden_states = [get_states(shape) for shape in self.problem.variables_flattened_shape]
@@ -173,88 +180,82 @@ class l2l(Meta_Optimizer):
 
         self.end_init()
 
+    def core(self, inputs):
+        with tf.variable_scope('optimizer_core/rnn_init', reuse=True):
+            lstm_output, hidden_state = self.lstm(inputs['preprocessed_gradient'], inputs['hidden_state'])
+        deltas = tf.add(tf.matmul(lstm_output, self.W, name='output_matmul'), self.b, name='add_bias')
+        return [deltas, hidden_state]
+
     def step(self):
-        def update(t, fx_array, params, hidden_states):
-            rnn_inputs = self.get_processed_gradients(params)
+        def update(t, fx_array, params, hidden_states, deltas_list):
+            rnn_inputs = self.preprocess_input(self.get_gradients(params))
             for i, (rnn_input, hidden_state) in enumerate(zip(rnn_inputs, hidden_states)):
                 deltas, hidden_states[i] = self.core({'preprocessed_gradient': rnn_input, 'hidden_state': hidden_state})
+                # overwrite each iteration of the while loop, so you will end up with the last update
+                deltas_list[i] = deltas
                 deltas = tf.reshape(deltas, self.problem.variables[i].get_shape(), name='reshape_deltas')
                 deltas = tf.multiply(deltas, self.learning_rate, 'multiply_deltas')
                 params[i] = tf.add(params[i], deltas, 'add_deltas_params')
             fx_array = fx_array.write(t, self.problem.loss(params))
             t_next = t + 1
-            return t_next, fx_array, params, hidden_states
+            return t_next, fx_array, params, hidden_states, deltas_list
 
-        fx_array = tf.TensorArray(tf.float32, size=self.unroll_len,
-                                  clear_after_read=False)
-        _, fx_array, vars_final, hidden_states_final = tf.while_loop(
+        deltas_list = list(range(len(self.hidden_states)))
+
+        _, self.fx_array, x_next, h_next, deltas_list = tf.while_loop(
             cond=lambda t, *_: t < self.unroll_len,
             body=update,
-            loop_vars=([0, fx_array, self.problem.variables, self.hidden_states]),
+            loop_vars=([0, self.fx_array, self.problem.variables, self.hidden_states, deltas_list]),
             parallel_iterations=1,
             swap_memory=True,
             name="unroll")
 
-        with tf.name_scope('update_params'):
-            update_params = list()
-            update_params.append([tf.assign(variable, variable_final) for variable, variable_final in
-                                  zip(self.problem.variables, vars_final)])
-            update_params.append([tf.assign(hidden_state, hidden_state_final) for hidden_state, hidden_state_final in
-                                  zip(nest.flatten(self.hidden_states), nest.flatten(hidden_states_final))])
+        return {'x_next': x_next, 'h_next': h_next, 'deltas': deltas_list}
 
-        with tf.name_scope('reset_variables'):
-            reset = tf.variables_initializer(
-                self.problem.variables + self.problem.constants + nest.flatten(self.hidden_states))
+    def updates(self, args):
+        update_list = list()
+        update_list.append([tf.assign(variable, variable_final) for variable, variable_final in
+                              zip(self.problem.variables, args['x_next'])])
+        update_list.append([tf.assign(hidden_state, hidden_state_final) for hidden_state, hidden_state_final in
+                              zip(nest.flatten(self.hidden_states), nest.flatten(args['h_next']))])
+        return update_list
 
-        loss_sum = tf.divide(tf.reduce_sum(fx_array.stack()), self.unroll_len)
-        self.debug_info = [[], [], []]
-        return [loss_sum, update_params, reset]
+    def reset_problem(self):
+        reset = super(l2l, self).reset_problem()
+        reset.append(nest.flatten(self.hidden_states))
+        reset.append(self.fx_array.close())
+        return reset
 
-    def minimize(self):
-        info = self.step()
-        step = self.meta_optimizer.minimize(info[0])
-        info.append(step)
-        return info
+    def loss(self, variables):
+        return tf.divide(tf.reduce_sum(self.fx_array.stack()), self.unroll_len)
+
+    def build(self):
+        step = self.step()
+        updates = self.updates(step)
+        loss = self.loss(step['x_next'])
+        meta_step = self.minimize(loss)
+        reset = [self.reset_problem(), self.reset_optimizer()]
+        return step, updates, loss, meta_step, reset
 
 
-class mlp(Meta_Optimizer):
+
+class MlpSimple(Meta_Optimizer):
+
     w_1, b_1, w_out, b_out = None, None, None, None
-
-    enable_momentum, avg_gradients, beta_1 = None, None, None
-
     layer_width = None
 
     def __init__(self, problem, path, args):
-        super(mlp, self).__init__(problem, path, args)
-        self.num_layers = self.global_args['num_layers']
-        self.layer_width = self.global_args['layer_width']
-        self.enable_momentum = self.global_args.has_key('momentum') and self.global_args['momentum']
-
+        super(MlpSimple, self).__init__(problem, path, args)
+        input_dim, output_dim = (2, 1) if 'dims' not in args else args['dims']
+        self.num_layers = 2
+        self.layer_width = self.global_args['layer_width'] if 'layer_width' in self.global_args else 20
+        init = tf.random_normal_initializer(mean=0.0, stddev=.1)
         with tf.variable_scope('optimizer_core'):
-            init = tf.random_normal_initializer(mean=0.0, stddev=.1)
-            input_dim, output_dim = (1, 1)
-            if self.preprocessor is not None:
-                input_dim = 2
-            if self.enable_momentum:
-                input_dim = 4
-                
-
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
             self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=tf.zeros_initializer)
-
-            if self.enable_momentum:
-                self.beta_1 = [tf.get_variable('beta_1' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer())
-                               for i, shape in enumerate(self.problem.variables_flattened_shape)]
-                self.avg_gradients = [
-                    tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
-                                    trainable=False)
-                    for i, shape in enumerate(self.problem.variables_flattened_shape)]
-
         self.end_init()
-    def reset_optimizer(self):
-        return tf.variables_initializer([self.w_1, self.b_1, self.w_out, self.b_out])
 
     def core(self, inputs):
         layer_1_activations = tf.nn.softplus(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
@@ -262,45 +263,62 @@ class mlp(Meta_Optimizer):
         return [output]
 
     def step(self):
-        update_params = list()
-        updated_vars = list()
-        beta_1_new_list = None
+        x_next = list()
         deltas_list = []
-        if self.enable_momentum:
-            beta_1_new_list = list()
-
-        # prepare optimizer inputs
-        flat_gradients = [self.flatten_input(i, gradient) for i, gradient in
-                          enumerate(self.get_gradients(self.problem.variables))]
-        preprocessed_gradients = [self.preprocess_input(flat_gradient) for flat_gradient in flat_gradients]
-        # preprocessed_gradients = self.get_processed_gradients(self.problem.variables)
-        if self.enable_momentum:
-            avg_gradients_pre_processed = [self.preprocess_input(avg_gradient) for avg_gradient in self.avg_gradients]
-            optimizer_inputs = [tf.concat([gradient_pre_processed, avg_gradient_pre_processed], 1)
-                                for gradient_pre_processed, avg_gradient_pre_processed in
-                                zip(preprocessed_gradients, avg_gradients_pre_processed)]
-        else:
-            optimizer_inputs = preprocessed_gradients
+        gradients = self.get_gradients(self.problem.variables)
+        preprocessed_gradients = [self.preprocess_input(gradient) for gradient in gradients]
+        optimizer_inputs = preprocessed_gradients
         for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
             deltas = self.core({'preprocessed_gradient': optim_input})[0]
             deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
             deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
-            updated_vars.append(tf.add(variable, deltas))
-        loss = self.problem.loss(updated_vars)
-        reset = tf.variables_initializer(self.problem.variables + self.problem.constants)
-        update_params.append(
-            [tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, updated_vars)])
-        if self.enable_momentum:
-            update_params.append(
-                [tf.assign(avg_gradient, avg_gradient * tf.sigmoid(beta_1_t) + (1 - tf.sigmoid(beta_1_t)) * gradient)
-                 for gradient, avg_gradient, beta_1_t in
-                 zip(flat_gradients, self.avg_gradients, self.beta_1)])
-        self.debug_info = [flat_gradients, preprocessed_gradients, deltas_list]
-        return [loss, update_params, reset]
+            x_next.append(tf.add(variable, deltas))
+        return {'x_next': x_next, 'deltas': deltas_list}
 
-    def minimize(self):
-        info = self.step()
-        step = self.meta_optimizer.minimize(info[0])
-        info.append(step)
-        return info
+    def updates(self, args):
+        update_list = list()
+        update_list.append(
+            [tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, args['x_next'])])
+        return update_list
+
+    def loss(self, variables):
+        return self.problem.loss(variables)
+
+    def build(self):
+        step = self.step()
+        updates = self.updates(step)
+        loss = self.loss(step['x_next'])
+        meta_step = self.minimize(loss)
+        reset = [self.reset_problem(), self.reset_optimizer()]
+        return step, updates, loss, meta_step, reset
+
+
+class MlpMovingAverage(MlpSimple):
+
+    avg_gradients = None
+    def __init__(self, problem, path, args):
+        args['dims'] = (4, 1)
+        super(MlpMovingAverage, self).__init__(problem, path, args)
+        self.avg_gradients = [
+            tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
+                            trainable=False)
+            for i, shape in enumerate(self.problem.variables_flattened_shape)]
+
+    def updates(self, args):
+        update_list = super(MlpMovingAverage, self).updates(args)
+        gradients = self.get_gradients(args['x_next'])
+        update_list.append([tf.assign(avg_gradient, avg_gradient * .9 + .1 * gradient)
+                            for gradient, avg_gradient in zip(gradients, self.avg_gradients)])
+        return update_list
+
+    def reset_optimizer(self):
+        reset = super(MlpMovingAverage, self).reset_optimizer()
+        reset.append(tf.variables_initializer(self.avg_gradients))
+        return reset
+
+    def reset_problem(self):
+        reset = super(MlpMovingAverage, self).reset_problem()
+        reset.append(tf.variables_initializer(self.avg_gradients))
+        return reset
+
