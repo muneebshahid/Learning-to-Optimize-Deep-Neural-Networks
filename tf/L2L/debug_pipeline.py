@@ -30,11 +30,11 @@ problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims'
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizer.MlpMovingAverage(problem, path=io_path, args={'second_derivatives': False,
+        optimizer = meta_optimizer.MlpGradHistory(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'momentum': momentum, 'layer_width': layer_width,
-                                                                                 'preprocess': preprocess})
+                                                                              'preprocess': preprocess, 'limit': 5})
     else:
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
