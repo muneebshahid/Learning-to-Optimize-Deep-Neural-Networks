@@ -22,7 +22,6 @@ test_epochs = 500
 learning_rate = .0001
 meta_learning_rate = .01
 layer_width = 20
-momentum = False
 #########################
 meta = True
 flag_optim = 'mlp'
@@ -34,8 +33,8 @@ if meta:
         optimizer = meta_optimizer.MlpGradHistory(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
-                                                                              'momentum': momentum, 'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 5})
+                                                                              'layer_width': layer_width,
+                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 1})
     else:
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,

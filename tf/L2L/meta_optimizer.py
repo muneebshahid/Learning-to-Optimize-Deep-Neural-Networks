@@ -54,6 +54,10 @@ class Meta_Optimizer():
             return self.preprocessor(inputs, self.preprocessor_args)
         else:
             return inputs
+    
+    def is_availble(self, param, args=None):
+        args = self.global_args if args is None else args
+        return param in args and args[param] is not None
 
     def flatten_input(self, i, inputs):
         return tf.reshape(inputs, [self.problem.variables_flattened_shape[i], 1])
@@ -243,7 +247,7 @@ class MlpSimple(Meta_Optimizer):
 
     w_1, b_1, w_out, b_out = None, None, None, None
     layer_width = None
-
+    hidden_layers = None
     def __init__(self, problem, path, args):
         super(MlpSimple, self).__init__(problem, path, args)
         input_dim, output_dim = (1, 1)
@@ -252,18 +256,27 @@ class MlpSimple(Meta_Optimizer):
         elif 'preprocess' in args and args['preprocess'] is not None:
             input_dim = 2
         self.num_layers = 2
-        self.layer_width = self.global_args['layer_width'] if 'layer_width' in self.global_args else 20
+        self.layer_width = self.global_args['layer_width'] if self.is_availble('layer_width') else 20
         init = tf.random_normal_initializer(mean=0.0, stddev=.1)
         with tf.variable_scope('optimizer_core'):
             self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
             self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
+            if self.is_availble('hidden_layers') and self.global_args['hidden_layers']:
+                self.hidden_layers = []
+                for layer in range(self.global_args['hidden_layers']):
+                    weight = tf.get_variable('w_' + str(layer), shape=[self.layer_width, self.layer_width], initializer=init)
+                    bias = tf.get_variable('b_' + str(layer), shape=[1, self.layer_width], initializer=init)
+                    self.hidden_layers.append([weight, bias])
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=tf.zeros_initializer)
         self.end_init()
 
     def core(self, inputs):
-        layer_1_activations = tf.nn.softplus(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
-        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
+        activations = tf.nn.softplus(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
+        if self.hidden_layers is not None:
+            for i, layer in enumerate(self.hidden_layers):
+                activations = tf.nn.softplus(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
+        output = tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')
         return [output]
 
     def step(self):
@@ -330,7 +343,7 @@ class MlpGradHistory(MlpSimple):
 
     def __init__(self, problem, path, args):
         limit = args['limit']
-        args['dims'] = (limit * 2, 1) if ('preprocess' in args and args['preprocess'] is not None) else (limit, 1)
+        args['dims'] = (limit * 2, 1) if self.is_availble('preprocess', args) else (limit, 1)
         super(MlpGradHistory, self).__init__(problem, path, args)
         self.gradient_history_ptr = tf.Variable(0, 'gradient_history_ptr')
 
@@ -347,13 +360,16 @@ class MlpGradHistory(MlpSimple):
                                 for i, gradient_tensor in enumerate(gradient_history_tensor)]
     def core(self, inputs):
         gradients = inputs['preprocessed_gradient']
-        cols = 2 if 'preprocess' in self.global_args and self.global_args['preprocess'] is not None else 1 
+        cols = 2 if self.is_availble('preprocess') else 1 
         start_ptr = tf.multiply(self.gradient_history_ptr, cols)
         start = tf.slice(gradients, [0, start_ptr], [-1, -1])
         end = tf.slice(gradients, [0, 0], [-1, start_ptr])
         final_input = tf.concat([start, end], 1, 'final_input')
-        layer_1_activations = tf.nn.softplus(tf.add(tf.matmul(final_input, self.w_1), self.b_1))
-        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
+        activations = tf.nn.softplus(tf.add(tf.matmul(final_input, self.w_1), self.b_1))
+        if self.hidden_layers is not None:
+            for i, layer in enumerate(self.hidden_layers):
+                activations = tf.nn.softplus(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
+        output = tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')
         return [output]
 
     def step(self):
