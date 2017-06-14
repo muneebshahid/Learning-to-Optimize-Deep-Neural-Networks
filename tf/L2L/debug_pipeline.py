@@ -1,5 +1,6 @@
 from __future__ import print_function
 import tensorflow as tf
+from timeit import default_timer as timer
 import numpy as np
 import problems
 import meta_optimizer
@@ -7,7 +8,7 @@ import util
 from preprocess import Preprocess
 
 tf.set_random_seed(0)
-preprocess = [Preprocess.log_sign, {'k': 10}]
+preprocess = None#[Preprocess.log_sign, {'k': 10}]
 
 second_derivatives = False
 #########################
@@ -65,15 +66,22 @@ mean_grads = [tf.reduce_mean(grad) for grad in grads]
 norm_grads = [tf.norm(grad) for grad in grads]
 
 iis = tf.InteractiveSession()
-iis.run(tf.global_variables_initializer())
+try:
+    iis.run(tf.global_variables_initializer())
+except:
+    iis.run(tf.global_variables_initializer())
 
 def itr(itr, print_interval=1000, reset_interval=None):
     loss_final = 0
     print('current loss: ', np.log10(iis.run(loss)))
+    total_time = 0
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             iis.run(reset)
+        start = timer()
         _, l, _ = iis.run([updates, loss, meta_step])
+        end = timer()
+        total_time += (end - start)
         loss_final += l
         if (i + 1) % print_interval == 0:
             print(i + 1)
@@ -84,7 +92,9 @@ def itr(itr, print_interval=1000, reset_interval=None):
                 print('lrate:' , iis.run(optimizer.learning_rate))
             print('norm_grads: ', iis.run(norm_grads))
             print('loss: ', np.log10(loss_final / print_interval), np.log10(l))
+            print('time:' , total_time / print_interval)
             loss_final = 0
+            total_time = 0
 
 
 
