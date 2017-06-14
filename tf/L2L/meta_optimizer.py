@@ -345,6 +345,16 @@ class MlpGradHistory(MlpSimple):
                     gradient_history_tensor[i] = tf.concat([gradient_history_tensor[i], gradient], axis=1)
         self.gradient_history = [tf.get_variable('gradients_history' + str(i), initializer=gradient_tensor, trainable=False) 
                                 for i, gradient_tensor in enumerate(gradient_history_tensor)]
+    def core(self, inputs):
+        gradients = inputs['preprocessed_gradient']
+        cols = 2 if 'preprocess' in self.global_args and self.global_args['preprocess'] is not None else 1 
+        start_ptr = tf.multiply(self.gradient_history_ptr, cols)
+        start = tf.slice(gradients, [0, start_ptr], [-1, -1])
+        end = tf.slice(gradients, [0, 0], [-1, start_ptr])
+        final_input = tf.concat([start, end], 1, 'final_input')
+        layer_1_activations = tf.nn.softplus(tf.add(tf.matmul(final_input, self.w_1), self.b_1))
+        output = tf.add(tf.matmul(layer_1_activations, self.w_out), self.b_out, name='layer_final_activation')
+        return [output]
 
     def step(self):
         x_next = list()

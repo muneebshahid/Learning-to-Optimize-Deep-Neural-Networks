@@ -8,7 +8,7 @@ import util
 from preprocess import Preprocess
 
 tf.set_random_seed(0)
-preprocess = None#[Preprocess.log_sign, {'k': 10}]
+preprocess = [Preprocess.log_sign, {'k': 10}]
 
 second_derivatives = False
 #########################
