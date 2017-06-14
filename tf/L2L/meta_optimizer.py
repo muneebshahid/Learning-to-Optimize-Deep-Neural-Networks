@@ -347,6 +347,96 @@ class MlpGradHistory(MlpSimple):
         super(MlpGradHistory, self).__init__(problem, path, args)
         self.gradient_history_ptr = tf.Variable(0, 'gradient_history_ptr')
 
+    def get_gradient_history(self):
+        if self.gradient_history is None:
+            gradient_history_tensor = [None for _ in self.problem.variables]
+            for history_itr in range(self.global_args['limit']):
+                initialized_values = [variable.initialized_value() for variable in self.problem.variables]
+                gradients = self.get_preprocessed_gradients(initialized_values)
+                for i, gradient in enumerate(gradients):
+                    if gradient_history_tensor[i] is None:
+                        gradient_history_tensor[i] = gradient
+                    else:
+                        gradient_history_tensor[i] = tf.concat([gradient_history_tensor[i], gradient], axis=1)
+            self.gradient_history = [tf.get_variable('gradients_history' + str(i), initializer=gradient_tensor, trainable=False) 
+                                    for i, gradient_tensor in enumerate(gradient_history_tensor)]
+        return self.gradient_history
+
+    def core(self, inputs):
+        gradients = inputs['preprocessed_gradient']
+        cols = 2 if self.is_availble('preprocess') else 1 
+        start_ptr = tf.multiply(self.gradient_history_ptr, cols)
+        start = tf.slice(gradients, [0, start_ptr], [-1, -1])
+        end = tf.slice(gradients, [0, 0], [-1, start_ptr])
+        final_input = tf.concat([start, end], 1, 'final_input')
+        activations = tf.nn.softplus(tf.add(tf.matmul(final_input, self.w_1), self.b_1))
+        if self.hidden_layers is not None:
+            for i, layer in enumerate(self.hidden_layers):
+                activations = tf.nn.softplus(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
+        output = tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')
+        return [output]
+
+    def step(self):
+        x_next = list()
+        deltas_list = []
+        for i, (variable, variable_gradient_history) in enumerate(zip(self.problem.variables, self.get_gradient_history())):
+            deltas = self.core({'preprocessed_gradient': variable_gradient_history})[0]
+            deltas_list.append(deltas)
+            deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
+            deltas = tf.reshape(deltas, variable.get_shape(), name='reshape_deltas')
+            x_next.append(tf.add(variable, deltas))
+        return {'x_next': x_next, 'deltas': deltas_list}
+    
+    def update_gradient_history_ops(self, variable_ptr, gradients):
+        cols = 1
+        rows = gradients.shape[0].value
+        if len(gradients.shape) > 1:
+            cols = gradients.shape[1].value
+        write_ptr = tf.multiply(self.gradient_history_ptr, cols)
+        indices = []
+        for col in range(cols):
+            for row in range(rows):
+                indices.append([row, write_ptr + col])
+        stacked_grads = tf.slice(gradients, [0, 0], [-1, 1])
+        for col in range(cols)[1:]:
+            stacked_grads = tf.concat([stacked_grads, tf.slice(gradients, [0, col], [-1, 1])], 0)
+        return tf.scatter_nd_update(self.gradient_history[variable_ptr], indices, tf.squeeze(stacked_grads))
+    #def update_gradient_history_ops(self, variable_ptr, gradients):
+    #    indices = [[i, self.gradient_history_ptr] for i in range(gradients.shape[0].value)]
+    #    return tf.scatter_nd_update(self.gradient_history[variable_ptr], indices, tf.squeeze(gradients))
+
+    def updates(self, args):
+        update_list = super(MlpGradHistory, self).updates(args)
+        gradients = self.get_preprocessed_gradients(args['x_next'])
+        for i, gradient in enumerate(gradients):
+            update_list.append(self.update_gradient_history_ops(i, gradient))
+        with tf.control_dependencies(update_list):
+            update_itr = tf.cond(self.gradient_history_ptr < self.global_args['limit'] - 1, 
+                            lambda: tf.assign_add(self.gradient_history_ptr, 1),
+                            lambda: tf.assign(self.gradient_history_ptr, 0))
+        return update_list + [update_itr]
+
+    def reset_optimizer(self):
+        reset = super(MlpGradHistory, self).reset_optimizer()
+        reset.append(tf.variables_initializer(self.gradient_history))
+        return reset
+
+    def reset_problem(self):
+        reset = super(MlpGradHistory, self).reset_problem()
+        reset.append(tf.variables_initializer(self.gradient_history))
+        return reset
+
+class MlpXHistory(MlpSimple):
+
+    gradient_history = None
+    gradient_history_ptr = None
+
+    def __init__(self, problem, path, args):
+        limit = args['limit']
+        args['dims'] = (limit * 2, 1) if self.is_availble('preprocess', args) else (limit, 1)
+        super(MlpGradHistory, self).__init__(problem, path, args)
+        self.gradient_history_ptr = tf.Variable(0, 'gradient_history_ptr')
+
         gradient_history_tensor = [None for _ in self.problem.variables]
         for history_itr in range(limit):
             initialized_values = [variable.initialized_value() for variable in self.problem.variables]
