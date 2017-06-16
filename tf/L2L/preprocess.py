@@ -9,8 +9,8 @@ class Preprocess():
 
     @staticmethod
     def clamp(inputs, args):
-        min_value = args['min'] if args.has_key('min') else None
-        max_value = args['max'] if args.has_key('max') else None
+        min_value = args['min'] if 'min' in args else None
+        max_value = args['max'] if 'max' in args else None
         outputs = inputs
         if min_value is not None:
             outputs = tf.maximum(outputs, min_value)

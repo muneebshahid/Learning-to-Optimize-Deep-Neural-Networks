@@ -26,9 +26,9 @@ class Problem():
 
     def __init__(self, args={}):
         self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
-        self.dims = args['dims'] if args.has_key('dims') else 1
-        self.dtype = args['dtype'] if args.has_key('dtype') else tf.float32
-        self.meta = args['meta'] if args.has_key('meta') else True
+        self.dims = args['dims'] if 'dims' in args else 1
+        self.dtype = args['dtype'] if 'dtype' in args else tf.float32
+        self.meta = args['meta'] if 'meta' in args else True
         self.variables = []
         self.constants = []
         self.variables_flattened_shape = []
