@@ -4,7 +4,6 @@ from timeit import default_timer as timer
 import numpy as np
 import problems
 import meta_optimizer
-import util
 from preprocess import Preprocess
 
 tf.set_random_seed(0)
@@ -21,20 +20,20 @@ test_epochs = 500
 #########################
 learning_rate = .0001
 meta_learning_rate = .01
-layer_width = 20
+layer_width = 50
 #########################
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':10, 'gog': True})
+problem = problems.FitX(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': True})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizer.MlpGradHistory(problem, path=io_path, args={'second_derivatives': False,
+        optimizer = meta_optimizer.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 1})
+                                                                              'preprocess': preprocess, 'limit': 20, 'hidden_layers': 1})
     else:
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
