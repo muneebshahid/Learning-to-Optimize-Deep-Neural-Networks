@@ -259,13 +259,13 @@ class MlpSimple(Meta_Optimizer):
         self.layer_width = self.global_args['layer_width'] if self.is_availble('layer_width') else 20
         init = tf.random_normal_initializer(mean=0.0, stddev=.1)
         with tf.variable_scope('optimizer_core'):
-            self.w_1 = tf.get_variable('w_1', shape=[input_dim, self.layer_width], initializer=init)
-            self.b_1 = tf.get_variable('b_1', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
+            self.w_1 = tf.get_variable('w_in', shape=[input_dim, self.layer_width], initializer=init)
+            self.b_1 = tf.get_variable('b_in', shape=[1, self.layer_width], initializer=tf.zeros_initializer)
             if self.is_availble('hidden_layers') and self.global_args['hidden_layers']:
                 self.hidden_layers = []
                 for layer in range(self.global_args['hidden_layers']):
-                    weight = tf.get_variable('w_' + str(layer), shape=[self.layer_width, self.layer_width], initializer=init)
-                    bias = tf.get_variable('b_' + str(layer), shape=[1, self.layer_width], initializer=init)
+                    weight = tf.get_variable('w_' + str(layer + 1), shape=[self.layer_width, self.layer_width], initializer=init)
+                    bias = tf.get_variable('b_' + str(layer + 1), shape=[1, self.layer_width], initializer=init)
                     self.hidden_layers.append([weight, bias])
             self.w_out = tf.get_variable('w_out', shape=[self.layer_width, output_dim], initializer=init)
             self.b_out = tf.get_variable('b_out', shape=[1, output_dim], initializer=tf.zeros_initializer)
@@ -431,13 +431,13 @@ class MlpXHistory(MlpSimple):
     variable_history = None
     grad_sign_history = None
     history_ptr = None
+    update_window = None
 
     def __init__(self, problem, path, args):
         limit = args['limit']
         args['dims'] = (limit * 2, 1) if self.is_availble('preprocess', args) else (limit, 1)
         super(MlpXHistory, self).__init__(problem, path, args)
         self.history_ptr = tf.Variable(0, 'history_ptr')
-        history_tensor = None
         variables, gradients, gradients_sign = None, None, None
         last_variables, last_gradients = None, None
         for history_itr in range(limit):
@@ -449,7 +449,7 @@ class MlpXHistory(MlpSimple):
                 last_variables = variables
                 last_gradients = gradients
             else:
-                last_variables = [last_variable + .001 * last_gradient for last_variable, last_gradient
+                last_variables = [last_variable + .1 * last_gradient for last_variable, last_gradient
                               in zip(last_variables, last_gradients)]
                 variables = [tf.concat([variable, new_point], 1) for variable, new_point in zip(variables, last_variables)]
                 new_points_reshaped = [tf.reshape(last_variable, variable.get_shape(), name='reshaped_variable')
@@ -468,7 +468,7 @@ class MlpXHistory(MlpSimple):
         min_values = tf.reduce_min(history_tensor, 1)
         max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
         min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-        diff = max_values - min_values
+        diff = max_values - min_values + 1e-7
         return (history_tensor - min_values) / diff
 
     def sort_input(self, inputs):
@@ -487,7 +487,7 @@ class MlpXHistory(MlpSimple):
         if self.hidden_layers is not None:
             for i, layer in enumerate(self.hidden_layers):
                 activations = tf.nn.softplus(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
-        output = tf.tanh(tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')) / 2
+        output = tf.tanh(tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')) / 1.4
         return [output]
 
     def step(self):
@@ -502,7 +502,7 @@ class MlpXHistory(MlpSimple):
             min_values = tf.reduce_min(variable_history, 1)
             max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
             min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-            diff = max_values - min_values
+            diff = max_values - min_values + 1e-7
             ref_points = max_values + min_values 
             new_points = ref_points / 2.0 + deltas * diff
             new_points = tf.reshape(new_points, variable.get_shape(), name='reshape_deltas')

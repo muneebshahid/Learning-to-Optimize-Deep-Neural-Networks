@@ -25,7 +25,7 @@ layer_width = 50
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.FitX(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': True})
+problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': True})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
@@ -33,7 +33,7 @@ if meta:
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 20, 'hidden_layers': 1})
+                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 2})
     else:
         optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
