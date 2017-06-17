@@ -28,7 +28,7 @@ if flag_optimizer == 'MLP':
 else:
     optimizer = meta_optimizer.l2l(problem, path=load_path, args={})
 
-optimizer_inputs = optimizer.optimizer_input_stack
+optimizer_inputs = optimizer.meta_optimizer_input_stack
 mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
 
 flat_gradients, preprocessed_gradients, deltas_list = [], [], []

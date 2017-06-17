@@ -12,7 +12,7 @@ class Meta_Optimizer():
     global_args = None
     io_handle = None
     problem = None
-    meta_optimizer = None
+    optimizer = None
     second_derivatives = None
     preprocessor = None
     preprocessor_args = None
@@ -34,8 +34,8 @@ class Meta_Optimizer():
                                                                                       if 'learning_rate' in self.global_args
                                                                                       else .0001,
                                                                                       dtype=tf.float32), trainable=False)
-        self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
-                                                                                               self.global_args else .01)
+        self.optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
+                                                                                          self.global_args else .01)
         self.debug_info = []
         self.trainable_variables = []
 
@@ -76,7 +76,7 @@ class Meta_Optimizer():
         return [self.preprocess_input(gradient) for gradient in self.get_flattened_gradients(variables)]
 
     @property
-    def optimizer_input_stack(self):
+    def meta_optimizer_input_stack(self):
         variables = self.problem.variables
         gradients_raw = self.get_gradients_raw(variables)
         flat_gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients_raw)]
@@ -104,7 +104,7 @@ class Meta_Optimizer():
         pass
 
     def minimize(self, loss):
-        return self.meta_optimizer.minimize(loss)
+        return self.optimizer.minimize(loss)
 
     def build(self):
         pass
@@ -143,8 +143,8 @@ class l2l(Meta_Optimizer):
     fx_array = None
 
     @property
-    def optimizer_input_stack(self):
-        inputs = super(l2l, self).optimizer_input_stack
+    def meta_optimizer_input_stack(self):
+        inputs = super(l2l, self).meta_optimizer_input_stack
         for (input, hidden_state) in zip(inputs, self.hidden_states):
             input['hidden_state'] = hidden_state
         return inputs
