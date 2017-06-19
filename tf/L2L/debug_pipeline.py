@@ -64,10 +64,8 @@ mean_grads = [tf.reduce_mean(grad) for grad in grads]
 norm_grads = [tf.norm(grad) for grad in grads]
 
 iis = tf.InteractiveSession()
-try:
-    iis.run(tf.global_variables_initializer())
-except:
-    iis.run(tf.global_variables_initializer())
+iis.run(tf.global_variables_initializer())
+tf.train.start_queue_runners(iis)
 
 def itr(itr, print_interval=1000, reset_interval=None):
     loss_final = 0

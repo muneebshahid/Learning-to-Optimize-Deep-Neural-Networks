@@ -99,6 +99,7 @@ with l2l.as_default():
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+        tf.train.start_queue_runners(sess)
         l2l.finalize()
         print('---- Starting Training ----')
         if restore_network:
