@@ -23,6 +23,7 @@ class Problem():
     variable_scope = 'variables'
     constant_scope = 'constants'
     allow_gradients_of_gradients = None
+    variables_flat = None
 
     def __init__(self, args={}):
         self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
@@ -30,6 +31,7 @@ class Problem():
         self.dtype = args['dtype'] if 'dtype' in args else tf.float32
         self.meta = args['meta'] if 'meta' in args else True
         self.variables = []
+        self.variables_flat = []
         self.constants = []
         self.variables_flattened_shape = []
 
@@ -40,8 +42,10 @@ class Problem():
         if constant:
             self.constants.append(variable)
         else:
+            flat_shape = np.multiply.reduce(shape)
             self.variables.append(variable)
-            self.variables_flattened_shape.append(np.multiply.reduce(shape))
+            self.variables_flattened_shape.append(flat_shape)
+            self.variables_flat.append(tf.reshape(variable, [flat_shape, 1]))
         return variable
 
     @property
