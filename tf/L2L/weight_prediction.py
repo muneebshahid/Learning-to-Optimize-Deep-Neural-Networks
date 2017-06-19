@@ -26,7 +26,13 @@ class WeightPredictor():
     def optim_step_problem(self, args=None):
         pass
 
+    def loss_problem(self, args=None):
+        pass
+
     def optim_step_pred(self, args=None):
+        pass
+
+    def loss_pred(self, args=None):
         pass
 
     def update_history(self, args=None):
@@ -55,17 +61,19 @@ class mlp(WeightPredictor):
             self.network['l_out'] = {'w': layer_o_w, 'b': layer_o_b}
         self.variable_history = [tf.get_variable('var_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, 4], trainable=False)
                                  for i, shape in enumerate(self.problem.variables_flattened_shape)]
-
+    
+    # Couldnt figure out how to run an op more than once in the same sess call, hence this ugliness.
     def init_history(self, args=None):
-        init_history_ops = []
-        dependencies = args['dep']
-        for col in range(100):
-            if (col % 1 == 0) or (col % 39 == 0) or (col % 69 == 0 ) or col % 99 == 0:
-                with tf.control_dependencies([dependencies] + init_history_ops):
-                    for variable_ptr, variable in enumerate(self.problem.variables_flat):
-                        indices = [[row, col] for row in range(variable.get_shape()[0].value)]
-                        init_history_ops.append(tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.squeeze(variable)))
-        return init_history_ops
+        sess = args['sess']
+        optim_step_problem_op = args['optim_prob_op']
+        col = 0
+        for iter in range(101)[1:]:
+            if iter == 1 or iter == 40 or iter == 70  or iter == 100:
+                for variable_ptr, variable in enumerate(self.problem.variables_flat):
+                    indices = [[row, col] for row in range(variable.get_shape()[0].value)]
+                    sess.run(tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.squeeze(variable)))
+                    sess.run(optim_step_problem_op)
+                col += 1
 
     def predict(self, args=None):
         predictions = []
@@ -74,18 +82,23 @@ class mlp(WeightPredictor):
             predictions.append(prediction)
         return predictions
 
-    def optim_step_problem(self, args=None):
-        return self.optimizer_problem.minimize(self.problem.loss(self.problem.variables), var_list=self.problem.variables)
 
-    def optim_step_pred(self, args=None):
-        dependencies = args['dep']
+    def loss_problem(self, args=None):
+        return self.problem.loss(self.problem.variables)
+
+    def optim_step_problem(self, args=None):
+        return self.optimizer_problem.minimize(self.loss_problem(), var_list=self.problem.variables)
+
+    def loss_pred(self, args=None):
         loss = 0
         predictions = self.predict()
-        with tf.control_dependencies([dependencies]):
-            for prediction, variable in zip(predictions, self.problem.variables_flat):
-                loss += tf.reduce_sum(tf.abs(prediction - variable))
+        for prediction, variable in zip(predictions, self.problem.variables_flat):
+            loss += tf.reduce_sum(tf.abs(prediction - variable))
+        return loss
+
+    def optim_step_pred(self, args=None):
         trainable_vars = [param for layer in self.network.values() for param in layer.values()]
-        optim_step_pred_ops = self.optimizer_weight_predictor.minimize(loss, var_list=trainable_vars)
+        optim_step_pred_ops = self.optimizer_weight_predictor.minimize(self.loss_pred(), var_list=trainable_vars)
         return optim_step_pred_ops
 
     def core(self, args=None):
@@ -98,11 +111,10 @@ class mlp(WeightPredictor):
         return
 
     def build(self):
-        step_optim_problem_ops = self.optim_step_problem()
-        init_history_ops = self.init_history({'dep': step_optim_problem_ops})
-        optim_step_pred_ops = self.optim_step_pred({'dep': step_optim_problem_ops})
+        optim_step_problem_ops = self.optim_step_problem()
+        optim_step_pred_ops = self.optim_step_pred({'dep': optim_step_problem_ops})
         update_history_ops = self.update_history()
-        return init_history_ops, step_optim_problem_ops, optim_step_pred_ops, update_history_ops
+        return optim_step_problem_ops, optim_step_pred_ops, self.loss_pred(), self.loss_problem(), update_history_ops
 
 
 
