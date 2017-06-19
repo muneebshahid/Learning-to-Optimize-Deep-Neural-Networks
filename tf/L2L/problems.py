@@ -247,7 +247,7 @@ class cifar10(Problem):
                                       min_after_dequeue=1000,
                                       dtypes=[tf.float32, tf.int32],
                                       shapes=[image.get_shape(), label.get_shape()])
-        enqueue_ops = [self.queue.enqueue([image, label]) for _ in xrange(4)]
+        enqueue_ops = [self.queue.enqueue([image, label]) for _ in six.moves.xrange(4)]
         tf.train.add_queue_runner(tf.train.QueueRunner(self.queue, enqueue_ops))
 
 
