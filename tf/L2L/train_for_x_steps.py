@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import problems
-import meta_optimizer
+import meta_optimizers
 import util
 
 #
@@ -30,8 +30,8 @@ with l2l.as_default():
         eval_epochs = 20
         eval_interval = 1000
         num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        optimizer = meta_optimizer.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                       args={'state_size': 20, 'num_layers': 2, \
+        optimizer = meta_optimizers.l2l(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                        args={'state_size': 20, 'num_layers': 2, \
                                              'unroll_len': unroll_len, 'learning_rate': 0.001,\
                                              'meta_learning_rate': 0.01})
     else:
@@ -45,8 +45,8 @@ with l2l.as_default():
         epoch_interval = 1000
         eval_epochs = 2000
         eval_interval = 10000
-        optimizer = meta_optimizer.MlpMovingAverage(problem, processing_constant=5, second_derivatives=second_derivatives,
-                                                    args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
+        optimizer = meta_optimizers.MlpMovingAverage(problem, processing_constant=5, second_derivatives=second_derivatives,
+                                                     args={'num_layers': 2, 'learning_rate': 0.0001, 'meta_learning_rate': 0.01,
                                          'momentum': False})
 
     loss_final, update, reset, step = optimizer.minimize()

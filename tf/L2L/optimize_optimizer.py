@@ -2,7 +2,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import problems
-import meta_optimizer
+import meta_optimizers
 import util
 from preprocess import Preprocess
 
@@ -58,12 +58,12 @@ with l2l.as_default():
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum, second_derivative=second_derivatives)
 
-        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
-                                                                 'preprocess': preprocess})
+                                                                  'preprocess': preprocess})
         step, updates, loss, meta_step, reset = optimizer.build()
         reset = None
     else:
@@ -85,7 +85,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optimizer = meta_optimizer.MlpSimple(problem, path=io_path, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizers.MlpSimple(problem, path=io_path, args={'second_derivatives': second_derivatives,
                                                                       'num_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.01,
                                                                       'momentum': momentum, 'layer_width': layer_width,

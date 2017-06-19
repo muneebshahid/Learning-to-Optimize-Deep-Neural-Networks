@@ -3,7 +3,7 @@ import tensorflow as tf
 from timeit import default_timer as timer
 import numpy as np
 import problems
-import meta_optimizer
+import meta_optimizers
 from preprocess import Preprocess
 
 tf.set_random_seed(0)
@@ -29,13 +29,13 @@ problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims'
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizer.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
+        optimizer = meta_optimizers.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
                                                                               'preprocess': preprocess, 'limit': 5, 'hidden_layers': 2})
     else:
-        optimizer = meta_optimizer.l2l(problem, path=None, args={'second_derivatives': False,
+        optimizer = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
                                                                  'learning_rate': 0.001,

@@ -1,4 +1,4 @@
-import meta_optimizer
+import meta_optimizers
 import problems
 from preprocess import Preprocess
 import tensorflow as tf
@@ -22,11 +22,11 @@ num_optim_steps_per_epoch = 1
 unroll_len = 1
 mean_optim_variables = None
 if flag_optimizer == 'MLP':
-    optimizer = meta_optimizer.MlpSimple(problem, path=load_path, args={'preprocess': preprocess})
+    optimizer = meta_optimizers.MlpSimple(problem, path=load_path, args={'preprocess': preprocess})
     mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                             tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 else:
-    optimizer = meta_optimizer.l2l(problem, path=load_path, args={})
+    optimizer = meta_optimizers.l2l(problem, path=load_path, args={})
 
 optimizer_inputs = optimizer.meta_optimizer_input_stack
 mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]

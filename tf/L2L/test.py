@@ -2,7 +2,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import problems
-import meta_optimizer
+import meta_optimizers
 import util
 from preprocess import Preprocess
 
@@ -33,7 +33,7 @@ with l2l.as_default():
     loss = None
     if meta:
         if flag_optimizer == 'L2L':
-            optimizer = meta_optimizer.l2l(problem, path=load_path, args={'state_size': 20, 'num_layers': 2,
+            optimizer = meta_optimizers.l2l(problem, path=load_path, args={'state_size': 20, 'num_layers': 2,
                                                                           'unroll_len': unroll_len,
                                                                           'learning_rate': 0.001,
                                                                           'meta_learning_rate': meta_learning_rate})
@@ -41,7 +41,7 @@ with l2l.as_default():
             final_step = [updates]
 
         elif flag_optimizer == 'MLP':
-            optimizer = meta_optimizer.MlpSimple(problem, path=load_path, args={'second_derivatives': second_derivatives,
+            optimizer = meta_optimizers.MlpSimple(problem, path=load_path, args={'second_derivatives': second_derivatives,
                                                                           'num_layers': 2, 'learning_rate': 0.0001,
                                                                           'meta_learning_rate': 0.01,
                                                                           'momentum': False, 'layer_width': 1,
