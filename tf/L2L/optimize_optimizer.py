@@ -26,7 +26,7 @@ with l2l.as_default():
     layer_width = None
     momentum = None
 
-    flag_optimizer = 'MLP'
+    flag_optimizer = 'mlp'
 
     model_id = '10'
 
@@ -89,7 +89,7 @@ with l2l.as_default():
                                                                       'num_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.01,
                                                                       'momentum': momentum, 'layer_width': layer_width,
-                                                                      'preprocess': preprocess})
+                                                                      'preprocess': preprocess, 'limit': 5})
         step, updates, loss, meta_step, reset = optimizer.build()
         reset = None
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),

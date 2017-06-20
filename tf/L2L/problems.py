@@ -55,6 +55,29 @@ class Problem():
     def loss(self, variables, mode='train'):
         pass
 
+    def flatten_input(self, i, inputs):
+        return tf.reshape(inputs, [self.variables_flattened_shape[i], 1])
+
+    def get_shape(self, i=None, variable=None):
+        shape = self.variables_flat[i].get_shape()[0] if i is not None else variable.get_shape()[0]
+        return shape
+
+    def set_shape(self, input, i=None, like_variable=None, op_name=''):
+        shape = self.variables[i].get_shape() if i is not None else like_variable.get_shape()
+        return tf.reshape(input, shape=shape, name=op_name)
+
+    def get_gradients_raw(self, variables=None):
+        variables = self.variables if variables is None else variables
+        return tf.gradients(self.loss(variables), variables)
+
+    def get_gradients(self, variables=None):
+        variables = variables if variables is not None else self.variables
+        gradients = self.get_gradients_raw(variables)
+        if not self.allow_gradients_of_gradients:
+            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
+        gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
+        return gradients
+
 
 class ElementwiseSquare(Problem):
 
