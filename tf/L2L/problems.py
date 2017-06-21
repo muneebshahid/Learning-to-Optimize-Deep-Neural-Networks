@@ -205,9 +205,16 @@ class Mnist(Problem):
                     self.create_variable('w_out', dims=[1024, 10])
                     self.create_variable('b_out', dims=[10])
                 else:
-                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
-                    self.create_variable('b_1', dims=[1, 20])
-                    self.create_variable('w_out', dims=[20, 10])
+                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 512])
+                    self.create_variable('b_1', dims=[1, 512])
+
+                    self.create_variable('w_2', dims=[512, 256])
+                    self.create_variable('b_2', dims=[256])
+
+                    self.create_variable('w_3', dims=[256, 128])
+                    self.create_variable('b_3', dims=[128])
+
+                    self.create_variable('w_out', dims=[128, 10])
                     self.create_variable('b_out', dims=[1, 10])
 
     
@@ -220,7 +227,6 @@ class Mnist(Problem):
 
     def network(self, batch, variables):
         if self.conv:
-
             h_conv1 = tf.nn.relu(Mnist.conv2d(batch, variables[0]) + variables[1])
             h_pool1 = Mnist.max_pool_2x2(h_conv1)
             h_conv2 = tf.nn.relu(Mnist.conv2d(h_pool1, variables[2]) + variables[3])
@@ -231,7 +237,9 @@ class Mnist(Problem):
             return y_conv
         else:
             layer_1 = tf.nn.relu(tf.add(tf.matmul(batch, variables[0]), variables[1]))
-            layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
+            layer_2 = tf.nn.relu(tf.add(tf.matmul(layer_1, variables[2]), variables[3]))
+            layer_3 = tf.nn.relu(tf.add(tf.matmul(layer_2, variables[4]), variables[5]))
+            layer_out = tf.add(tf.matmul(layer_3, variables[6]), variables[7])
             return layer_out
 
     def get_batch(self, mode='train'):

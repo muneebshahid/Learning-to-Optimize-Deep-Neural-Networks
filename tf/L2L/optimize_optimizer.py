@@ -37,7 +37,7 @@ with l2l.as_default():
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
 
-    problem = problems.Mnist(args={'gog': second_derivatives, 'path': 'cifar', 'conv': True})
+    problem = problems.Mnist(args={'gog': second_derivatives, 'path': 'cifar', 'conv': False})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
 
