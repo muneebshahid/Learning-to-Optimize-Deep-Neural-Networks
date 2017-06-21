@@ -8,7 +8,7 @@ from preprocess import Preprocess
 
 l2l = tf.Graph()
 with l2l.as_default():
-    tf.set_random_seed(20)
+    tf.set_random_seed(0)
     preprocess = [Preprocess.log_sign, {'k': 10}]
 
     second_derivatives = False
@@ -37,7 +37,7 @@ with l2l.as_default():
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
 
-    problem = problems.Mnist(args={'gog': second_derivatives})
+    problem = problems.Mnist(args={'gog': second_derivatives, 'path': 'cifar', 'conv': True})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
 
@@ -70,13 +70,13 @@ with l2l.as_default():
         print('Using MLP')
         #########################
         epochs = 100000
-        epoch_interval = 1000
+        epoch_interval = 1
         eval_interval = 50000
         validation_epochs = 50
         test_epochs = 500
         #########################
         learning_rate = 0.0001
-        layer_width = 20
+        layer_width = 50
         momentum = False
         #########################
 

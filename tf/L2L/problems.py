@@ -148,23 +148,41 @@ class Quadratic(Problem):
 class Mnist(Problem):
 
     training_data, test_data, validation_data = None, None, None
-    w_1 = None
-    w_out = None
-    b_1 = None
-    b_out = None
+    conv = False
+
+    def weight_variable(self, name, shape):
+        initial = tf.truncated_normal(shape, stddev=0.1)
+        return
+
+    def bias_variable(shape):
+        initial = tf.constant(0.1, shape=shape)
+        return tf.Variable(initial)
+
+    @staticmethod
+    def conv2d(x, W):
+        return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+    @staticmethod
+    def max_pool_2x2(x):
+        return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
+                              strides=[1, 2, 2, 1], padding='SAME')
+
 
     def __init__(self, args):
         super(Mnist, self).__init__(args=args)
+        self.conv = False if 'conv' not in args else args['conv']
 
         def get_data(data, mode='train'):
             mode_data = getattr(data, mode)
             images = tf.constant(mode_data.images, dtype=tf.float32, name="MNIST_images_" + mode)
+            if self.conv:
+                images = tf.reshape(images, [-1, 28, 28, 1])
             if self.allow_gradients_of_gradients:
                 labels = tf.one_hot(mode_data.labels, 10, name="MNIST_labels_" + mode)
             else:
                 labels = tf.constant(mode_data.labels, dtype=tf.int64, name="MNIST_labels_" + mode)
-
             return images, labels
+
         data = mnist_dataset.load_mnist()
         self.training_data, self.test_data, self.validation_data = dict(), dict(), dict()
         self.training_data['images'], self.training_data['labels'] = get_data(data, 'train')
@@ -173,10 +191,24 @@ class Mnist(Problem):
 
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
-                self.w_1 = self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
-                self.b_1 = self.create_variable('b_1', dims=[1, 20])
-                self.w_out = self.create_variable('w_out', dims=[20, 10])
-                self.b_out = self.create_variable('b_out', dims=[1, 10])
+                if self.conv:
+                    self.create_variable('w_1', dims=[5, 5, 1, 32])
+                    self.create_variable('b_1', dims=[32])
+
+                    self.create_variable('w_2', dims=[5, 5, 32, 64])
+                    self.create_variable('b_2', dims=[64])
+
+                    self.create_variable('w_3', dims=[7 * 7 * 64, 1024])
+                    self.create_variable('b_3', dims=[1024])
+
+                    self.create_variable('w_out', dims=[1024, 10])
+                    self.create_variable('b_out', dims=[10])
+                else:
+                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
+                    self.create_variable('b_1', dims=[1, 20])
+                    self.create_variable('w_out', dims=[20, 10])
+                    self.create_variable('b_out', dims=[1, 10])
+
     
     def __xent_loss(self, output, labels):
         if self.allow_gradients_of_gradients:
@@ -186,9 +218,20 @@ class Mnist(Problem):
         return tf.reduce_mean(loss)
 
     def network(self, batch, variables):
-        layer_1 = tf.nn.relu(tf.add(tf.matmul(batch, variables[0]), variables[1]))
-        layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
-        return layer_out
+        if self.conv:
+
+            h_conv1 = tf.nn.relu(Mnist.conv2d(batch, variables[0]) + variables[1])
+            h_pool1 = Mnist.max_pool_2x2(h_conv1)
+            h_conv2 = tf.nn.relu(Mnist.conv2d(h_pool1, variables[2]) + variables[3])
+            h_pool2 = Mnist.max_pool_2x2(h_conv2)
+            h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+            h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, variables[4]) + variables[5])
+            y_conv = tf.matmul(h_fc1, variables[6]) + variables[7]
+            return y_conv
+        else:
+            layer_1 = tf.nn.relu(tf.add(tf.matmul(batch, variables[0]), variables[1]))
+            layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
+            return layer_out
 
     def get_batch(self, mode='train'):
         data_holder = None
@@ -238,12 +281,12 @@ class cifar10(Problem):
         self.b2 = self.create_variable('b2', dims=[16])
         self.w3 = self.create_variable('w3', dims=[5, 5, 16, 16])
         self.b3 = self.create_variable('b3', dims=[16])
-        self.w4 = self.create_variable('w4', dims=[1024, 32])
+        self.w4 = self.create_variable('w4', dims=[256, 32])
         self.b4 = self.create_variable('b4', dims=[32])
         self.w5 = self.create_variable('w5', dims=[32, 10])
         self.b5 = self.create_variable('b5', dims=[10])
         # Read images and labels from disk.
-        filenames = [os.path.join(path, CIFAR10_FOLDER, "data_batch_{}.bin".format(i)) for i in xrange(1, 6)]
+        filenames = [os.path.join(path, CIFAR10_FOLDER, "data_batch_{}.bin".format(i)) for i in six.moves.xrange(1, 6)]
 
         for f in filenames:
             if not tf.gfile.Exists(f):
@@ -285,8 +328,8 @@ class cifar10(Problem):
         conv2 = conv_activation(
             tf.nn.bias_add(tf.nn.conv2d(conv1, variables[2], [1, 1, 1, 1], padding='SAME'), variables[3]))
         conv3 = conv_activation(
-            tf.nn.bias_add(tf.nn.conv2d(conv1, variables[4], [1, 1, 1, 1], padding='SAME'), variables[5]))
-        reshaped_conv3 = tf.reshape(conv3, [batch.shape[0].value, -1])
+            tf.nn.bias_add(tf.nn.conv2d(conv2, variables[4], [1, 1, 1, 1], padding='SAME'), variables[5]))
+        reshaped_conv3 = tf.reshape(conv3, [batch.shape[0].value, -1], 'reshape_fully_connected')
         linear = tf.nn.relu(tf.nn.bias_add(tf.matmul(reshaped_conv3, variables[6]), variables[7]))
         out = tf.nn.bias_add(tf.matmul(linear, variables[8]), variables[9])
         return out

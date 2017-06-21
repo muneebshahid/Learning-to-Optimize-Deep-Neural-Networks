@@ -11,33 +11,33 @@ preprocess = [Preprocess.log_sign, {'k': 10}]
 
 second_derivatives = False
 #########################
-epochs = 500
-unroll_len = 20
-epoch_interval = 1000
-eval_interval = 10
+epochs = 100000
+epoch_interval = 1
+eval_interval = 50000
 validation_epochs = 50
 test_epochs = 500
 #########################
-learning_rate = .0001
-meta_learning_rate = .01
+learning_rate = 0.0001
 layer_width = 50
+momentum = False
+meta_learning_rate = .1
 #########################
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': True})
+problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': True})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizers.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
+        optimizer = meta_optimizers.MlpGradHistoryFAST(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 2})
+                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 1})
     else:
         optimizer = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
-                                                                 'unroll_len': unroll_len,
+                                                                 'unroll_len': 20,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                  'preprocess': preprocess})
@@ -54,8 +54,8 @@ else:
     else:
         optimizer = tf.train.GradientDescentOptimizer(meta_learning_rate)
     loss = problem.loss(problem.variables)
-    min = optimizer.minimize(loss)
-    update = []
+    meta_step = optimizer.minimize(loss)
+    updates = []
 
 mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
 norm_problem_variables = [tf.norm(variable) for variable in problem.variables]
@@ -75,7 +75,7 @@ def itr(itr, print_interval=1000, reset_interval=None):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             iis.run(reset)
         start = timer()
-        _, l, _ = iis.run([updates, loss, meta_step])
+        _, _, l = iis.run([updates, meta_step, loss])
         end = timer()
         total_time += (end - start)
         loss_final += l

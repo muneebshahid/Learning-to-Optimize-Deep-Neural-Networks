@@ -261,10 +261,10 @@ class MlpSimple(Meta_Optimizer):
         self.end_init()
 
     def core(self, inputs):
-        activations = tf.nn.softplus(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
+        activations = tf.nn.relu(tf.add(tf.matmul(inputs['preprocessed_gradient'], self.w_1), self.b_1))
         if self.hidden_layers is not None:
             for i, layer in enumerate(self.hidden_layers):
-                activations = tf.nn.softplus(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
+                activations = tf.nn.relu(tf.add(tf.matmul(activations, layer[0]), layer[1]), name='layer_' + str(i))
         output = tf.add(tf.matmul(activations, self.w_out), self.b_out, name='layer_final_activation')
         return [output]
 
