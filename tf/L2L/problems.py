@@ -68,13 +68,14 @@ class Problem():
 
     def get_gradients_raw(self, variables=None):
         variables = self.variables if variables is None else variables
-        return tf.gradients(self.loss(variables), variables)
+        gradients = tf.gradients(self.loss(variables), variables)
+        if not self.allow_gradients_of_gradients:
+            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
+        return gradients
 
     def get_gradients(self, variables=None):
         variables = variables if variables is not None else self.variables
         gradients = self.get_gradients_raw(variables)
-        if not self.allow_gradients_of_gradients:
-            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
         gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
         return gradients
 
