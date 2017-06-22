@@ -4,7 +4,8 @@ import tensorflow as tf
 from tensorflow.python.util import nest
 import pickle
 from preprocess import Preprocess
-import problems
+from timeit import default_timer as timer
+
 
 
 class Meta_Optimizer():
@@ -13,12 +14,18 @@ class Meta_Optimizer():
     global_args = None
     io_handle = None
     problem = None
-    optimizer = None
-    second_derivatives = None
+    meta_optimizer_optimizer = None
     preprocessor = None
     preprocessor_args = None
-    debug_info = None
     trainable_variables = None
+    session = None
+
+    ops_step = None
+    ops_updates = None
+    ops_loss = None
+    ops_meta_step = None
+    ops_reset = None
+    allow_reset = False
 
     def __init__(self, problem, path, args):
         if path is not None:
@@ -31,14 +38,12 @@ class Meta_Optimizer():
         if 'preprocess' in self.global_args and self.global_args['preprocess'] is not None:
             self.preprocessor = self.global_args['preprocess'][0]
             self.preprocessor_args = self.global_args['preprocess'][1]
-        self.second_derivatives = self.global_args['second_derivatives'] if 'second_derivatives' in self.global_args else False
         self.learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(self.global_args['learning_rate']
                                                                                       if 'learning_rate' in self.global_args
                                                                                       else .0001,
                                                                                       dtype=tf.float32), trainable=False)
-        self.optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
-                                                                                          self.global_args else .01)
-        self.debug_info = []
+        self.meta_optimizer_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
+                                                                                                         self.global_args else .01)
         self.trainable_variables = []
 
     def __init_trainable_vars_list(self):
@@ -56,7 +61,7 @@ class Meta_Optimizer():
             return self.preprocessor(inputs, self.preprocessor_args)
         else:
             return inputs
-    
+
     def is_availble(self, param, args=None):
         args = self.global_args if args is None else args
         return param in args and args[param] is not None
@@ -93,7 +98,7 @@ class Meta_Optimizer():
         pass
 
     def minimize(self, loss):
-        return self.optimizer.minimize(loss)
+        return self.meta_optimizer_optimizer.minimize(loss)
 
     def build(self):
         pass
@@ -124,9 +129,27 @@ class Meta_Optimizer():
         self.io_handle.save(sess, path)
         self.save_args(path)
 
+    def init_with_sessin(self):
+        return
+
+    def set_session(self, session):
+        self.session = session
+
+    def run(self, args=None):
+        num_steps = 1 if 'num_steps' not in args else args['num_steps']
+        if self.allow_reset and self.ops_reset is not None:
+            self.session.run(self.ops_reset)
+        loss = 0
+        start = timer()
+        for _ in range(num_steps):
+            loss += self.session.run([self.ops_loss, self.ops_meta_step, self.ops_updates])[0]
+        return timer() - start, loss / num_steps
+
 class l2l(Meta_Optimizer):
 
     state_size = None
+    unroll_len = None
+    optim_per_epoch = None
     W, b = None, None
     lstm = None
     fx_array = None
@@ -143,6 +166,7 @@ class l2l(Meta_Optimizer):
         self.state_size = self.global_args['state_size']
         self.num_layers = self.global_args['num_layers']
         self.unroll_len = self.global_args['unroll_len']
+        self.num_step = self.global_args['optim_per_epoch'] // self.unroll_len
         self.meta_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'])
         self.fx_array = tf.TensorArray(tf.float32, size=self.unroll_len, clear_after_read=False)
 
@@ -228,7 +252,15 @@ class l2l(Meta_Optimizer):
         loss = self.loss(step['x_next'])
         meta_step = self.minimize(loss)
         reset = [self.reset_problem(), self.reset_optimizer()]
-        return step, updates, loss, meta_step, reset
+        self.ops_step = step
+        self.ops_updates = updates
+        self.ops_loss = loss
+        self.ops_meta_step = meta_step
+        self.ops_reset = reset
+
+    def run(self, args=None):
+        return super(l2l, self).run({'num_steps': self.num_step})
+
 
 
 
@@ -294,7 +326,14 @@ class MlpSimple(Meta_Optimizer):
         loss = self.loss(step['x_next'])
         meta_step = self.minimize(loss)
         reset = [self.reset_problem(), self.reset_optimizer()]
-        return step, updates, loss, meta_step, reset
+        self.ops_step = step
+        self.ops_updates = updates
+        self.ops_loss = loss
+        self.ops_meta_step = meta_step
+        self.ops_reset = reset
+
+    def run(self, args=None):
+        super(MlpSimple, self).run({'num_step': 1})
 
 
 class MlpMovingAverage(MlpSimple):
@@ -390,9 +429,6 @@ class MlpGradHistory(MlpSimple):
         for col in range(cols)[1:]:
             stacked_grads = tf.concat([stacked_grads, tf.slice(gradients, [0, col], [-1, 1])], 0)
         return tf.scatter_nd_update(self.gradient_history[variable_ptr], indices, tf.squeeze(stacked_grads))
-    #def update_gradient_history_ops(self, variable_ptr, gradients):
-    #    indices = [[i, self.gradient_history_ptr] for i in range(gradients.shape[0].value)]
-    #    return tf.scatter_nd_update(self.gradient_history[variable_ptr], indices, tf.squeeze(gradients))
 
     def updates(self, args):
         update_list = super(MlpGradHistory, self).updates(args)

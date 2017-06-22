@@ -26,7 +26,7 @@ with l2l.as_default():
     layer_width = None
     momentum = None
 
-    flag_optimizer = 'mlp'
+    flag_optimizer = 'L2L'
 
     model_id = '10'
 
@@ -37,7 +37,7 @@ with l2l.as_default():
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.FitX(args={'dims': 20, 'dtype': tf.float32})
 
-    problem = problems.Mnist(args={'gog': second_derivatives, 'path': 'cifar', 'conv': False})
+    problem = problems.ElementwiseSquare(args={'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': True})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
 
@@ -47,7 +47,7 @@ with l2l.as_default():
         epochs = 10000
         num_optim_steps_per_epoch = 100
         unroll_len = 20
-        epoch_interval = 1000
+        epoch_interval = 1
         eval_interval = 10000
         validation_epochs = 5
         test_epochs = 5
@@ -58,14 +58,13 @@ with l2l.as_default():
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum, second_derivative=second_derivatives)
 
-        optimizer = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': second_derivatives,
+        optimizer = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                   'preprocess': preprocess})
-        step, updates, loss, meta_step, reset = optimizer.build()
-        reset = None
+        optimizer.build()
     else:
         print('Using MLP')
         #########################
@@ -96,12 +95,14 @@ with l2l.as_default():
                                 tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 
     norm_problem_variables = [tf.norm(variable) for variable in optimizer.problem.variables]
-    norm_deltas = [tf.norm(delta) for delta in step['deltas']]
+    norm_deltas = norm_problem_variables#[tf.norm(delta) for delta in step['deltas']]
     norm_grads = [tf.norm(gradients) for gradients in optimizer.problem.get_gradients()]
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
+        optimizer.set_session(sess)
+        optimizer.init_with_sessin()
         l2l.finalize()
         print('---- Starting Training ----')
         if restore_network:
@@ -119,7 +120,7 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss_value = util.run_epoch(sess, loss, [meta_step, updates], reset, num_unrolls_per_epoch)
+            time, loss_value = optimizer.run()
             total_loss += loss_value
             total_time += time
             if (epoch + 1) % epoch_interval == 0:

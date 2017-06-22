@@ -205,17 +205,29 @@ class Mnist(Problem):
                     self.create_variable('w_out', dims=[1024, 10])
                     self.create_variable('b_out', dims=[10])
                 else:
-                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 512])
-                    self.create_variable('b_1', dims=[1, 512])
+                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
+                    self.create_variable('b_1', dims=[1, 20])
 
-                    self.create_variable('w_2', dims=[512, 256])
-                    self.create_variable('b_2', dims=[256])
+                    self.create_variable('w_2', dims=[20, 20])
+                    self.create_variable('b_2', dims=[20])
 
-                    self.create_variable('w_3', dims=[256, 128])
-                    self.create_variable('b_3', dims=[128])
+                    self.create_variable('w_3', dims=[20, 20])
+                    self.create_variable('b_3', dims=[20])
 
-                    self.create_variable('w_out', dims=[128, 10])
+                    self.create_variable('w_out', dims=[20, 10])
                     self.create_variable('b_out', dims=[1, 10])
+                    #
+                    # self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 512])
+                    # self.create_variable('b_1', dims=[1, 512])
+                    #
+                    # self.create_variable('w_2', dims=[512, 256])
+                    # self.create_variable('b_2', dims=[256])
+                    #
+                    # self.create_variable('w_3', dims=[256, 128])
+                    # self.create_variable('b_3', dims=[128])
+                    #
+                    # self.create_variable('w_out', dims=[128, 10])
+                    # self.create_variable('b_out', dims=[1, 10])
 
     
     def __xent_loss(self, output, labels):
