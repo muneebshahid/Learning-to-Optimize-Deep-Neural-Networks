@@ -26,14 +26,17 @@ def print_update(epoch, epochs, loss, epoch_interval, time):
     print('--------------------------------------------------------------------\n')
 
 
-def write_update(loss, time, mean_mats_values_list):
+def write_update(loss, time, problem_norm, deltas_norm, grads_norm):
+    def write_to_file(f_name, list_var):
+        with open(f_name, 'a') as log_file:
+            for variable in list_var:
+                log_file.write(str(variable) + ' ')
+            log_file.write('\n')
     with open('loss_file_upd', 'a') as log_file:
         log_file.write("{:.5f}".format(loss) + " " + "{:.2f}".format(time) + "\n")
-    with open('mean_var_upd', 'a') as log_file:
-        for mean_vars in mean_mats_values_list:
-            for value in mean_vars:
-                log_file.write(str(value) + ' ')
-            log_file.write('\n')
+    write_to_file('norm_prob', problem_norm)
+    write_to_file('norm_delta', deltas_norm)
+    write_to_file('norm_grads', grads_norm)
 
 
 def get_model_path(flag_optimizer, model_id):

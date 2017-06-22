@@ -95,7 +95,9 @@ with l2l.as_default():
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                 tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 
-    mean_problem_variables = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
+    norm_problem_variables = [tf.norm(variable) for variable in optimizer.problem.variables]
+    norm_deltas = [tf.norm(delta) for delta in step['deltas']]
+    norm_grads = [tf.norm(gradients) for gradients in optimizer.problem.get_gradients()]
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -104,7 +106,9 @@ with l2l.as_default():
         print('---- Starting Training ----')
         if restore_network:
             optimizer.load(sess, io_path)
-        print('Init Problem Vars: ', sess.run(mean_problem_variables))
+        print('Init Problem Norm: ', sess.run(norm_problem_variables))
+        print('Init Delts Norm: ', sess.run(norm_deltas))
+        print('Init Grad Norm: ', sess.run(norm_grads))
         # print 'Init Optim Vars: ', sess.run(mean_optim_variables)
         total_loss = 0
         total_time = 0
@@ -115,17 +119,20 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            mean_mats_values = sess.run(mean_problem_variables)
-            mean_mats_values_list.append(mean_mats_values)
             time, loss_value = util.run_epoch(sess, loss, [meta_step, updates], reset, num_unrolls_per_epoch)
             total_loss += loss_value
             total_time += time
             if (epoch + 1) % epoch_interval == 0:
-                print('Problem Vars: ', mean_mats_values)
+                problem_norm = sess.run(norm_problem_variables)
+                deltas_norm = sess.run(norm_deltas)
+                grads_norm = sess.run(norm_grads)
+                print('Problem Vars Norm: ', problem_norm)
+                print('Deltas Norm: ', deltas_norm)
+                print('Grads Norm: ', grads_norm)
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
                 log10loss = np.log10(total_loss / epoch_interval)
                 util.print_update(epoch, epochs, log10loss, epoch_interval, total_time)
-                util.write_update(log10loss, total_time, mean_mats_values_list)
+                util.write_update(log10loss, total_time, problem_norm, deltas_norm, grads_norm)
                 total_loss = 0
                 total_time = 0
                 mean_mats_values_list = list()
