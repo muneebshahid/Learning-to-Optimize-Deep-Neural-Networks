@@ -26,7 +26,7 @@ with l2l.as_default():
     layer_width = None
     momentum = None
 
-    flag_optimizer = 'L2L'
+    flag_optimizer = 'Mlp'
 
     model_id = '10'
 
@@ -89,7 +89,7 @@ with l2l.as_default():
                                                                       'meta_learning_rate': 0.01,
                                                                       'momentum': momentum, 'layer_width': layer_width,
                                                                       'preprocess': preprocess, 'limit': 5})
-        step, updates, loss, meta_step, reset = optimizer.build()
+        optimizer.build()
         reset = None
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                 tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
@@ -102,7 +102,7 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
         optimizer.set_session(sess)
-        optimizer.init_with_sessin()
+        optimizer.init_with_session()
         l2l.finalize()
         print('---- Starting Training ----')
         if restore_network:

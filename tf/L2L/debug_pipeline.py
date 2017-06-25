@@ -25,11 +25,11 @@ meta_learning_rate = .1
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.Mnist(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': True})
+problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optimizer = meta_optimizers.MlpGradHistoryFAST(problem, path=io_path, args={'second_derivatives': False,
+        optimizer = meta_optimizers.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -40,13 +40,15 @@ if meta:
                                                                  'unroll_len': 20,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
+                                                                  'optim_per_epoch': 1,
                                                                  'preprocess': preprocess})
 
-    step, updates, loss, meta_step, reset = optimizer.build()
+    optimizer.build()
+    updates, loss, meta_step = optimizer.ops_updates, optimizer.ops_loss, optimizer.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optimizer.trainable_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optimizer.trainable_variables]
-    mean_deltas = [tf.reduce_mean(delta) for delta in step['deltas']]
-    norm_deltas = [tf.norm(delta) for delta in step['deltas']]
+    mean_deltas = [tf.reduce_mean(delta) for delta in optimizer.ops_step['deltas']]
+    norm_deltas = [tf.norm(delta) for delta in optimizer.ops_step['deltas']]
 
 else:
     if flag_optim == 'Adam':
@@ -66,6 +68,9 @@ norm_grads = [tf.norm(grad) for grad in grads]
 iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
 tf.train.start_queue_runners(iis)
+if meta:
+    optimizer.set_session(iis)
+    optimizer.init_with_session(iis)
 
 def itr(itr, print_interval=1000, reset_interval=None):
     loss_final = 0
@@ -73,9 +78,9 @@ def itr(itr, print_interval=1000, reset_interval=None):
     total_time = 0
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
-            iis.run(reset)
+            iis.run(optimizer.ops_reset)
         start = timer()
-        _, _, l = iis.run([updates, meta_step, loss])
+        _, _, l = iis.run([meta_step, updates, loss])
         end = timer()
         total_time += (end - start)
         loss_final += l
