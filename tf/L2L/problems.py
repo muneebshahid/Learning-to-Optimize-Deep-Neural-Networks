@@ -37,8 +37,9 @@ class Problem():
 
     def create_variable(self, name, initializer=tf.random_normal_initializer(mean=0, stddev=0.01), constant=False, dims=None):
         shape = [self.dims, 1] if dims is None else dims
-        variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
-                                   initializer=initializer, trainable=self.is_trainable)
+        with tf.name_scope('problem_variables'):
+            variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
+                                       initializer=initializer, trainable=self.is_trainable)
         if constant:
             self.constants.append(variable)
         else:
