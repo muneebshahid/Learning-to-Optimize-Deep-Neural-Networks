@@ -5,6 +5,8 @@ import numpy as np
 import problems
 import meta_optimizers
 from preprocess import Preprocess
+import matplotlib.pyplot as plt
+import numpy as np
 
 tf.set_random_seed(0)
 preprocess = [Preprocess.log_sign, {'k': 10}]
@@ -45,8 +47,8 @@ if meta:
 
     optimizer.build()
     updates, loss, meta_step = optimizer.ops_updates, optimizer.ops_loss, optimizer.ops_meta_step
-    mean_optim_variables = [tf.reduce_mean(variable) for variable in optimizer.trainable_variables]
-    norm_optim_variables = [tf.norm(variable) for variable in optimizer.trainable_variables]
+    mean_optim_variables = [tf.reduce_mean(variable) for layer in optimizer.optimizer_variables for variable in layer]
+    norm_optim_variables = [tf.norm(variable) for layer in optimizer.optimizer_variables for variable in layer]
     mean_deltas = [tf.reduce_mean(delta) for delta in optimizer.ops_step['deltas']]
     norm_deltas = [tf.norm(delta) for delta in optimizer.ops_step['deltas']]
 
@@ -72,18 +74,34 @@ if meta:
     optimizer.set_session(iis)
     optimizer.init_with_session(iis)
 
-def itr(itr, print_interval=1000, reset_interval=None):
+def write_to_file(f_name, all_variables):
+    final_dump = None
+    for curr_variable in all_variables:
+        if final_dump is None:
+            final_dump = curr_variable
+        else:
+            final_dump = np.hstack((final_dump, curr_variable))
+    with open(f_name, 'a') as log_file:
+        for variable in final_dump:
+            log_file.write(str(variable) + ' ')
+        log_file.write('\n')
+
+def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
     loss_final = 0
     print('current loss: ', np.log10(iis.run(loss)))
     total_time = 0
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             iis.run(optimizer.ops_reset)
+            optimizer.init_with_session(iis)
         start = timer()
         _, _, l = iis.run([meta_step, updates, loss])
         end = timer()
         total_time += (end - start)
         loss_final += l
+        if write_interval is not None and (i + 1) % write_interval == 0:
+            variables = iis.run(tf.squeeze(optimizer.problem.variables_flat))
+            write_to_file('variables_updates.txt', variables)
         if (i + 1) % print_interval == 0:
             print(i + 1)
             print('norm_probl: ', iis.run(norm_problem_variables))
@@ -96,7 +114,8 @@ def itr(itr, print_interval=1000, reset_interval=None):
             print('time:' , total_time / print_interval)
             loss_final = 0
             total_time = 0
+    # if write_interval is not None:
+    #     f_data = np.load('variables_updates')
 
-
-
-
+writer = tf.summary.FileWriter('tf_summary/')
+writer.add_graph(iis.graph)
