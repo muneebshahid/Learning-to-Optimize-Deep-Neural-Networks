@@ -40,13 +40,14 @@ class Problem():
         with tf.name_scope('problem_variables'):
             variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
                                        initializer=initializer, trainable=self.is_trainable)
-        if constant:
-            self.constants.append(variable)
-        else:
-            flat_shape = np.multiply.reduce(shape)
-            self.variables.append(variable)
-            self.variables_flattened_shape.append(flat_shape)
-            self.variables_flat.append(tf.reshape(variable, [flat_shape, 1]))
+            if constant:
+                self.constants.append(variable)
+            else:
+                flat_shape = np.multiply.reduce(shape)
+                tf.summary.histogram(name, variable)
+                self.variables.append(variable)
+                self.variables_flattened_shape.append(flat_shape)
+                self.variables_flat.append(tf.reshape(variable, [flat_shape, 1]))
         return variable
 
     @property

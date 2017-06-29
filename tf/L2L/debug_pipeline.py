@@ -74,6 +74,10 @@ if meta:
     optimizer.set_session(iis)
     optimizer.init_with_session(iis)
 
+all_summ = tf.summary.merge_all()
+writer = tf.summary.FileWriter('tf_summary/')
+writer.add_graph(iis.graph)
+
 def write_to_file(f_name, all_variables):
     final_dump = None
     for curr_variable in all_variables:
@@ -95,10 +99,14 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
             iis.run(optimizer.ops_reset)
             optimizer.init_with_session(iis)
         start = timer()
-        _, _, l = iis.run([meta_step, updates, loss])
+        _, _, l, summaries, deltas = iis.run([meta_step, updates, loss, all_summ, optimizer.ops_step['deltas']])
+        writer.add_summary(summaries, i)
         end = timer()
         total_time += (end - start)
         loss_final += l
+        print('-----------')
+        print('deltas', deltas)
+        print('-----------')
         if write_interval is not None and (i + 1) % write_interval == 0:
             variables = iis.run(tf.squeeze(optimizer.problem.variables_flat))
             write_to_file('variables_updates.txt', variables)
@@ -117,5 +125,4 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
 
-writer = tf.summary.FileWriter('tf_summary/')
-writer.add_graph(iis.graph)
+itr(100, 10)

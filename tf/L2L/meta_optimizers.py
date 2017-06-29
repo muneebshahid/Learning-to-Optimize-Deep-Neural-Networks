@@ -278,6 +278,8 @@ class MlpSimple(Meta_Optimizer):
                 b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[1])
                 linear = tf.add(tf.matmul(inputs, w), b, name='activations_' + 'layer_' + str(name))
                 layer_output = linear if activation is None else activation(linear)
+                # tf.summary.histogram('weights', w)
+                # tf.summary.histogram('bias', b)
                 if not reuse:
                     self.optimizer_variables.append([w, b])
         return layer_output
@@ -615,6 +617,8 @@ class MlpXHistory(MlpSimple):
                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
             self.grad_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                       for i, shape in enumerate(self.problem.variables_flattened_shape)]
+            for i, variable in enumerate(self.variable_history):
+                tf.summary.histogram('variable_history_' + str(i), variable)
 
     def init_with_session(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
@@ -674,6 +678,12 @@ class MlpXHistory(MlpSimple):
                 new_points = tf.add(tf.divide(ref_points, 2.0), tf.multiply(deltas, diff), 'new_points')
                 new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
+                tf.summary.histogram('deltas_' + str(i), deltas)
+                tf.summary.histogram('new_x_' + str(i), new_points)
+                tf.summary.scalar('deltas_0_s', deltas[0][0])
+                tf.summary.scalar('deltas_1_s', deltas[1][0])
+                tf.summary.scalar('new_x_0', new_points[1])
+                tf.summary.scalar('new_x_1', new_points[1])
             return {'x_next': x_next, 'deltas': deltas_list}
 
     def update_history_ops(self, variable_ptr, inputs):
