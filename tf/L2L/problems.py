@@ -209,28 +209,16 @@ class Mnist(Problem):
                     self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
                     self.create_variable('b_1', dims=[1, 20])
 
-                    self.create_variable('w_2', dims=[20, 20])
-                    self.create_variable('b_2', dims=[20])
-
-                    self.create_variable('w_3', dims=[20, 20])
-                    self.create_variable('b_3', dims=[20])
+                    # self.create_variable('w_2', dims=[20, 20])
+                    # self.create_variable('b_2', dims=[20])
+                    #
+                    # self.create_variable('w_3', dims=[20, 20])
+                    # self.create_variable('b_3', dims=[20])
 
                     self.create_variable('w_out', dims=[20, 10])
                     self.create_variable('b_out', dims=[1, 10])
-                    #
-                    # self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 512])
-                    # self.create_variable('b_1', dims=[1, 512])
-                    #
-                    # self.create_variable('w_2', dims=[512, 256])
-                    # self.create_variable('b_2', dims=[256])
-                    #
-                    # self.create_variable('w_3', dims=[256, 128])
-                    # self.create_variable('b_3', dims=[128])
-                    #
-                    # self.create_variable('w_out', dims=[128, 10])
-                    # self.create_variable('b_out', dims=[1, 10])
 
-    
+
     def __xent_loss(self, output, labels):
         if self.allow_gradients_of_gradients:
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=labels)
@@ -249,10 +237,10 @@ class Mnist(Problem):
             y_conv = tf.matmul(h_fc1, variables[6]) + variables[7]
             return y_conv
         else:
-            layer_1 = tf.nn.relu(tf.add(tf.matmul(batch, variables[0]), variables[1]))
-            layer_2 = tf.nn.relu(tf.add(tf.matmul(layer_1, variables[2]), variables[3]))
-            layer_3 = tf.nn.relu(tf.add(tf.matmul(layer_2, variables[4]), variables[5]))
-            layer_out = tf.add(tf.matmul(layer_3, variables[6]), variables[7])
+            layer_1 = tf.sigmoid(tf.add(tf.matmul(batch, variables[0]), variables[1]))
+            # layer_2 = tf.nn.relu(tf.add(tf.matmul(layer_1, variables[2]), variables[3]))
+            # layer_3 = tf.nn.relu(tf.add(tf.matmul(layer_2, variables[4]), variables[5]))
+            layer_out = tf.add(tf.matmul(layer_1, variables[2]), variables[3])
             return layer_out
 
     def get_batch(self, mode='train'):

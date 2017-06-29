@@ -43,7 +43,7 @@ if mean_optim_variables is not None:
 flatten = lambda mat_array: [element for mat in mat_array for element in mat]
 
 for gradient in optimizer_inputs:
-    output = optimizer.core(gradient)[0]
+    output = optimizer.network(gradient)[0]
     deltas_list.append(output)
     flat_gradients.append(gradient['flat_gradient'])
     preprocessed_gradients.append(gradient['preprocessed_gradient'])

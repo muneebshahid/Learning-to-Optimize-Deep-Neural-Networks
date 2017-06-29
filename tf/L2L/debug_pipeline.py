@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 tf.set_random_seed(0)
-preprocess = [Preprocess.log_sign, {'k': 10}]
+preprocess = None#[Preprocess.log_sign, {'k': 10}]
 
 second_derivatives = False
 #########################
@@ -22,7 +22,7 @@ test_epochs = 500
 learning_rate = 0.0001
 layer_width = 50
 momentum = False
-meta_learning_rate = .1
+meta_learning_rate = .01
 #########################
 meta = True
 flag_optim = 'mlp'
