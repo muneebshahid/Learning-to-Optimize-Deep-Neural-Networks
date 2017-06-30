@@ -87,6 +87,7 @@ class ElementwiseSquare(Problem):
     x = None
 
     def __init__(self, args):
+        args['dims'] = [args['dims'], 1]
         super(ElementwiseSquare, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
             self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=args['dims'])

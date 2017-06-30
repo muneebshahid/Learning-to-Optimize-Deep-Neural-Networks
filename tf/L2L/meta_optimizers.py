@@ -610,7 +610,7 @@ class MlpXHistory(MlpSimple):
         super(MlpXHistory, self).__init__(problem, path, args)
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
-            self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
+            self.guide_optimizer = tf.train.GradientDescentOptimizer(.01, name='guide_optimizer')
             self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
                                                             var_list=self.problem.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
@@ -624,10 +624,7 @@ class MlpXHistory(MlpSimple):
         with tf.name_scope('mlp_x_init_with_session'):
             for col in range(self.global_args['limit']):
                 for variable_ptr, (variable, gradient) in enumerate(zip(self.problem.variables_flat, self.problem.get_gradients())):
-                    indices = [[row, col] for row in range(variable.get_shape()[0].value)]
-                    update_ops = [tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.squeeze(variable))]
-                    update_ops.append(tf.scatter_nd_update(self.grad_sign_history[variable_ptr], indices,
-                                                   tf.squeeze(tf.sign(gradient))))
+                    update_ops = self.update_history_ops(variable_ptr, (variable, tf.sign(gradient)))
                     self.session.run(update_ops)
                 if col < self.global_args['limit'] - 1:
                     self.session.run(self.guide_step)
@@ -687,9 +684,10 @@ class MlpXHistory(MlpSimple):
     def update_history_ops(self, variable_ptr, inputs):
         variable, grad_sign = inputs
         history_ops = []
-        indices = [[i, self.history_ptr] for i in range(variable.shape[0].value)]
-        history_ops.append(tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.squeeze(variable)))
-        history_ops.append(tf.scatter_nd_update(self.grad_sign_history[variable_ptr], indices, tf.squeeze(grad_sign)))
+        shape = variable.shape[0].value
+        indices = [[i, self.history_ptr] for i in range(shape)]
+        history_ops.append(tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.reshape(variable, [shape])))
+        history_ops.append(tf.scatter_nd_update(self.grad_sign_history[variable_ptr], indices, tf.reshape(grad_sign, [shape])))
         return history_ops
 
     def updates(self, args):
