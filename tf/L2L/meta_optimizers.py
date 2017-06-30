@@ -639,7 +639,7 @@ class MlpXHistory(MlpSimple):
             max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
             min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
             diff = max_values - min_values
-            return (history_tensor - min_values) / diff
+            return 2 * (history_tensor - min_values) / diff - 1.0
 
     def sort_input(self, inputs):
         with tf.name_scope('mlp_x_sort_input'):
