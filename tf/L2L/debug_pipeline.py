@@ -27,7 +27,7 @@ meta_learning_rate = .01
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': False})
+problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
@@ -73,10 +73,11 @@ tf.train.start_queue_runners(iis)
 if meta:
     optimizer.set_session(iis)
     optimizer.init_with_session(iis)
-
-all_summ = tf.summary.merge_all()
-writer = tf.summary.FileWriter('tf_summary/')
-writer.add_graph(iis.graph)
+update_summaries = False
+if update_summaries:
+    all_summ = tf.summary.merge_all()
+    writer = tf.summary.FileWriter('tf_summary/')
+    writer.add_graph(iis.graph)
 
 def write_to_file(f_name, all_variables):
     final_dump = None
@@ -99,8 +100,11 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
             iis.run(optimizer.ops_reset)
             optimizer.init_with_session(iis)
         start = timer()
+        if not update_summaries:
+            all_summ = []
         _, _, l, summaries, deltas = iis.run([meta_step, updates, loss, all_summ, optimizer.ops_step['deltas']])
-        writer.add_summary(summaries, i)
+        if update_summaries:
+            writer.add_summary(summaries, i)
         end = timer()
         total_time += (end - start)
         loss_final += l

@@ -680,10 +680,8 @@ class MlpXHistory(MlpSimple):
                 x_next.append(new_points)
                 tf.summary.histogram('deltas_' + str(i), deltas)
                 tf.summary.histogram('new_x_' + str(i), new_points)
-                tf.summary.scalar('deltas_0_s', deltas[0][0])
-                tf.summary.scalar('deltas_1_s', deltas[1][0])
-                tf.summary.scalar('new_x_0', new_points[1])
-                tf.summary.scalar('new_x_1', new_points[1])
+                tf.summary.scalar('deltas', deltas)
+                tf.summary.scalar('new_x', new_points)
             return {'x_next': x_next, 'deltas': deltas_list}
 
     def update_history_ops(self, variable_ptr, inputs):
