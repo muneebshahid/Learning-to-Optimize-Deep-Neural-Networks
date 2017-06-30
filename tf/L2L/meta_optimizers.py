@@ -628,6 +628,8 @@ class MlpXHistory(MlpSimple):
                     self.session.run(update_ops)
                 if col < self.global_args['limit'] - 1:
                     self.session.run(self.guide_step)
+                    self.session.run(tf.assign_add(self.history_ptr, 1))
+            self.session.run(tf.assign(self.history_ptr, 0))
 
     @staticmethod
     def normalize_values(history_tensor):
@@ -654,7 +656,8 @@ class MlpXHistory(MlpSimple):
             final_input = tf.concat([final_var_history, final_var_grad_history], 1, name='final_input')
             activations = final_input
             activations = super(MlpXHistory, self).network({'preprocessed_gradient': activations, 'reuse': inputs['reuse']})[0]
-            output = Preprocess.clamp(activations, {'min':-1, 'max':1})
+            output = tf.tanh(activations)
+            # output = Preprocess.clamp(activations, {'min':-1, 'max':1})
             return [output]
 
     def step(self):
@@ -677,8 +680,8 @@ class MlpXHistory(MlpSimple):
                 x_next.append(new_points)
                 tf.summary.histogram('deltas_' + str(i), deltas)
                 tf.summary.histogram('new_x_' + str(i), new_points)
-                tf.summary.scalar('deltas', deltas)
-                tf.summary.scalar('new_x', new_points)
+                tf.summary.scalar('deltas', tf.squeeze(deltas))
+                tf.summary.scalar('new_x', tf.squeeze(new_points))
             return {'x_next': x_next, 'deltas': deltas_list}
 
     def update_history_ops(self, variable_ptr, inputs):
