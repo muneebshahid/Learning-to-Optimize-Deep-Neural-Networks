@@ -72,7 +72,7 @@ iis.run(tf.global_variables_initializer())
 tf.train.start_queue_runners(iis)
 if meta:
     optimizer.set_session(iis)
-    optimizer.init_with_session(iis)
+    optimizer.init_with_session()
 update_summaries = False
 if update_summaries:
     all_summ = tf.summary.merge_all()
@@ -92,6 +92,7 @@ def write_to_file(f_name, all_variables):
         log_file.write('\n')
 
 def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
+    global all_summ
     loss_final = 0
     print('current loss: ', np.log10(iis.run(loss)))
     total_time = 0
@@ -102,7 +103,7 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, l, summaries, deltas = iis.run([meta_step, updates, loss, all_summ, optimizer.ops_step['deltas']])
+        _, _, l, summaries, deltas, hist = iis.run([meta_step, updates, loss, all_summ, optimizer.ops_step['deltas'], optimizer.variable_history])
         if update_summaries:
             writer.add_summary(summaries, i)
         end = timer()
@@ -110,6 +111,7 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
         loss_final += l
         print('-----------')
         print('deltas', deltas)
+        print('history', hist)
         print('-----------')
         if write_interval is not None and (i + 1) % write_interval == 0:
             variables = iis.run(tf.squeeze(optimizer.problem.variables_flat))
@@ -128,5 +130,5 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
             total_time = 0
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
-
-itr(100, 10)
+#
+# itr(100, 10)
