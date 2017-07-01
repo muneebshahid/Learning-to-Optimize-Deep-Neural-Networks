@@ -100,13 +100,13 @@ class Meta_Optimizer():
         pass
 
     def minimize(self, loss):
-        return self.meta_optimizer_optimizer.minimize(loss)
+        return self.meta_optimizer_optimizer.minimize(loss, var_list=self.optimizer_variables)
 
     def build(self):
         pass
 
     def reset_optimizer(self):
-        return [tf.variables_initializer(variable) for variable in self.optimizer_variables]
+        return [tf.variables_initializer(self.optimizer_variables)]
 
     def reset_problem(self):
         return [tf.variables_initializer(self.problem.variables + self.problem.constants)]
@@ -278,10 +278,10 @@ class MlpSimple(Meta_Optimizer):
                 b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[1])
                 linear = tf.add(tf.matmul(inputs, w), b, name='activations_' + 'layer_' + str(name))
                 layer_output = linear if activation is None else activation(linear)
-                # tf.summary.histogram('weights', w)
-                # tf.summary.histogram('bias', b)
+                tf.summary.histogram('weights', w)
+                tf.summary.histogram('bias', b)
                 if not reuse:
-                    self.optimizer_variables.append([w, b])
+                    self.optimizer_variables.extend([w, b])
         return layer_output
 
     def __init__(self, problem, path, args):
@@ -610,7 +610,7 @@ class MlpXHistory(MlpSimple):
         super(MlpXHistory, self).__init__(problem, path, args)
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
-            self.guide_optimizer = tf.train.GradientDescentOptimizer(.01, name='guide_optimizer')
+            self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
             self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
                                                             var_list=self.problem.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
@@ -678,10 +678,10 @@ class MlpXHistory(MlpSimple):
                 new_points = tf.add(tf.divide(ref_points, 2.0), tf.multiply(deltas, diff), 'new_points')
                 new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
-                tf.summary.histogram('deltas_' + str(i), deltas)
-                tf.summary.histogram('new_x_' + str(i), new_points)
-                tf.summary.scalar('deltas', tf.squeeze(deltas))
-                tf.summary.scalar('new_x', tf.squeeze(new_points))
+                # tf.summary.histogram('deltas_' + str(i), deltas)
+                # tf.summary.histogram('new_x_' + str(i), new_points)
+                # tf.summary.scalar('deltas', tf.squeeze(deltas))
+                # tf.summary.scalar('new_x', tf.squeeze(new_points))
             return {'x_next': x_next, 'deltas': deltas_list}
 
     def update_history_ops(self, variable_ptr, inputs):
