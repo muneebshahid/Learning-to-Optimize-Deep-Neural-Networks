@@ -95,15 +95,51 @@ class ElementwiseSquare(Problem):
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
 
-class RosenBrock(Problem):
+class Rosenbrock(Problem):
     def __init__(self, args):
-        super(RosenBrock, self).__init__(args=args)
+        super(Rosenbrock, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
-            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+            init = tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
+            init = tf.constant_initializer(-3)
+            self.x = self.create_variable('x', initializer=init, dims=[1, 1])
+            self.y = self.create_variable('y', initializer=init, dims=[1, 1])
 
     def loss(self, variables, mode='train'):
-        return tf.square(1 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
+        return tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
+
+
+class RosenbrockMulti(Problem):
+
+    def __init__(self, args):
+        if 'dims' not in args:
+            args['dims'] = 2
+        super(RosenbrockMulti, self).__init__(args)
+        for i, dim in enumerate(range(self.dims)):
+            self.create_variable('var_' + str(i), initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+
+    def loss(self, variables, mode='train'):
+        half_length = self.dims // 2
+        sum = 0
+        for i in range(half_length):
+            index_i = 2 * i
+            index_j = 2 * i + 1
+            sum = tf.add(100 * tf.square(tf.square(variables[index_i]) - variables[index_j]) + tf.square(variables[index_i] - 1), sum)
+        return sum
+
+class DifferentPowers(Problem):
+
+    def __init__(self, args):
+        if 'dims' not in args or args['dims'] == 1:
+            args['dims'] = 2
+        super(DifferentPowers, self).__init__(args)
+        for i, dim in enumerate(range(self.dims)):
+            self.create_variable('var_' + str(i), initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+
+    def loss(self, variables, mode='train'):
+        loss = 0
+        for i, variable in enumerate(variables):
+            loss += tf.pow(tf.abs(variable), 2 + 4 * (i) / (len(variables) - 1))
+        return loss
 
 class FitX(Problem):
 
@@ -121,6 +157,7 @@ class FitX(Problem):
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(variables[0], self.x), self.y)))
 
+
 class TwoVars(Problem):
 
     x, y = None, None
@@ -133,6 +170,7 @@ class TwoVars(Problem):
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.matmul(tf.square(variables[0], name='x_square'), tf.square(variables[1], name='y_square'), name='matmul'))
+
 
 class Quadratic(Problem):
 
@@ -273,7 +311,6 @@ class Mnist(Problem):
         return self.__xent_loss(output, batch_labels)
 
 
-            
 class cifar10(Problem):
 
     def __init__(self, args):

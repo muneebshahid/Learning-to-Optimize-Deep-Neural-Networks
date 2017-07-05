@@ -1,9 +1,9 @@
 import tensorflow as tf
 import numpy as np
 from optimizers import XHistorySign, XSign
-from problems import ElementwiseSquare, FitX, Mnist, RosenBrock
+from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti, DifferentPowers
 
-prob = RosenBrock(args={'meta': False, 'minval':-100, 'maxval':100, 'dims': 1})
+prob = DifferentPowers(args={'meta': False, 'minval':-10000, 'maxval':10000, 'dims': 2})
 
 optim = XHistorySign(prob, {'limit': 5, 'beta': 0.9})
 
