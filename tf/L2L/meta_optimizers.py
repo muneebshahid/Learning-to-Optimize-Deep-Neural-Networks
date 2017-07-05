@@ -280,6 +280,7 @@ class MlpSimple(Meta_Optimizer):
                 layer_output = linear if activation is None else activation(linear)
                 tf.summary.histogram('weights', w)
                 tf.summary.histogram('bias', b)
+                tf.summary.scalar('activation', layer_output)
                 if not reuse:
                     self.optimizer_variables.extend([w, b])
         return layer_output
@@ -668,7 +669,7 @@ class MlpXHistory(MlpSimple):
                                                                                              self.variable_history,
                                                                                              self.grad_sign_history)):
                 deltas = self.network({'preprocessed_gradient': [variable_history, variable_grad_sign_history], 'reuse': i > 0})[0]
-                deltas_list.append(deltas)
+                deltas_list.append([deltas])
                 max_values = tf.reduce_max(variable_history, 1)
                 min_values = tf.reduce_min(variable_history, 1)
                 max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
