@@ -1,12 +1,11 @@
 import tensorflow as tf
 import numpy as np
-from optimizers import XhistorySign, XSign
+from optimizers import XHistorySign, XSign
+from problems import ElementwiseSquare, FitX, Mnist, RosenBrock
 
-from problems import ElementwiseSquare, FitX, Mnist
+prob = RosenBrock(args={'meta': False, 'minval':-100, 'maxval':100, 'dims': 1})
 
-prob = Mnist(args={'meta': False, 'minval':-10000, 'maxval':10000, 'dims': 100})
-
-optim = XSign(prob, {'limit': 5, 'beta': 0.8})
+optim = XHistorySign(prob, {'limit': 5, 'beta': 0.9})
 
 optim.build()
 
@@ -27,7 +26,7 @@ def itr(itera, x_s=True, g_s=False):
     for i in range(itera):
         if x_s:
             s, u, l = iis.run([updates, step, loss])
-            print('Xloss', np.log10(l))
+            print('Xloss', l)
         if g_s:
             s, u, l = iis.run([updates_adam, step_adam, loss_adam])
-            print('Aloss', np.log10(l))
+            print('Aloss', l)
