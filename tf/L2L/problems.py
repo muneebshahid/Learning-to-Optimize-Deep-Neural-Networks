@@ -95,6 +95,15 @@ class ElementwiseSquare(Problem):
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
 
+class RosenBrock(Problem):
+    def __init__(self, args):
+        super(RosenBrock, self).__init__(args=args)
+        with tf.variable_scope(self.variable_scope):
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+
+    def loss(self, variables, mode='train'):
+        return tf.square(1 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
 
 class FitX(Problem):
 
