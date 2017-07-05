@@ -41,11 +41,11 @@ class Optimizer():
     def build(self):
         pass
 
-class XhistorySign(Optimizer):
+class XHistorySign(Optimizer):
 
     limit = None
     def __init__(self, problem, args):
-        super(XhistorySign, self).__init__(problem, args)
+        super(XHistorySign, self).__init__(problem, args)
         self.limit = args['limit']
         with tf.name_scope('optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
@@ -83,7 +83,7 @@ class XhistorySign(Optimizer):
                                                                                          self.grad_sign_history)):
             sum = tf.reduce_sum(variable_grad_sign_history, 1)
             sum = tf.reshape(sum, [tf.shape(sum)[0], 1])
-            deltas = XhistorySign.normalize_value(sum, -self.limit * 1.0, self.limit * 1.0)
+            deltas = XHistorySign.normalize_value(sum, -self.limit * 1.0, self.limit * 1.0)
             deltas_list.append(deltas)
             max_values = tf.reduce_max(variable_history, 1)
             min_values = tf.reduce_min(variable_history, 1)
