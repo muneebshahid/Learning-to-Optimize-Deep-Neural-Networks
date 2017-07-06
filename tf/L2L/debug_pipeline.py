@@ -27,11 +27,11 @@ meta_learning_rate = .01
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-100, 'maxval':100, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
+problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-10000, 'maxval':10000, 'dims':2000, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optim = meta_optimizers.MlpXHistory(problem, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpXHistoryBin(problem, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -112,8 +112,8 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, l, summaries, deltas, hist, grad_norm = iis.run([meta_step, updates, loss, all_summ,
-                                                               optim.ops_step['deltas'],
+        _, _, l, summaries, run_step, hist, grad_norm = iis.run([meta_step, updates, loss, all_summ,
+                                                               optim.ops_step,
                                                                optim.variable_history,
                                                                optim_grad_norm])
         if update_summaries:
@@ -127,7 +127,8 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
         if (i + 1) % print_interval == 0:
             print(i + 1)
             print('-----------')
-            print('deltas', deltas)
+            print('deltas', run_step['deltas'])
+            print('x_next', run_step['x_next'])
             print('history', hist)
             print('O Grad norm', grad_norm)
             print('-----------')
