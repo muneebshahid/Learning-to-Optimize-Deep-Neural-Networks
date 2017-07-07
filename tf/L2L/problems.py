@@ -100,7 +100,6 @@ class Rosenbrock(Problem):
         super(Rosenbrock, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
             init = tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
-            init = tf.constant_initializer(-3)
             self.x = self.create_variable('x', initializer=init, dims=[1, 1])
             self.y = self.create_variable('y', initializer=init, dims=[1, 1])
 
