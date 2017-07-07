@@ -2,10 +2,10 @@ import tensorflow as tf
 import numpy as np
 from optimizers import XHistorySign, XSign
 from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti, DifferentPowers
+tf.set_random_seed(0)
+prob = Rosenbrock(args={'meta': False, 'minval':-10, 'maxval':10, 'dims': 2})
 
-prob = DifferentPowers(args={'meta': False, 'minval':-10000, 'maxval':10000, 'dims': 2})
-
-optim = XHistorySign(prob, {'limit': 5, 'beta': 0.9})
+optim = XSign(prob, {'limit': 5, 'beta': 0.8})
 
 optim.build()
 
@@ -14,6 +14,16 @@ iis.run(tf.global_variables_initializer())
 
 optim.set_session(iis)
 optim.init_with_session()
+
+p = optim.problem.variables
+
+hist = optim.variable_avg
+
+gs = optim.sign_avg
+
+x_n = optim.ops_step['x_next']
+
+d_n = optim.ops_step['deltas']
 
 def itr(itera, x_s=True, g_s=False):
     updates = optim.ops_updates
@@ -26,7 +36,7 @@ def itr(itera, x_s=True, g_s=False):
     for i in range(itera):
         if x_s:
             s, u, l = iis.run([updates, step, loss])
-            print('Xloss', l)
+            print('Xloss', np.log(l))
         if g_s:
             s, u, l = iis.run([updates_adam, step_adam, loss_adam])
-            print('Aloss', l)
+            print('Aloss', np.log(l))
