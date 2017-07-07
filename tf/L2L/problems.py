@@ -100,8 +100,9 @@ class Rosenbrock(Problem):
         super(Rosenbrock, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
             init = tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
-            self.x = self.create_variable('x', initializer=init, dims=[1, 1])
-            self.y = self.create_variable('y', initializer=init, dims=[1, 1])
+            init = tf.constant_initializer(-3)
+            self.x = self.create_variable('x', initializer=tf.constant_initializer(-1), dims=[1, 1])
+            self.y = self.create_variable('y', initializer=tf.constant_initializer(1), dims=[1, 1])
 
     def loss(self, variables, mode='train'):
         return tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))

@@ -70,28 +70,23 @@ class XHistorySign(Optimizer):
                     self.session.run(tf.assign_add(self.history_ptr, 1))
             self.session.run(tf.assign(self.history_ptr, 0))
 
-    @staticmethod
-    def normalize_value(value, min=-1.0, max=1.0):
-        diff = tf.subtract(max, min)
-        return 2.0 * tf.divide((value - min), diff) - 1.0
-
     def step(self):
         x_next = list()
         deltas_list = []
         for i, (variable, variable_history, variable_grad_sign_history) in enumerate(zip(self.problem.variables,
                                                                                          self.variable_history,
                                                                                          self.grad_sign_history)):
-            sum = tf.reduce_sum(variable_grad_sign_history, 1)
-            sum = tf.reshape(sum, [tf.shape(sum)[0], 1])
-            deltas = XHistorySign.normalize_value(sum, -self.limit * 1.0, self.limit * 1.0)
+            deltas = tf.reduce_mean(variable_grad_sign_history, 1)
+            deltas = tf.expand_dims(deltas, 1)
             deltas_list.append(deltas)
-            max_values = tf.reduce_max(variable_history, 1)
-            min_values = tf.reduce_min(variable_history, 1)
-            max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
-            min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+            max_values = tf.expand_dims(tf.reduce_max(variable_history, 1), 1)
+            min_values = tf.expand_dims(tf.reduce_min(variable_history, 1), 1)
             diff = max_values - min_values
             ref_points = tf.divide(max_values + min_values, 2.0)
-            new_points = tf.subtract(ref_points, tf.multiply(deltas, diff), 'new_points')
+            noise = tf.random_normal([ref_points.shape[0].value, 1], 0, .01)
+            mean = tf.multiply(deltas, diff)
+            noisey_mean = mean * (1 + noise)
+            new_points = tf.subtract(ref_points, noisey_mean, 'new_points')
             new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
             x_next.append(new_points)
         return {'x_next': x_next, 'deltas': deltas_list}
@@ -154,7 +149,10 @@ class XSign(Optimizer):
                                                                    self.sign_avg)):
             ref_points = (variable_avg + variable_flat) / 2.0
             diff = tf.abs(variable_avg - variable_flat)
-            new_points = tf.subtract(ref_points, tf.multiply(sign_avg, diff), 'new_points')
+            mean = tf.subtract(ref_points, tf.multiply(sign_avg, diff))
+            noise = tf.random_normal([mean.shape[0].value, 1], 0, .01)
+            noisey_mean = mean * (1 + noise)
+            new_points = tf.subtract(ref_points, noisey_mean, 'new_points')
             deltas_list.append(sign_avg)
             new_points = self.problem.set_shape(new_points, i=i, op_name='reshaped_new_points')
             x_next.append(new_points)

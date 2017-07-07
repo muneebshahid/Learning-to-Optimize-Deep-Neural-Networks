@@ -5,7 +5,7 @@ from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti
 tf.set_random_seed(0)
 prob = Rosenbrock(args={'meta': False, 'minval':-10, 'maxval':10, 'dims': 2})
 
-optim = XSign(prob, {'limit': 5, 'beta': 0.8})
+optim = XHistorySign(prob, {'limit': 5, 'beta': 0.8})
 
 optim.build()
 
@@ -17,9 +17,9 @@ optim.init_with_session()
 
 p = optim.problem.variables
 
-hist = optim.variable_avg
+hist = optim.variable_history
 
-gs = optim.sign_avg
+gs = optim.grad_sign_history
 
 x_n = optim.ops_step['x_next']
 
