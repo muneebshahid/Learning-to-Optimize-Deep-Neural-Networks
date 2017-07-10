@@ -484,8 +484,13 @@ class MlpXHistoryBin(MlpSimple):
                 max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
                 min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
                 diff = max_values - min_values
-                ref_points = max_values + min_values
-                new_points = tf.add(variable_flat, tf.multiply(deltas, diff), 'new_points')
+                # ref_points = (max_values + min_values) / 2.0
+                # new_points = tf.add(variable_flat, tf.multiply(deltas, diff), 'new_points')
+                mean = tf.multiply(deltas, diff)
+                noise = tf.random_normal([mean.shape[0].value, 1], 0, .01)
+                noisey_mean = mean * (1 + noise)
+                new_points = tf.add(variable_flat, noisey_mean, 'new_points')
+
                 new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
                 # tf.summary.histogram('deltas_' + str(i), deltas)

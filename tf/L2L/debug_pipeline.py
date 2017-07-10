@@ -27,7 +27,7 @@ meta_learning_rate = .01
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.Rosenbrock(args={'meta': meta, 'minval':-10000, 'maxval':10000, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': False})
+problem = problems.Rosenbrock(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
