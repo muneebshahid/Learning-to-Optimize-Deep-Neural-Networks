@@ -273,10 +273,11 @@ class MlpSimple(Meta_Optimizer):
     def layer_fc(self, name, dims, inputs, initializers=None, activation=tf.nn.softplus, reuse=False):
         initializers = [tf.random_normal_initializer(mean=0.0, stddev=.1), tf.zeros_initializer] \
             if initializers is None else initializers
+        initializers = [tf.contrib.layers.variance_scaling_initializer()]
         with tf.name_scope('optimizer_fc_layer_' + name):
             with tf.variable_scope('optimizer_network', reuse=reuse):
                 w = tf.get_variable('w_' + name, shape=dims, initializer=initializers[0])
-                b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[1])
+                b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[0])
                 linear = tf.add(tf.matmul(inputs, w), b, name='activations_' + 'layer_' + str(name))
                 layer_output = linear if activation is None else activation(linear)
                 tf.summary.histogram('weights', w)
@@ -440,14 +441,18 @@ class MlpXHistoryBin(MlpSimple):
             self.session.run(tf.assign(self.history_ptr, 0))
 
     @staticmethod
-    def normalize_values(history_tensor):
+    def normalize_values(history_tensor, switch=0):
         with tf.name_scope('mlp_x_normalize_variable_history'):
-            max_values = tf.reduce_max(history_tensor, 1)
-            min_values = tf.reduce_min(history_tensor, 1)
-            max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
-            min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-            diff = max_values - min_values
-            return 2 * (history_tensor - min_values) / diff - 1.0
+            if switch == 0:
+                normalized_values = tf.divide(history_tensor, tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True))
+            else:
+                max_values = tf.reduce_max(history_tensor, 1)
+                min_values = tf.reduce_min(history_tensor, 1)
+                max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
+                min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+                diff = max_values - min_values
+                normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+            return normalized_values
 
     def sort_input(self, inputs):
         with tf.name_scope('mlp_x_sort_input'):
@@ -484,11 +489,22 @@ class MlpXHistoryBin(MlpSimple):
                 max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
                 min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
                 diff = max_values - min_values
+                # deterministic
                 # ref_points = (max_values + min_values) / 2.0
                 # new_points = tf.add(variable_flat, tf.multiply(deltas, diff), 'new_points')
+
+                # tf.where(tf.equal(tf.squeeze(x), -.47270381), tf.zeros(10), tf.ones(10))
+                # random prev
+                # mean = tf.multiply(deltas, diff)
+                # noise = tf.random_normal([mean.shape[0].value, 1], 0, .001)
+                # noisey_mean = mean * (1 + noise)
+
+                # for same effect use .001 as multiplier for mean.
+
                 mean = tf.multiply(deltas, diff)
-                noise = tf.random_normal([mean.shape[0].value, 1], 0, .01)
-                noisey_mean = mean * (1 + noise)
+                noisey_mean = tf.expand_dims(tf.random_normal([1, 1], mean, .0001 + tf.abs(mean) * .001), 1)
+
+
                 new_points = tf.add(variable_flat, noisey_mean, 'new_points')
 
                 new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
@@ -575,14 +591,18 @@ class MlpXHistoryCont(MlpSimple):
             self.session.run(tf.assign(self.history_ptr, 0))
 
     @staticmethod
-    def normalize_values(history_tensor):
+    def normalize_values(history_tensor, switch=0):
         with tf.name_scope('mlp_x_normalize_variable_history'):
-            max_values = tf.reduce_max(history_tensor, 1)
-            min_values = tf.reduce_min(history_tensor, 1)
-            max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
-            min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-            diff = max_values - min_values
-            return 2 * (history_tensor - min_values) / diff - 1.0
+            if switch == 0:
+                normalized_values = tf.divide(history_tensor, tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True))
+            else:
+                max_values = tf.reduce_max(history_tensor, 1)
+                min_values = tf.reduce_min(history_tensor, 1)
+                max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
+                min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+                diff = max_values - min_values
+                normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+            return normalized_values
 
     def sort_input(self, inputs):
         with tf.name_scope('mlp_x_sort_input'):
