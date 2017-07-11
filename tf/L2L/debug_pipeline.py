@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 tf.set_random_seed(0)
-preprocess = None#[Preprocess.log_sign, {'k': 10}]
+preprocess = [Preprocess.log_sign, {'k': 10}]
 
 second_derivatives = False
 #########################
@@ -27,11 +27,12 @@ meta_learning_rate = .01
 meta = True
 flag_optim = 'mlp'
 
-problem = problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
+problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        optim = meta_optimizers.MlpXHistoryBin(problem, path=io_path, args={'second_derivatives': False,
+        problem_batches = problems.create_batches_all()
+        optim = meta_optimizers.MlpSimple(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -46,11 +47,10 @@ if meta:
                                                                  'preprocess': preprocess})
 
     optim.build()
-    updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step
+    updates, loss, meta_step = optim.ops_updates, optim.ops_final_loss, optim.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
-    mean_deltas = [tf.reduce_mean(delta) for delta in optim.ops_step['deltas']]
-    norm_deltas = [tf.norm(delta) for delta in optim.ops_step['deltas']]
+    norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
 
 
 else:
@@ -62,10 +62,10 @@ else:
     meta_step = optim.minimize(loss)
     updates = []
 
-norm_problem_variables = [tf.norm(variable) for variable in problem.variables]
+norm_problem_variables = [tf.norm(variable) for problem in optim.problems for variable in problem.variables]
 input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 input_grads_norm = [tf.norm(grad) for grad in input_grads]
-optim_grad = tf.gradients(optim.loss(optim.ops_step['x_next']), optim.optimizer_variables)
+optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
 optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
 
 # for i, grad in enumerate(grad_optim):
@@ -100,7 +100,7 @@ def write_to_file(f_name, all_variables):
             log_file.write(str(variable) + ' ')
         log_file.write('\n')
 
-def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
+def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
     loss_final = 0
     print('current loss: ', np.log10(iis.run(loss)))
@@ -114,7 +114,7 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
             all_summ = []
         _, _, l, summaries, run_step, hist, grad_norm = iis.run([meta_step, updates, loss, all_summ,
                                                                optim.ops_step,
-                                                               optim.variable_history,
+                                                               [],
                                                                optim_grad_norm])
         if update_summaries:
             writer.add_summary(summaries, i)
@@ -122,13 +122,13 @@ def itr(itr, print_interval=1000, write_interval=None, reset_interval=None):
         total_time += (end - start)
         loss_final += l
         if write_interval is not None and (i + 1) % write_interval == 0:
-            variables = iis.run(tf.squeeze(optim.problem.variables_flat))
+            variables = iis.run(tf.squeeze(optim.problems.variables_flat))
             write_to_file('variables_updates.txt', variables)
         if (i + 1) % print_interval == 0:
             print(i + 1)
             print('-----------')
-            print('deltas', run_step['deltas'])
-            print('x_next', run_step['x_next'])
+            print('deltas', run_step[show_prob]['deltas'])
+            print('x_next', run_step[show_prob]['x_next'])
             print('history', hist)
             print('O Grad norm', grad_norm)
             print('-----------')

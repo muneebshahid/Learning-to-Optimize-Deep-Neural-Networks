@@ -50,7 +50,7 @@ with l2l.as_default():
                                          'momentum': False})
 
     loss_final, update, reset, step = optimizer.minimize()
-    mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problem.variables]
+    mean_mats = [tf.reduce_mean(variable) for variable in optimizer.problems.variables]
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
     saver = tf.train.Saver(trainable_variables, max_to_keep=100)
 

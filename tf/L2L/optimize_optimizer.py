@@ -94,9 +94,9 @@ with l2l.as_default():
         mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
                                 tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 
-    norm_problem_variables = [tf.norm(variable) for variable in optimizer.problem.variables]
+    norm_problem_variables = [tf.norm(variable) for variable in optimizer.problems.variables]
     norm_deltas = norm_problem_variables#[tf.norm(delta) for delta in step['deltas']]
-    norm_grads = [tf.norm(gradients) for gradients in optimizer.problem.get_gradients()]
+    norm_grads = [tf.norm(gradients) for gradients in optimizer.problems.get_gradients()]
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())

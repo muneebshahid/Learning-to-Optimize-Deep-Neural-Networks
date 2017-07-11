@@ -14,7 +14,7 @@ class Meta_Optimizer():
 
     global_args = None
     io_handle = None
-    problem = None
+    problems = None
     meta_optimizer_optimizer = None
     preprocessor = None
     preprocessor_args = None
@@ -28,14 +28,14 @@ class Meta_Optimizer():
     ops_reset = None
     allow_reset = False
 
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         if path is not None:
             print('Loading optimizer args, ignoring provided args...')
             self.global_args = self.load_args(path)
             print('Args Loaded, call load_optimizer with session to restore the optimizer graph.')
         else:
             self.global_args = args
-        self.problem = problem
+        self.problems = problems
         if 'preprocess' in self.global_args and self.global_args['preprocess'] is not None:
             self.preprocessor = self.global_args['preprocess'][0]
             self.preprocessor_args = self.global_args['preprocess'][1]
@@ -69,14 +69,14 @@ class Meta_Optimizer():
         args = self.global_args if args is None else args
         return param in args and args[param] is not None
 
-    def get_preprocessed_gradients(self, variables=None):
-        return [self.preprocess_input(gradient) for gradient in self.problem.get_gradients(variables)]
+    def get_preprocessed_gradients(self, problem, variables=None):
+        return [self.preprocess_input(gradient) for gradient in problem.get_gradients(variables)]
 
     @property
     def meta_optimizer_input_stack(self):
-        variables = self.problem.variables_flat
-        gradients_raw = self.problem.get_gradients_raw(variables)
-        flat_gradients = [self.problem.flatten_input(i, gradient) for i, gradient in enumerate(gradients_raw)]
+        variables = self.problems.variables_flat
+        gradients_raw = self.problems.get_gradients_raw(variables)
+        flat_gradients = [self.problems.flatten_input(i, gradient) for i, gradient in enumerate(gradients_raw)]
         preprocessed_gradients = [self.preprocess_input(gradient) for gradient in flat_gradients]
         stacked_inputs = [{
             'x': variable,
@@ -88,16 +88,16 @@ class Meta_Optimizer():
             zip(variables, gradients_raw, flat_gradients, preprocessed_gradients)]
         return stacked_inputs
 
-    def updates(self, args):
+    def updates(self, problem, args):
         pass
 
     def network(self, inputs):
         pass
 
-    def loss(self, variables=None):
+    def loss(self, problem, variables=None):
         pass
 
-    def step(self):
+    def step(self, problem):
         pass
 
     def minimize(self, loss):
@@ -109,8 +109,14 @@ class Meta_Optimizer():
     def reset_optimizer(self):
         return [tf.variables_initializer(self.optimizer_variables)]
 
-    def reset_problem(self):
-        return [tf.variables_initializer(self.problem.variables + self.problem.constants)]
+    def reset_problem(self, problem):
+        return [tf.variables_initializer(problem.variables + problem.constants)]
+
+    def reset_problems(self):
+        reset_problem_ops = []
+        for problem in self.problems:
+            reset_problem_ops.extend(self.reset_problem(problem))
+        return reset_problem_ops
 
     @staticmethod
     def load_args(path):
@@ -164,8 +170,8 @@ class l2l(Meta_Optimizer):
             input['hidden_state'] = hidden_state
         return inputs
 
-    def __init__(self, problem, path, args):
-        super(l2l, self).__init__(problem, path, args)
+    def __init__(self, problems, path, args):
+        super(l2l, self).__init__(problems, path, args)
         self.state_size = self.global_args['state_size']
         self.num_layers = self.global_args['num_layers']
         self.unroll_len = self.global_args['unroll_len']
@@ -186,10 +192,10 @@ class l2l(Meta_Optimizer):
             self.lstm = tf.contrib.rnn.BasicLSTMCell(self.state_size)
             self.lstm = tf.contrib.rnn.MultiRNNCell(
                 [tf.contrib.rnn.BasicLSTMCell(self.state_size) for _ in range(self.num_layers)])
-            gradients = self.preprocess_input(self.problem.get_gradients()[0])
+            gradients = self.preprocess_input(self.problems.get_gradients()[0])
 
             with tf.variable_scope('hidden_states'):
-                self.hidden_states = [get_states(self.problem.get_shape(variable=variable)) for variable in self.problem.variables_flat]
+                self.hidden_states = [get_states(self.problems.get_shape(variable=variable)) for variable in self.problems.variables_flat]
 
             with tf.variable_scope('rnn_init'):
                 self.lstm(gradients, self.hidden_states[0])
@@ -213,10 +219,10 @@ class l2l(Meta_Optimizer):
                 deltas, hidden_states[i] = self.network({'preprocessed_gradient': rnn_input, 'hidden_state': hidden_state})
                 # overwrite each iteration of the while loop, so you will end up with the last update
                 # deltas_list[i] = deltas
-                deltas = self.problem.set_shape(deltas, i, op_name='reshape_deltas')
+                deltas = self.problems.set_shape(deltas, i, op_name='reshape_deltas')
                 deltas = tf.multiply(deltas, self.learning_rate, 'multiply_deltas')
                 params[i] = tf.add(params[i], deltas, 'add_deltas_params')
-            fx_array = fx_array.write(t, self.problem.loss(params))
+            fx_array = fx_array.write(t, self.problems.loss(params))
             t_next = t + 1
             return t_next, fx_array, params, hidden_states
 
@@ -225,7 +231,7 @@ class l2l(Meta_Optimizer):
         _, self.fx_array, x_next, h_next = tf.while_loop(
             cond=lambda t, *_: t < self.unroll_len,
             body=update,
-            loop_vars=([0, self.fx_array, self.problem.variables, self.hidden_states]),
+            loop_vars=([0, self.fx_array, self.problems.variables, self.hidden_states]),
             parallel_iterations=1,
             swap_memory=True,
             name="unroll")
@@ -235,7 +241,7 @@ class l2l(Meta_Optimizer):
     def updates(self, args):
         update_list = list()
         update_list.append([tf.assign(variable, variable_final) for variable, variable_final in
-                              zip(self.problem.variables, args['x_next'])])
+                            zip(self.problems.variables, args['x_next'])])
         update_list.append([tf.assign(hidden_state, hidden_state_final) for hidden_state, hidden_state_final in
                               zip(nest.flatten(self.hidden_states), nest.flatten(args['h_next']))])
         return update_list
@@ -271,12 +277,18 @@ class MlpSimple(Meta_Optimizer):
     hidden_layers = None
 
     def layer_fc(self, name, dims, inputs, initializers=None, activation=tf.nn.softplus, reuse=False):
-        initializers = [tf.random_normal_initializer(mean=0.0, stddev=.1), tf.zeros_initializer] \
-            if initializers is None else initializers
+        # initializers = [tf.random_normal_initializer(mean=0.0, stddev=.1), tf.zeros_initializer] \
+        #     if initializers is None else initializers
         initializers = [tf.contrib.layers.variance_scaling_initializer()]
+        reuse = False
         with tf.name_scope('optimizer_fc_layer_' + name):
-            with tf.variable_scope('optimizer_network', reuse=reuse):
-                w = tf.get_variable('w_' + name, shape=dims, initializer=initializers[0])
+            with tf.variable_scope('optimizer_network') as scope:
+                try:
+                    w = tf.get_variable('w_' + name, shape=dims, initializer=initializers[0])
+                except ValueError:
+                    scope.reuse_variables()
+                    reuse = True
+                    w = tf.get_variable('w_' + name, shape=dims, initializer=initializers[0])
                 b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[0])
                 linear = tf.add(tf.matmul(inputs, w), b, name='activations_' + 'layer_' + str(name))
                 layer_output = linear if activation is None else activation(linear)
@@ -287,14 +299,13 @@ class MlpSimple(Meta_Optimizer):
                     self.optimizer_variables.extend([w, b])
         return layer_output
 
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         if 'dims' not in args:
             input_dim, output_dim = (1, 1)
             if 'preprocess' in args and args['preprocess'] is not None:
                 input_dim = 2
             args['dims'] = (input_dim, output_dim)
-        super(MlpSimple, self).__init__(problem, path, args)
-        self.num_layers = 2
+        super(MlpSimple, self).__init__(problems, path, args)
         self.layer_width = self.global_args['layer_width'] if self.is_availble('layer_width') else 20
         self.end_init()
 
@@ -311,41 +322,50 @@ class MlpSimple(Meta_Optimizer):
         output = self.layer_fc('out', dims=[self.layer_width, output_dim], inputs=activations, activation=output_activation, reuse=reuse)
         return [output]
 
-    def step(self):
+    def step(self, problem):
         with tf.name_scope('mlp_simple_optimizer_step'):
             x_next = list()
             deltas_list = []
-            preprocessed_gradients = self.get_preprocessed_gradients()
+            preprocessed_gradients = self.get_preprocessed_gradients(problem)
             optimizer_inputs = preprocessed_gradients
-            for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
+            for i, (variable, optim_input) in enumerate(zip(problem.variables, optimizer_inputs)):
                 deltas = self.network({'preprocessed_gradient': optim_input, 'reuse': i > 0})[0]
                 deltas_list.append(deltas)
                 deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
-                deltas = self.problem.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
+                deltas = problem.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
                 x_next.append(tf.add(variable, deltas))
             return {'x_next': x_next, 'deltas': deltas_list}
 
-    def updates(self, args):
+    def updates(self, problem, args):
         with tf.name_scope('mlp_simple_optimizer_updates'):
-            update_list = [tf.assign(variable, updated_var) for variable, updated_var in zip(self.problem.variables, args['x_next'])]
+            update_list = [tf.assign(variable, updated_var) for variable, updated_var in zip(problem.variables, args['x_next'])]
             return update_list
 
-    def loss(self, variables=None):
+    def loss(self, problem, variables=None):
         with tf.name_scope('mlp_simple_optimizer_loss'):
-            variables = variables if variables is not None else self.problem.variables
-            return self.problem.loss(variables)
+            variables = variables if variables is not None else problem.variables
+            return problem.loss(variables)
 
     def build(self):
-        step = self.step()
-        updates = self.updates(step)
-        loss = self.loss(step['x_next'])
-        meta_step = self.minimize(loss)
-        reset = [self.reset_problem(), self.reset_optimizer()]
-        self.ops_step = step
-        self.ops_updates = updates
-        self.ops_loss = loss
-        self.ops_meta_step = meta_step
-        self.ops_reset = reset
+        self.ops_step = []
+        self.ops_updates = []
+        self.ops_loss = []
+        self.ops_meta_step = []
+        self.ops_final_loss = 0
+        self.ops_reset = [self.reset_optimizer()]
+        for problem in self.problems:
+            step = self.step(problem)
+            updates = self.updates(problem, step)
+            loss = self.loss(problem, step['x_next'])
+            reset = self.reset_problem(problem)
+            self.ops_step.append(step)
+            self.ops_updates.append(updates)
+            self.ops_loss.append(loss)
+            self.ops_reset.append(reset)
+        for op_loss in self.ops_loss:
+            self.ops_final_loss += op_loss
+        self.ops_final_loss /= len(self.ops_loss)
+        self.ops_meta_step = self.minimize(self.ops_final_loss)
 
     def run(self, args=None):
         return super(MlpSimple, self).run({'num_step': 1})
@@ -354,13 +374,13 @@ class MlpSimple(Meta_Optimizer):
 class MlpMovingAverage(MlpSimple):
 
     avg_gradients = None
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         args['dims'] = (4, 1) if self.is_availble('preprocess', args) else (2, 1)
-        super(MlpMovingAverage, self).__init__(problem, path, args)
+        super(MlpMovingAverage, self).__init__(problems, path, args)
         self.avg_gradients = [
             tf.get_variable('avg_gradients_' + str(i), shape=[shape, 1], initializer=tf.zeros_initializer(),
                             trainable=False)
-            for i, shape in enumerate(self.problem.variables_flattened_shape)]
+            for i, shape in enumerate(self.problems.variables_flattened_shape)]
 
     def step(self):
         x_next = list()
@@ -368,11 +388,11 @@ class MlpMovingAverage(MlpSimple):
         preprocessed_gradients = self.get_preprocessed_gradients()
         optimizer_inputs = [tf.concat([gradient, self.preprocess_input(avg_gradient)], 1)
                             for gradient, avg_gradient in zip(preprocessed_gradients, self.avg_gradients)]
-        for i, (variable, optim_input) in enumerate(zip(self.problem.variables, optimizer_inputs)):
+        for i, (variable, optim_input) in enumerate(zip(self.problems.variables, optimizer_inputs)):
             deltas = self.network({'preprocessed_gradient': optim_input})[0]
             deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
-            deltas = self.problem.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
+            deltas = self.problems.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
             x_next.append(tf.add(variable, deltas))
         return {'x_next': x_next, 'deltas': deltas_list}
 
@@ -412,27 +432,27 @@ class MlpXHistoryBin(MlpSimple):
     guide_optimizer = None
     guide_step = None
 
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         limit = args['limit']
         args['dims'] = (limit * 2, 21)
-        super(MlpXHistoryBin, self).__init__(problem, path, args)
+        super(MlpXHistoryBin, self).__init__(problems, path, args)
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
             self.step_dist = tf.Variable(tf.constant(np.linspace(-1.0, 1.0, 21), shape=[21, 1], dtype=tf.float32), name='step_dist')
             self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
-            self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
-                                                            var_list=self.problem.variables, name='guide_step')
+            self.guide_step = self.guide_optimizer.minimize(self.problems.loss(self.problems.variables),
+                                                            var_list=self.problems.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                     for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                     for i, shape in enumerate(self.problems.variables_flattened_shape)]
             self.grad_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                      for i, shape in enumerate(self.problems.variables_flattened_shape)]
             for i, variable in enumerate(self.variable_history):
                 tf.summary.histogram('variable_history_' + str(i), variable)
 
     def init_with_session(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
             for col in range(self.global_args['limit']):
-                for variable_ptr, (variable, gradient) in enumerate(zip(self.problem.variables_flat, self.problem.get_gradients())):
+                for variable_ptr, (variable, gradient) in enumerate(zip(self.problems.variables_flat, self.problems.get_gradients())):
                     update_ops = self.update_history_ops(variable_ptr, (variable, tf.sign(gradient)))
                     self.session.run(update_ops)
                 if col < self.global_args['limit'] - 1:
@@ -479,9 +499,9 @@ class MlpXHistoryBin(MlpSimple):
         with tf.name_scope('mlp_x_optimizer_step'):
             x_next = list()
             deltas_list = []
-            for i, (variable, variable_flat, variable_history, variable_grad_sign_history) in enumerate(zip(self.problem.variables, self.problem.variables_flat,
-                                                                                             self.variable_history,
-                                                                                             self.grad_sign_history)):
+            for i, (variable, variable_flat, variable_history, variable_grad_sign_history) in enumerate(zip(self.problems.variables, self.problems.variables_flat,
+                                                                                                            self.variable_history,
+                                                                                                            self.grad_sign_history)):
                 deltas = self.network({'preprocessed_gradient': [variable_history, variable_grad_sign_history], 'reuse': i > 0})[0]
                 deltas_list.append([deltas])
                 max_values = tf.reduce_max(variable_history, 1)
@@ -507,7 +527,7 @@ class MlpXHistoryBin(MlpSimple):
 
                 new_points = tf.add(variable_flat, noisey_mean, 'new_points')
 
-                new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
+                new_points = self.problems.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
                 # tf.summary.histogram('deltas_' + str(i), deltas)
                 # tf.summary.histogram('new_x_' + str(i), new_points)
@@ -527,8 +547,8 @@ class MlpXHistoryBin(MlpSimple):
     def updates(self, args):
         with tf.name_scope('mlp_x_optimizer_updates'):
             update_list = super(MlpXHistoryBin, self).updates(args)
-            flat_gradients = self.problem.get_gradients(args['x_next'])
-            flat_variables = [self.problem.flatten_input(i, variable) for i, variable in enumerate(args['x_next'])]
+            flat_gradients = self.problems.get_gradients(args['x_next'])
+            flat_variables = [self.problems.flatten_input(i, variable) for i, variable in enumerate(args['x_next'])]
             for i, (variable, grads) in enumerate(zip(flat_variables, flat_gradients)):
                 new_input = [variable, tf.sign(grads)]
                 update_list.extend(self.update_history_ops(i, new_input))
@@ -563,26 +583,26 @@ class MlpXHistoryCont(MlpSimple):
     guide_optimizer = None
     guide_step = None
 
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         limit = args['limit']
         args['dims'] = (limit * 2, 1)
-        super(MlpXHistoryCont, self).__init__(problem, path, args)
+        super(MlpXHistoryCont, self).__init__(problems, path, args)
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
             self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
-            self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
-                                                            var_list=self.problem.variables, name='guide_step')
+            self.guide_step = self.guide_optimizer.minimize(self.problems.loss(self.problems.variables),
+                                                            var_list=self.problems.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                     for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                     for i, shape in enumerate(self.problems.variables_flattened_shape)]
             self.grad_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                      for i, shape in enumerate(self.problems.variables_flattened_shape)]
             for i, variable in enumerate(self.variable_history):
                 tf.summary.histogram('variable_history_' + str(i), variable)
 
     def init_with_session(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
             for col in range(self.global_args['limit']):
-                for variable_ptr, (variable, gradient) in enumerate(zip(self.problem.variables_flat, self.problem.get_gradients())):
+                for variable_ptr, (variable, gradient) in enumerate(zip(self.problems.variables_flat, self.problems.get_gradients())):
                     update_ops = self.update_history_ops(variable_ptr, (variable, tf.sign(gradient)))
                     self.session.run(update_ops)
                 if col < self.global_args['limit'] - 1:
@@ -627,7 +647,7 @@ class MlpXHistoryCont(MlpSimple):
         with tf.name_scope('mlp_x_optimizer_step'):
             x_next = list()
             deltas_list = []
-            for i, (variable, variable_history, variable_grad_sign_history) in enumerate(zip(self.problem.variables,
+            for i, (variable, variable_history, variable_grad_sign_history) in enumerate(zip(self.problems.variables,
                                                                                              self.variable_history,
                                                                                              self.grad_sign_history)):
                 deltas = self.network({'preprocessed_gradient': [variable_history, variable_grad_sign_history], 'reuse': i > 0})[0]
@@ -639,7 +659,7 @@ class MlpXHistoryCont(MlpSimple):
                 diff = max_values - min_values
                 ref_points = max_values + min_values
                 new_points = tf.add(tf.divide(ref_points, 2.0), tf.multiply(deltas, diff), 'new_points')
-                new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
+                new_points = self.problems.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
                 # tf.summary.histogram('deltas_' + str(i), deltas)
                 # tf.summary.histogram('new_x_' + str(i), new_points)
@@ -659,8 +679,8 @@ class MlpXHistoryCont(MlpSimple):
     def updates(self, args):
         with tf.name_scope('mlp_x_optimizer_updates'):
             update_list = super(MlpXHistoryCont, self).updates(args)
-            flat_gradients = self.problem.get_gradients(args['x_next'])
-            flat_variables = [self.problem.flatten_input(i, variable) for i, variable in enumerate(args['x_next'])]
+            flat_gradients = self.problems.get_gradients(args['x_next'])
+            flat_variables = [self.problems.flatten_input(i, variable) for i, variable in enumerate(args['x_next'])]
             for i, (variable, grads) in enumerate(zip(flat_variables, flat_gradients)):
                 new_input = [variable, tf.sign(grads)]
                 update_list.extend(self.update_history_ops(i, new_input))
@@ -791,23 +811,23 @@ class MlpGradHistoryFAST(MlpSimple):
     guide_optimizer = None
     adam_problem_step = None
 
-    def __init__(self, problem, path, args):
+    def __init__(self, problems, path, args):
         limit = args['limit']
         args['dims'] = (limit * 2, 1) if self.is_availble('preprocess', args) else (limit, 1)
-        super(MlpGradHistoryFAST, self).__init__(problem, path, args)
+        super(MlpGradHistoryFAST, self).__init__(problems, path, args)
         with tf.name_scope('optimizer_network'):
             self.gradient_history_ptr = tf.Variable(0, 'gradient_history_ptr')
             self.guide_optimizer = tf.train.AdamOptimizer(.01)
-            self.adam_problem_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables), var_list=self.problem.variables)
+            self.adam_problem_step = self.guide_optimizer.minimize(self.problems.loss(self.problems.variables), var_list=self.problems.variables)
             self.gradient_history = [tf.get_variable('gradients_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                     for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                     for i, shape in enumerate(self.problems.variables_flattened_shape)]
             if self.is_availble('preprocess'):
                 self.gradient_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
-                                          for i, shape in enumerate(self.problem.variables_flattened_shape)]
+                                              for i, shape in enumerate(self.problems.variables_flattened_shape)]
 
     def init_with_session(self, args=None):
         for col in range(4):
-            for variable_ptr, gradient in enumerate(self.problem.get_gradients()):
+            for variable_ptr, gradient in enumerate(self.problems.get_gradients()):
                 indices = [[row, col] for row in range(gradient.get_shape()[0].value)]
                 update_ops = [tf.scatter_nd_update(self.gradient_history[variable_ptr], indices, tf.squeeze(gradient))]
                 if self.is_availble('preprocess'):
@@ -845,11 +865,11 @@ class MlpGradHistoryFAST(MlpSimple):
         x_next = list()
         deltas_list = []
         for i, (variable, variable_gradient_history, variable_gradient_sign_history) in enumerate(
-                zip(self.problem.variables, self.gradient_history, self.gradient_sign_history)):
+                zip(self.problems.variables, self.gradient_history, self.gradient_sign_history)):
             deltas = self.network({'preprocessed_gradient': [variable_gradient_history, variable_gradient_sign_history]})[0]
             deltas_list.append(deltas)
             deltas = tf.multiply(deltas, self.learning_rate, name='apply_learning_rate')
-            deltas = self.problem.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
+            deltas = self.problems.set_shape(deltas, like_variable=variable, op_name='reshape_deltas')
             x_next.append(tf.add(variable, deltas))
         return {'x_next': x_next, 'deltas': deltas_list}
 

@@ -10,6 +10,31 @@ import os, tarfile
 import six.moves
 from six.moves import urllib, xrange
 
+def create_batches(problem, batches=5, dims=5, args={}):
+    batch_list = []
+    for batch in range(batches):
+        batch_list.extend(problem(args))
+    return batch_list
+
+def create_batches_all():
+    batches = []
+    # ElementSquare
+    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 10, 'minval': -1000, 'maxval': 1000}))
+    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 10, 'minval': -0.5, 'maxval': 0.5}))
+    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 10, 'minval': -10.0, 'maxval': 10.0}))
+
+    # Rosenbrock
+    batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
+    batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
+    # for i in range(5):
+    #     batches.append(batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10})))
+
+    # DifferentPower
+    # for i in range(5):
+    #     batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+
+    return batches
+
 
 class Problem():
     __metaclass__ = ABCMeta
@@ -24,6 +49,7 @@ class Problem():
     constant_scope = 'constants'
     allow_gradients_of_gradients = None
     variables_flat = None
+    problem_prefix = None
 
     def __init__(self, args={}):
         self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
@@ -34,11 +60,13 @@ class Problem():
         self.variables_flat = []
         self.constants = []
         self.variables_flattened_shape = []
+        self.problem_prefix = '' if 'prefix' not in args else args['prefix']
+
 
     def create_variable(self, name, initializer=tf.random_normal_initializer(mean=0, stddev=0.01), constant=False, dims=None):
         shape = [self.dims, 1] if dims is None else dims
         with tf.name_scope('problem_variables'):
-            variable = tf.get_variable(name, shape=shape, dtype=self.dtype,
+            variable = tf.get_variable(self.problem_prefix + name, shape=shape, dtype=self.dtype,
                                        initializer=initializer, trainable=self.is_trainable)
             if constant:
                 self.constants.append(variable)
@@ -100,9 +128,8 @@ class Rosenbrock(Problem):
         super(Rosenbrock, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
             init = tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
-            init = tf.constant_initializer(-3)
-            self.x = self.create_variable('x', initializer=tf.constant_initializer(-1), dims=[1, 1])
-            self.y = self.create_variable('y', initializer=tf.constant_initializer(1), dims=[1, 1])
+            self.x = self.create_variable('x', initializer=init, dims=[1, 1])
+            self.y = self.create_variable('y', initializer=init, dims=[1, 1])
 
     def loss(self, variables, mode='train'):
         return tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
