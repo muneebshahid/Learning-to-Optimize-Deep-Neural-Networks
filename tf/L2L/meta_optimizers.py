@@ -502,7 +502,7 @@ class MlpXHistoryBin(MlpSimple):
                 # for same effect use .001 as multiplier for mean.
 
                 mean = tf.multiply(deltas, diff)
-                noisey_mean = tf.expand_dims(tf.random_normal([1, 1], mean, .0001 + tf.abs(mean) * .001), 1)
+                noisey_mean = tf.random_normal([1, 1], mean, .0001 + tf.abs(mean) * .001)
 
 
                 new_points = tf.add(variable_flat, noisey_mean, 'new_points')
