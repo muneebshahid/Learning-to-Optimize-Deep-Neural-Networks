@@ -26,12 +26,15 @@ def create_batches_all():
     # Rosenbrock
     batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
     batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
-    # for i in range(5):
-    #     batches.append(batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10})))
+    for i in range(3):
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10}))
 
     # DifferentPower
-    # for i in range(5):
-    #     batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+    for i in range(5):
+        batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+
+    for i in range(5):
+        batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
     return batches
 
@@ -178,8 +181,8 @@ class FitX(Problem):
             self.w = self.create_variable('w', initializer=tf.random_uniform_initializer(), dims=[self.dims, self.dims])
 
         with tf.variable_scope(self.constant_scope):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
-            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(), dims=[self.dims, 1], constant=True)
+            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[self.dims, 1], constant=True)
+            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[self.dims, 1], constant=True)
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(variables[0], self.x), self.y)))
