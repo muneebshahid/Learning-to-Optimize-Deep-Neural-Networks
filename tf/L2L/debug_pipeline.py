@@ -32,11 +32,11 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches = problems.create_batches_all()
-        optim = meta_optimizers.MlpSimple(problem_batches, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpXHistoryGradNorm(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 1})
+                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 0})
     else:
         optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
@@ -138,7 +138,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
                 print('norm_delta: ', iis.run(norm_deltas))
                 print('lrate: ', iis.run(optim.learning_rate))
             print('norm_input_grads: ', iis.run(input_grads_norm))
-            print('loss: ', np.log10(loss_final / print_interval), np.log10(l))
+            print('loss: ', loss_final / print_interval, l)
             print('time:' , total_time / print_interval)
             loss_final = 0
             total_time = 0
