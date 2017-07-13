@@ -99,10 +99,10 @@ class Meta_Optimizer():
         pass
 
     def reset_optimizer(self):
-        return [tf.variables_initializer(self.optimizer_variables)]
+        return [tf.variables_initializer(self.optimizer_variables, name='reset_optimizer')]
 
     def reset_problem(self, problem):
-        return [tf.variables_initializer(problem.variables + problem.constants)]
+        return [tf.variables_initializer(problem.variables + problem.constants, name='reset_' + problem.__class__.__name__)]
 
     def reset_problems(self):
         reset_problem_ops = []
@@ -130,7 +130,7 @@ class Meta_Optimizer():
         self.io_handle.save(self.session, path)
         # self.save_args(path)
 
-    def init_with_session(self, args=None):
+    def run_init(self, args=None):
         return
 
     def set_session(self, session):
@@ -446,7 +446,7 @@ class MlpXHistoryGradNorm(MlpSimple):
                                               for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.history_ptr.append(tf.Variable(0, 'history_ptr'))
 
-    def init_with_session(self, args=None):
+    def run_init(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
             for problem, guide_step, problem_variable_history, problem_grad_sign_history, history_ptr in zip(self.problems,
                                                                                                              self.guide_step,
@@ -464,6 +464,11 @@ class MlpXHistoryGradNorm(MlpSimple):
                         self.session.run(guide_step)
                         self.session.run(tf.assign_add(history_ptr, 1))
                 self.session.run(tf.assign(history_ptr, 0))
+
+    def run_reset(self, optimizer=False):
+        reset_ops = self.ops_reset if optimizer else self.ops_reset[:-1]
+        self.session.run(reset_ops)
+        self.run_init()
 
     @staticmethod
     def normalize_values(history_tensor, switch=0):
@@ -579,13 +584,13 @@ class MlpXHistoryGradNorm(MlpSimple):
     def reset_problem(self, args):
         problem = args['problem']
         problem_variable_history = args['variable_history']
-        problem_grad_sign_history = args['grad_history']
+        problem_grad_history = args['grad_history']
         problem_history_ptr = args['history_ptr']
         reset = []
         reset.append(super(MlpXHistoryGradNorm, self).reset_problem(problem))
-        reset.append(tf.variables_initializer(problem_variable_history))
-        reset.append(tf.variables_initializer(problem_grad_sign_history))
-        reset.append(tf.variables_initializer([problem_history_ptr]))
+        reset.append(tf.variables_initializer(problem_variable_history, name='reset_variable_history'))
+        reset.append(tf.variables_initializer(problem_grad_history, name='reset_grad_history'))
+        reset.append(tf.variables_initializer([problem_history_ptr], name='reset_history_ptr'))
         return reset
 
     def build(self):
@@ -594,7 +599,7 @@ class MlpXHistoryGradNorm(MlpSimple):
         self.ops_loss = []
         self.ops_meta_step = []
         self.ops_final_loss = 0
-        self.ops_reset = [self.reset_optimizer()]
+        self.ops_reset = []
         for problem, variable_history, grad_sign_history, history_ptr in zip(self.problems,
                                                                              self.variable_history,
                                                                              self.grad_history,
@@ -614,6 +619,7 @@ class MlpXHistoryGradNorm(MlpSimple):
             self.ops_final_loss += op_loss
         self.ops_final_loss /= len(self.ops_loss)
         self.ops_meta_step = self.minimize(self.ops_final_loss)
+        self.ops_reset.append(self.reset_optimizer())
         self.init_saver_handle()
 
 
@@ -650,7 +656,7 @@ class MlpXHistoryCont(MlpSimple):
             for i, variable in enumerate(self.variable_history):
                 tf.summary.histogram('variable_history_' + str(i), variable)
 
-    def init_with_session(self, args=None):
+    def run_init(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
             for col in range(self.global_args['limit']):
                 for variable_ptr, (variable, gradient) in enumerate(zip(self.problems.variables_flat, self.problems.get_gradients())):
@@ -875,7 +881,7 @@ class MlpGradHistoryFAST(MlpSimple):
                 self.gradient_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                               for i, shape in enumerate(self.problems.variables_flattened_shape)]
 
-    def init_with_session(self, args=None):
+    def run_init(self, args=None):
         for col in range(4):
             for variable_ptr, gradient in enumerate(self.problems.get_gradients()):
                 indices = [[row, col] for row in range(gradient.get_shape()[0].value)]

@@ -102,7 +102,7 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
         optimizer.set_session(sess)
-        optimizer.init_with_session()
+        optimizer.run_init()
         l2l.finalize()
         print('---- Starting Training ----')
         if restore_network:

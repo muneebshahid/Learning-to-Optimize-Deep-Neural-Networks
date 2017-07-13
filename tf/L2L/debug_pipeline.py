@@ -81,7 +81,7 @@ iis.run(tf.global_variables_initializer())
 tf.train.start_queue_runners(iis)
 if meta:
     optim.set_session(iis)
-    optim.init_with_session()
+    optim.run_init()
 update_summaries = False
 if update_summaries:
     all_summ = tf.summary.merge_all()
@@ -108,7 +108,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             iis.run(optim.ops_reset)
-            optim.init_with_session(iis)
+            optim.run_init(iis)
         start = timer()
         if not update_summaries:
             all_summ = []
