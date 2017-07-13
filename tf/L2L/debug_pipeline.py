@@ -32,7 +32,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches = problems.create_batches_all()
-        optim = meta_optimizers.MlpXHistoryGradNorm(problem_batches, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpXHistoryGradSign(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -103,7 +103,7 @@ def write_to_file(f_name, all_variables):
 def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
     loss_final = 0
-    print('current loss: ', np.log10(iis.run(loss)))
+    print('current loss: ', iis.run(loss))
     total_time = 0
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
