@@ -47,7 +47,7 @@ if meta:
                                                                  'preprocess': preprocess})
 
     optim.build()
-    updates, loss, meta_step = optim.ops_updates, optim.ops_final_loss, optim.ops_meta_step
+    updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
@@ -120,7 +120,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             writer.add_summary(summaries, i)
         end = timer()
         total_time += (end - start)
-        loss_final += l
+        loss_final += l[show_prob]
         if write_interval is not None and (i + 1) % write_interval == 0:
             variables = iis.run(tf.squeeze(optim.problems.variables_flat))
             write_to_file('variables_updates.txt', variables)

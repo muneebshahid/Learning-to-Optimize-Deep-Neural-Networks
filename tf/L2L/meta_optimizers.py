@@ -334,8 +334,7 @@ class MlpSimple(Meta_Optimizer):
     def loss(self, args=None):
         with tf.name_scope('mlp_simple_optimizer_loss'):
             problem = args['problem']
-            variables = args['x_next']
-            variables = variables if variables is not None else problem.variables
+            variables = args['x_next'] if 'x_next' in args else problem.variables
             return problem.loss(variables)
 
     def build(self):
@@ -436,7 +435,8 @@ class MlpXGradNormHistory(MlpSimple):
                                          name='step_dist')
 
             self.guide_optimizer = tf.train.MomentumOptimizer(.01, 0.9, name='guide_optimizer')
-            self.guide_step, self.variable_history, self.grad_history, self.history_ptr = [], [], [], []
+
+            self.guide_step, self.variable_history, self.grad_history, self.history_ptr= [], [], [], []
             for i, problem in enumerate(self.problems):
                 with tf.variable_scope('problem_' + str(i)):
                     self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables),
@@ -446,6 +446,8 @@ class MlpXGradNormHistory(MlpSimple):
                     self.grad_history.append([tf.get_variable('gradients_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                               for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.history_ptr.append(tf.Variable(0, 'history_ptr'))
+
+
 
     def run_init(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
@@ -605,21 +607,24 @@ class MlpXGradNormHistory(MlpSimple):
                                                                              self.variable_history,
                                                                              self.grad_history,
                                                                              self.history_ptr):
+
             args = {'problem': problem, 'variable_history': variable_history,
-                    'grad_history': grad_sign_history, 'history_ptr': history_ptr}
+                    'grad_history': grad_sign_history, 'history_ptr': history_ptr,
+                    'x_next': [variable.initialized_value() for variable in problem.variables]}
+
+            loss_curr = tf.log(self.loss(args))
             step = self.step(args)
             args['x_next'] = step['x_next']
             updates = self.updates(args)
-            loss = tf.log(self.loss(args))
+
+            loss_next = tf.log(self.loss(args))
             reset = self.reset_problem(args)
             self.ops_step.append(step)
             self.ops_updates.append(updates)
+            loss = loss_next - loss_curr
             self.ops_loss.append(loss)
+            self.ops_meta_step.append(self.minimize(loss))
             self.ops_reset.append(reset)
-        for op_loss in self.ops_loss:
-            self.ops_final_loss += op_loss
-        self.ops_final_loss /= len(self.ops_loss)
-        self.ops_meta_step = self.minimize(self.ops_final_loss)
         self.ops_reset.append(self.reset_optimizer())
         self.init_saver_handle()
 
