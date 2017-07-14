@@ -63,8 +63,8 @@ else:
     updates = []
 
 norm_problem_variables = [tf.norm(variable) for problem in optim.problems for variable in problem.variables]
-input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
-input_grads_norm = [tf.norm(grad) for grad in input_grads]
+# input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
+# input_grads_norm = [tf.norm(grad) for grad in input_grads]
 optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
 optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
 
@@ -136,7 +136,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
                 print('norm_optim: ', iis.run(norm_optim_variables))
                 print('norm_delta: ', iis.run(norm_deltas))
                 print('lrate: ', iis.run(optim.learning_rate))
-            print('norm_input_grads: ', iis.run(input_grads_norm))
+            # print('norm_input_grads: ', iis.run(input_grads_norm))
             print('loss: ', loss_final / print_interval)
             print('time:' , total_time / print_interval)
             loss_final = 0
