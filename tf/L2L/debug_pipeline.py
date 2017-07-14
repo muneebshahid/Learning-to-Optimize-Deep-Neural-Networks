@@ -22,7 +22,7 @@ test_epochs = 500
 learning_rate = 0.0001
 layer_width = 50
 momentum = False
-meta_learning_rate = .01
+meta_learning_rate = .0001
 #########################
 meta = True
 flag_optim = 'mlp'
@@ -102,13 +102,12 @@ def write_to_file(f_name, all_variables):
 
 def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
-    loss_final = 0
+    loss_final = np.zeros(len(loss))
     print('current loss: ', iis.run(loss))
     total_time = 0
     for i in range(itr):
         if reset_interval is not None and (i + 1) % reset_interval == 0:
-            iis.run(optim.ops_reset)
-            optim.run_init(iis)
+            optim.run_reset()
         start = timer()
         if not update_summaries:
             all_summ = []
@@ -120,7 +119,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             writer.add_summary(summaries, i)
         end = timer()
         total_time += (end - start)
-        loss_final += l[show_prob]
+        loss_final += np.array(l)
         if write_interval is not None and (i + 1) % write_interval == 0:
             variables = iis.run(tf.squeeze(optim.problems.variables_flat))
             write_to_file('variables_updates.txt', variables)
@@ -138,7 +137,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
                 print('norm_delta: ', iis.run(norm_deltas))
                 print('lrate: ', iis.run(optim.learning_rate))
             print('norm_input_grads: ', iis.run(input_grads_norm))
-            print('loss: ', loss_final / print_interval, l)
+            print('loss: ', loss_final / print_interval)
             print('time:' , total_time / print_interval)
             loss_final = 0
             total_time = 0
