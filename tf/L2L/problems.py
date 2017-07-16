@@ -25,7 +25,7 @@ def create_batches_all():
     batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_3_', 'dims': 3, 'minval': -10.0, 'maxval': 10.0}))
     #
     # Rosenbrock
-    # batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
+    batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
     # batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
     # for i in range(3):
     #     batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10}))

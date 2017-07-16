@@ -22,7 +22,7 @@ test_epochs = 500
 learning_rate = 0.0001
 layer_width = 50
 momentum = False
-meta_learning_rate = .0001
+meta_learning_rate = .00001
 #########################
 meta = True
 flag_optim = 'mlp'
