@@ -36,7 +36,7 @@ if meta:
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
-                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 0})
+                                                                              'preprocess': preprocess, 'limit': 5, 'hidden_layers': 1})
     else:
         optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
@@ -126,8 +126,8 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         if (i + 1) % print_interval == 0:
             print(i + 1)
             print('-----------')
-            print('deltas', run_step[show_prob]['deltas'])
-            print('x_next', run_step[show_prob]['x_next'])
+            print('deltas', run_step[i%4]['deltas'])
+            print('x_next', run_step[i%4]['x_next'])
             print('history', hist)
             print('O Grad norm', grad_norm)
             print('-----------')
