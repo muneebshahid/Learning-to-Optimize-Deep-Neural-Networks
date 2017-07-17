@@ -434,7 +434,7 @@ class MlpXGradNormHistory(MlpSimple):
             self.step_dist = tf.Variable(tf.constant(np.linspace(-1.0, 1.0, output_dims), shape=[output_dims, 1], dtype=tf.float32),
                                          name='step_dist')
 
-            self.guide_optimizer = tf.train.MomentumOptimizer(.01, 0.9, name='guide_optimizer')
+            self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
             self.guide_step, self.variable_history, self.grad_history, self.history_ptr= [], [], [], []
             for i, problem in enumerate(self.problems):
