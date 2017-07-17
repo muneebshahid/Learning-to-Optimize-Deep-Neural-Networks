@@ -555,7 +555,7 @@ class MlpXGradNormHistory(MlpSimple):
                 # for same effect use .001 as multiplier for mean.
 
                 mean = tf.multiply(deltas, diff)
-                noisey_mean = tf.random_normal([1, 1], mean, .0001 + tf.abs(mean) * .001)
+                noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
                 new_points = tf.add(ref, noisey_mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
