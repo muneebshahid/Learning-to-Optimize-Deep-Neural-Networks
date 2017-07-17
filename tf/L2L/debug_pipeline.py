@@ -22,7 +22,7 @@ test_epochs = 500
 learning_rate = 0.0001
 layer_width = 50
 momentum = False
-meta_learning_rate = .00001
+meta_learning_rate = .0001#05
 #########################
 meta = True
 flag_optim = 'mlp'
@@ -106,6 +106,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     print('current loss: ', iis.run(loss))
     total_time = 0
     for i in range(itr):
+        problem_index = i % len(optim.problems)
         if reset_interval is not None and (i + 1) % reset_interval == 0:
             optim.run_reset()
         start = timer()
@@ -113,7 +114,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             all_summ = []
         _, _, l, summaries, run_step, hist, grad_norm = iis.run([meta_step, updates, loss, all_summ,
                                                                optim.ops_step,
-                                                               [],
+                                                               optim.grad_history,
                                                                optim_grad_norm])
         if update_summaries:
             writer.add_summary(summaries, i)
@@ -125,17 +126,18 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             write_to_file('variables_updates.txt', variables)
         if (i + 1) % print_interval == 0:
             print(i + 1)
+            # print('problem: ', problem_index)
             print('-----------')
-            print('deltas', run_step[i%4]['deltas'])
-            print('x_next', run_step[i%4]['x_next'])
-            print('history', hist)
+            # print('deltas', run_step[problem_index]['deltas'])
+            # print('x_next', run_step[problem_index]['x_next'])
+            # print('history', hist[problem_index])
             print('O Grad norm', grad_norm)
             print('-----------')
             print('norm_probl: ', iis.run(norm_problem_variables))
             if meta:
                 print('norm_optim: ', iis.run(norm_optim_variables))
-                print('norm_delta: ', iis.run(norm_deltas))
-                print('lrate: ', iis.run(optim.learning_rate))
+                # print('norm_delta: ', iis.run(norm_deltas))
+                # print('lrate: ', iis.run(optim.learning_rate))
             # print('norm_input_grads: ', iis.run(input_grads_norm))
             print('loss: ', loss_final / print_interval)
             print('time:' , total_time / print_interval)
