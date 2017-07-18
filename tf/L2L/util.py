@@ -19,10 +19,12 @@ def run_epoch(sess, loss, ops, reset, num_unrolls):
     return timer() - start, cost / num_unrolls
 
 
-def print_update(epoch, epochs, loss, epoch_interval, time):
+def print_update(epoch, epochs, loss, epoch_interval, time, optim_norm=None, optim_grad_norm=None):
     print('Epoch/Total Epocs: ', epoch + 1, '/', epochs)
     print('Mean Log Loss: ', loss)
     print('Mean Epoch Time: ', time / epoch_interval)
+    print('Optim Norm: ', optim_norm)
+    print('Optim Grad Norm: ', optim_grad_norm)
     print('--------------------------------------------------------------------\n')
 
 

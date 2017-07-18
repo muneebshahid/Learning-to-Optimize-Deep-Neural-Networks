@@ -135,20 +135,24 @@ class Meta_Optimizer():
     def set_session(self, session):
         self.session = session
 
+    def run_reset(self, optimizer=False):
+        pass
+
     def run(self, args=None):
-        set_arg = lambda op, op_key: op if args[op_key] else []
+        set_arg = lambda op, op_key: op if op_key in args and args[op_key] else []
         num_steps = 1 if 'num_steps' not in args else args['num_steps']
         ops_reset = set_arg(self.ops_reset, 'ops_reset')
         ops_loss = set_arg(self.ops_loss, 'ops_loss')
         ops_meta_step = set_arg(self.ops_meta_step, 'ops_meta_step')
         ops_updates = set_arg(self.ops_updates, 'ops_updates')
-        if args['reset']:
-            self.session.run(ops_reset)
-        loss = 0
+        if ops_reset:
+            self.run_reset()
+        loss_array = 0
         start = timer()
         for _ in range(num_steps):
-            loss += self.session.run([ops_loss, ops_meta_step, ops_updates])[0]
-        return timer() - start, loss / num_steps
+            loss = self.session.run([ops_loss, ops_meta_step, ops_updates])[0]
+            loss_array += np.array(loss)
+        return timer() - start, loss_array / num_steps
 
 class l2l(Meta_Optimizer):
 
@@ -364,7 +368,7 @@ class MlpSimple(Meta_Optimizer):
         self.ops_meta_step = self.minimize(self.ops_final_loss)
 
     def run(self, args=None):
-        return super(MlpSimple, self).run({'num_step': 1})
+        return super(MlpSimple, self).run(args)
 
 
 class MlpMovingAverage(MlpSimple):
