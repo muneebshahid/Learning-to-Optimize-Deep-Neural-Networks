@@ -26,7 +26,6 @@ class Meta_Optimizer():
     ops_loss = None
     ops_meta_step = None
     ops_reset = None
-    allow_reset = False
 
     def __init__(self, problems, path, args):
         if path is not None:
@@ -137,13 +136,18 @@ class Meta_Optimizer():
         self.session = session
 
     def run(self, args=None):
+        set_arg = lambda op, op_key: op if args[op_key] else []
         num_steps = 1 if 'num_steps' not in args else args['num_steps']
-        if self.allow_reset and self.ops_reset is not None:
-            self.session.run(self.ops_reset)
+        ops_reset = set_arg(self.ops_reset, 'ops_reset')
+        ops_loss = set_arg(self.ops_loss, 'ops_loss')
+        ops_meta_step = set_arg(self.ops_meta_step, 'ops_meta_step')
+        ops_updates = set_arg(self.ops_updates, 'ops_updates')
+        if args['reset']:
+            self.session.run(ops_reset)
         loss = 0
         start = timer()
         for _ in range(num_steps):
-            loss += self.session.run([self.ops_loss, self.ops_meta_step, self.ops_updates])[0]
+            loss += self.session.run([ops_loss, ops_meta_step, ops_updates])[0]
         return timer() - start, loss / num_steps
 
 class l2l(Meta_Optimizer):
@@ -258,7 +262,7 @@ class l2l(Meta_Optimizer):
         self.ops_reset = reset
 
     def run(self, args=None):
-        return super(l2l, self).run({'num_steps': self.num_step})
+        return super(l2l, self).run(args)
 
 class MlpSimple(Meta_Optimizer):
 

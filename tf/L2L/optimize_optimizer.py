@@ -13,6 +13,7 @@ with l2l.as_default():
 
     second_derivatives = False
     restore_network = False
+    io_path = ''
     save_network = True
 
     epochs = None
@@ -40,7 +41,7 @@ with l2l.as_default():
     problem = problems.ElementwiseSquare(args={'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': True})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
-
+    problem_batches = problems.create_batches_all()
     if flag_optimizer == 'L2L':
         print('Using L2L')
         #########################
@@ -58,13 +59,13 @@ with l2l.as_default():
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum, second_derivative=second_derivatives)
 
-        optimizer = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
+        optim = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
                                                                  'state_size': 20, 'num_layers': 2,
                                                                  'unroll_len': unroll_len,
                                                                  'learning_rate': 0.001,
                                                                  'meta_learning_rate': 0.01,
                                                                   'preprocess': preprocess})
-        optimizer.build()
+        optim.build()
     else:
         print('Using MLP')
         #########################
@@ -84,32 +85,29 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optimizer = meta_optimizers.MlpSimple(problem, path=io_path, args={'second_derivatives': second_derivatives,
-                                                                      'num_layers': 1, 'learning_rate': learning_rate,
-                                                                      'meta_learning_rate': 0.01,
+        optim = meta_optimizers.MlpHistoryGradNorm(problems, path=io_path, args={'second_derivatives': second_derivatives,
+                                                                      'hidden_layers': 1, 'learning_rate': learning_rate,
+                                                                      'meta_learning_rate': 0.0001,
                                                                       'momentum': momentum, 'layer_width': layer_width,
                                                                       'preprocess': preprocess, 'limit': 5})
-        optimizer.build()
+        optim.build()
         reset = None
-        mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
-                                tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
 
-    norm_problem_variables = [tf.norm(variable) for variable in optimizer.problems.variables]
-    norm_deltas = norm_problem_variables#[tf.norm(delta) for delta in step['deltas']]
-    norm_grads = [tf.norm(gradients) for gradients in optimizer.problems.get_gradients()]
+    optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
+    optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
+    norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
-        optimizer.set_session(sess)
-        optimizer.run_init()
+        optim.set_session(sess)
+        optim.run_init()
         l2l.finalize()
         print('---- Starting Training ----')
         if restore_network:
-            optimizer.load(sess, io_path)
-        print('Init Problem Norm: ', sess.run(norm_problem_variables))
-        print('Init Delts Norm: ', sess.run(norm_deltas))
-        print('Init Grad Norm: ', sess.run(norm_grads))
+            optim.load(io_path)
+        print('Init Prob Grad Norm: ', sess.run(norm_grads))
+        print('Init Optim Grad Norm: ', sess.run(optim_grad_norm))
         # print 'Init Optim Vars: ', sess.run(mean_optim_variables)
         total_loss = 0
         total_time = 0
@@ -120,29 +118,30 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss_value = optimizer.run()
+            time, loss_value = optim.run()
             total_loss += loss_value
             total_time += time
             if (epoch + 1) % epoch_interval == 0:
-                problem_norm = sess.run(norm_problem_variables)
-                deltas_norm = sess.run(norm_deltas)
-                grads_norm = sess.run(norm_grads)
-                print('Problem Vars Norm: ', problem_norm)
-                print('Deltas Norm: ', deltas_norm)
-                print('Grads Norm: ', grads_norm)
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
                 log10loss = np.log10(total_loss / epoch_interval)
                 util.print_update(epoch, epochs, log10loss, epoch_interval, total_time)
-                util.write_update(log10loss, total_time, problem_norm, deltas_norm, grads_norm)
                 total_loss = 0
                 total_time = 0
                 mean_mats_values_list = list()
 
             if (epoch + 1) % eval_interval == 0:
                 print('VALIDATION')
+                optim.run_reset()
                 loss_eval_total = 0
                 for eval_epoch in range(validation_epochs):
-                    time_eval, loss_eval = util.run_epoch(sess, eval_loss, None, reset, num_unrolls_per_epoch)
+        #                     ops_reset = set_arg(self.ops_reset, 'ops_reset')
+        # ops_loss = set_arg(self.ops_loss, 'ops_loss')
+        # ops_meta_step = set_arg(self.ops_meta_step, 'ops_meta_step')
+        # ops_updates = set_arg(self.ops_updates, 'ops_updates')
+                    time_eval, loss_eval = optim.run({'num_steps': 500,
+                                                      'ops_loss': True,
+                                                      'ops_reset': True,
+                                                      'ops_updates:': True})
                     loss_eval_total += loss_eval
                 loss_eval_total = np.log10(loss_eval_total / validation_epochs)
                 print('VALIDATION LOSS: ', loss_eval_total)
@@ -162,7 +161,7 @@ with l2l.as_default():
                                                     # learning_rate=learning_rate, layer_width=layer_width,
                                                     # momentum=momentum, second_derivative=second_derivatives)
                     print(save_path)
-                    optimizer.save(sess, save_path)
+                    optim.save(sess, save_path)
                     print('Network Saved')
                     best_evaluation = loss_eval_total
         if save_network:
@@ -171,6 +170,6 @@ with l2l.as_default():
                                             # learning_rate=learning_rate, layer_width=layer_width,
                                             # momentum=momentum, second_derivative=second_derivatives)
             print(save_path)
-            optimizer.save(sess, save_path)
+            optim.save(sess, save_path)
             print('Final Network Saved')
         print(flag_optimizer + ' optimized.')
