@@ -105,8 +105,8 @@ class Problem():
     def get_gradients_raw(self, variables=None):
         variables = self.variables if variables is None else variables
         gradients = tf.gradients(self.loss(variables), variables)
-        if not self.allow_gradients_of_gradients:
-            gradients = [tf.stop_gradient(gradient) for gradient in gradients]
+        # if not self.allow_gradients_of_gradients:
+        #     gradients = [tf.stop_gradient(gradient) for gradient in gradients]
         return gradients
 
     def get_gradients(self, variables=None):
