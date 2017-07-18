@@ -493,7 +493,10 @@ class MlpXGradNormHistory(MlpSimple):
     def normalize_values(history_tensor, switch=0):
         with tf.name_scope('mlp_x_normalize_variable_history'):
             if switch == 0:
-                normalized_values = tf.divide(history_tensor, tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True))
+                norm = tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True)
+                ones = tf.ones(tf.shape(norm))
+                divisor = tf.where(tf.equal(norm, 0.0), ones, norm)
+                normalized_values = tf.divide(history_tensor, divisor)
             else:
                 max_values = tf.reduce_max(history_tensor, 1)
                 min_values = tf.reduce_min(history_tensor, 1)

@@ -37,6 +37,8 @@ def create_batches_all():
     for i in range(4):
         batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
+    batches.append(Mnist({}))
+
     return batches
 
 
