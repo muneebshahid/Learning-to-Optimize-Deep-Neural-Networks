@@ -11,7 +11,7 @@ with l2l.as_default():
     preprocess = [Preprocess.log_sign, {'k': 10}]
 
 
-    model_id = '200_FINAL'
+    model_id = '1000_FINAL'
 
     #########################
     epochs = 100
@@ -39,14 +39,15 @@ with l2l.as_default():
         tf.train.start_queue_runners(sess)
         optim.set_session(sess)
         optim.run_init()
+        l = []
         for i, (problem, problem_variables_history) in enumerate(zip(optim.problems, optim.variable_history)):
             name_prefix = problem.__class__.__name__ + "_" + str(i)
             with tf.name_scope(name_prefix):
                 loss = tf.squeeze(tf.log(problem.loss(problem.variables)))
+                l.append(loss)
                 tf.summary.scalar('loss', loss)
-                tf.summary.histogram('variable_history', problem_variables_history)
                 for j, (variable, variable_history) in enumerate(zip(problem.variables, problem_variables_history)):
-                    tf.summary.histogram('variable_' + str(j), variable)
+                    # tf.summary.histogram('variable_' + str(j), variable)
                     tf.summary.histogram('variable_history_scl_' + str(j), variable_history)
         all_summ = tf.summary.merge_all()
         writer = tf.summary.FileWriter('tf_summary/')
@@ -55,8 +56,11 @@ with l2l.as_default():
         print('---- Starting Evaluation ----')
         optim.load(io_path)
         print('Optimizer loaded.')
-        for i in range(100):
-            _, summaries = sess.run([optim.ops_updates, all_summ])
+        total_itr = 1000
+        for i in range(total_itr):
+            print(str(i) + '/' + str(total_itr))
+            _, curr_loss, summaries = sess.run([optim.ops_updates, l, all_summ])
+            print(curr_loss)
             writer.add_summary(summaries, i)
 
 

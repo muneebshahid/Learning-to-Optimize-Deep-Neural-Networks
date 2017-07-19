@@ -292,7 +292,7 @@ class MlpSimple(Meta_Optimizer):
                 layer_output = linear if activation is None else activation(linear)
                 tf.summary.histogram('weights', w)
                 tf.summary.histogram('bias', b)
-                tf.summary.scalar('activation', layer_output)
+                tf.summary.histogram('activation', layer_output)
                 if not reuse:
                     self.optimizer_variables.extend([w, b])
         return layer_output
@@ -734,8 +734,8 @@ class MlpXHistoryCont(MlpSimple):
                                      for i, shape in enumerate(self.problems.variables_flattened_shape)]
             self.grad_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                       for i, shape in enumerate(self.problems.variables_flattened_shape)]
-            for i, variable in enumerate(self.variable_history):
-                tf.summary.histogram('variable_history_' + str(i), variable)
+            # for i, variable in enumerate(self.variable_history):
+            #     tf.summary.histogram('variable_history_' + str(i), variable)
 
     def run_init(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):

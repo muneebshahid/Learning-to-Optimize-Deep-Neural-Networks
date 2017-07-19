@@ -43,7 +43,7 @@ def write_update(loss, time, problem_norm, deltas_norm, grads_norm):
 
 def get_model_path(flag_optimizer, model_id):
     #, preprocess_args=None, learning_rate=None, num_layer=None, layer_width=None, momentum=None, second_derivative=None):
-    path = 'results/' + flag_optimizer + '_model_' + model_id
+    path = 'trained/' + flag_optimizer + '_model_' + model_id
     # if preprocess_args is not None:
     #     path += ('_' + preprocess_args[0].func_name)
     #     for key in preprocess_args[1]:

@@ -38,10 +38,20 @@ def create_batches_all(train=True):
         for i in range(4):
             batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
-        # batches.append(Mnist({}))
+        batches.append(Mnist({}))
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
+        batches.append(
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'minval': -1000, 'maxval': 0}))
+        batches.append(
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'minval': -0.5, 'maxval': 0.5}))
+
+        batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_0_', 'dims': 5, 'minval': -10.0, 'maxval': 10.0}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_2_', 'minval': -10, 'maxval': 10}))
+        batches.append(Mnist({}))
     return batches
 
 
@@ -81,7 +91,7 @@ class Problem():
                 self.constants.append(variable)
             else:
                 flat_shape = np.multiply.reduce(shape)
-                tf.summary.histogram(name, variable)
+                # tf.summary.histogram(name, variable)
                 self.variables.append(variable)
                 self.variables_flattened_shape.append(flat_shape)
                 self.variables_flat.append(tf.reshape(variable, [flat_shape, 1]))
