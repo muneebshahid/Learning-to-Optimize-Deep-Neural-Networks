@@ -112,3 +112,6 @@ tf_log/*
 tags
 *~
 *.swp
+/tf/L2L/tf_summary/*
+/tf/L2L/trained/*
+/tf/L2L/trained/
