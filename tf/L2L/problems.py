@@ -16,29 +16,32 @@ def create_batches(problem, batches=5, dims=5, args={}):
         batch_list.extend(problem(args))
     return batch_list
 
-def create_batches_all():
+def create_batches_all(train=True):
     batches = []
-    # ElementSquare
-    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
-    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'minval': -1000, 'maxval': 0}))
-    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'minval': -0.5, 'maxval': 0.5}))
-    batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_3_', 'dims': 4, 'minval': -10.0, 'maxval': 10.0}))
-    #
-    # Rosenbrock
-    batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
-    batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
-    for i in range(4):
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10}))
+    if train:
+        # ElementSquare
+        batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
+        batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'minval': -1000, 'maxval': 0}))
+        batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'minval': -0.5, 'maxval': 0.5}))
+        batches.append(ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_3_', 'dims': 4, 'minval': -10.0, 'maxval': 10.0}))
+        #
+        # Rosenbrock
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
+        for i in range(4):
+            batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_'+ str(i + 2) + '_', 'minval': -10, 'maxval': 10}))
 
-    # DifferentPower
-    for i in range(4):
-        batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
-    #
-    for i in range(4):
-        batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+        # DifferentPower
+        for i in range(4):
+            batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+        #
+        for i in range(4):
+            batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
-    batches.append(Mnist({}))
-
+        # batches.append(Mnist({}))
+    else:
+        batches.append(
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
     return batches
 
 
