@@ -14,7 +14,7 @@ with l2l.as_default():
     second_derivatives = False
     restore_network = False
     io_path = ''
-    save_network = False
+    save_network = True
 
     epochs = None
     num_optim_steps_per_epoch = None
@@ -69,7 +69,7 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 100000
+        epochs = 1000
         epoch_interval = 100
         eval_interval = 200
         validation_epochs = 50
@@ -91,7 +91,6 @@ with l2l.as_default():
                                                                       'momentum': momentum, 'layer_width': layer_width,
                                                                       'preprocess': preprocess, 'limit': 5})
         optim.build()
-        reset = None
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
@@ -120,7 +119,7 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss_value = optim.run({'num_steps': 50,
+            time, loss_value = optim.run({'num_steps': 100,
                                           'ops_loss': True,
                                           'ops_reset': True,
                                           'ops_meta_step': True,
@@ -139,7 +138,7 @@ with l2l.as_default():
                 print('--- VALIDATION ---')
                 avg_eval_loss = 0
                 for eval_epoch in range(validation_epochs):
-                    time_eval, loss_eval = optim.run({'num_steps': 50,
+                    time_eval, loss_eval = optim.run({'num_steps': 100,
                                                       'ops_loss': True,
                                                       'ops_reset': True,
                                                       'ops_updates': True})
@@ -155,17 +154,17 @@ with l2l.as_default():
                 # loss_test_total = np.log10(loss_test_total / test_epochs)
                 # print('TEST LOSS: ', loss_eval_total)
 
-                if save_network:# and avg_eval_loss < best_evaluation:
-                    print('Better Loss Found')
-                    save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
-                                                    # preprocess_args=preprocess,
-                                                    # learning_rate=learning_rate, layer_width=layer_width,
-                                                    # momentum=momentum, second_derivative=second_derivatives)
-                    print(save_path)
-                    optim.save(save_path)
-                    print('Network Saved')
-                    best_evaluation = avg_eval_loss
-                print('---------------------------------------')
+                # if save_network:# and avg_eval_loss < best_evaluation:
+                #     print('Better Loss Found')
+                #     save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
+                #                                     # preprocess_args=preprocess,
+                #                                     # learning_rate=learning_rate, layer_width=layer_width,
+                #                                     # momentum=momentum, second_derivative=second_derivatives)
+                #     print(save_path)
+                #     optim.save(save_path)
+                #     print('Network Saved')
+                #     best_evaluation = avg_eval_loss
+                # print('---------------------------------------')
         if save_network:
             save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epochs) + '_FINAL')
                                             # preprocess_args=preprocess,
