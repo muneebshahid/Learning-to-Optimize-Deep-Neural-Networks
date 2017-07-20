@@ -38,7 +38,7 @@ def create_batches_all(train=True):
         for i in range(4):
             batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
-        batches.append(Mnist({}))
+        # batches.append(Mnist({}))
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
@@ -51,7 +51,7 @@ def create_batches_all(train=True):
         batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
         batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
         batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_2_', 'minval': -10, 'maxval': 10}))
-        batches.append(Mnist({}))
+        # batches.append(Mnist({}))
     return batches
 
 
