@@ -41,16 +41,18 @@ def create_batches_all(train=True):
         # batches.append(Mnist({}))
     else:
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'minval': 0, 'maxval': 1000}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant([100, 500, 600, 1000])}))
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'minval': -1000, 'maxval': 0}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'init': tf.constant([-100, -500, -600, -1000])}))
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'minval': -0.5, 'maxval': 0.5}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'init': tf.constant([-0.5, -.36, 0, .4])}))
 
-        batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_0_', 'dims': 5, 'minval': -10.0, 'maxval': 10.0}))
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'minval': -3.0, 'maxval': 3.0}))
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_2_', 'minval': -10, 'maxval': 10}))
+        # batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_0_', 'dims': 5, 'minval': -10.0, 'maxval': 10.0}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([-3]), tf.constant([3.0])]}))
+        batches.append(
+            Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([0]), tf.constant([0.0])]}))
+        batches.append(
+            Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([10]), tf.constant([-10])]}))
         # batches.append(Mnist({}))
     return batches
 
@@ -128,6 +130,12 @@ class Problem():
         gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
         return gradients
 
+def get_default_init(args):
+    if 'init' in args:
+        return args['init']
+    else:
+        return tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
+
 
 class ElementwiseSquare(Problem):
 
@@ -137,7 +145,7 @@ class ElementwiseSquare(Problem):
         args['dims'] = [args['dims'], 1]
         super(ElementwiseSquare, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=args['dims'])
+            self.x = self.create_variable('x', initializer=get_default_init(args), dims=args['dims'])
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
@@ -146,9 +154,10 @@ class Rosenbrock(Problem):
     def __init__(self, args):
         super(Rosenbrock, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            init = tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval'])
-            self.x = self.create_variable('x', initializer=init, dims=[1, 1])
-            self.y = self.create_variable('y', initializer=init, dims=[1, 1])
+            init = get_default_init(args)
+            init_0, init_1 = (init[0], init[1]) if type(init) is list else (init, init)
+            self.x = self.create_variable('x', initializer=init_0, dims=[1, 1])
+            self.y = self.create_variable('y', initializer=init_1, dims=[1, 1])
 
     def loss(self, variables, mode='train'):
         return tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
@@ -161,7 +170,7 @@ class RosenbrockMulti(Problem):
             args['dims'] = 2
         super(RosenbrockMulti, self).__init__(args)
         for i, dim in enumerate(range(self.dims)):
-            self.create_variable('var_' + str(i), initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+            self.create_variable('var_' + str(i), initializer=get_default_init(args), dims=[1, 1])
 
     def loss(self, variables, mode='train'):
         half_length = self.dims // 2
@@ -179,7 +188,7 @@ class DifferentPowers(Problem):
             args['dims'] = 2
         super(DifferentPowers, self).__init__(args)
         for i, dim in enumerate(range(self.dims)):
-            self.create_variable('var_' + str(i), initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[1, 1])
+            self.create_variable('var_' + str(i), initializer=get_default_init(args), dims=[1, 1])
 
     def loss(self, variables, mode='train'):
         loss = 0
@@ -194,11 +203,11 @@ class FitX(Problem):
     def __init__(self, args):
         super(FitX, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.w = self.create_variable('w', initializer=tf.random_uniform_initializer(), dims=[self.dims, self.dims])
+            self.w = self.create_variable('w', initializer=get_default_init(args), dims=[self.dims, self.dims])
 
         with tf.variable_scope(self.constant_scope):
-            self.x = self.create_variable('x', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[self.dims, 1], constant=True)
-            self.y = self.create_variable('y', initializer=tf.random_uniform_initializer(minval=args['minval'], maxval=args['maxval']), dims=[self.dims, 1], constant=True)
+            self.x = self.create_variable('x', initializer=get_default_init(args), dims=[self.dims, 1], constant=True)
+            self.y = self.create_variable('y', initializer=get_default_init(args), dims=[self.dims, 1], constant=True)
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(tf.subtract(tf.matmul(variables[0], self.x), self.y)))
@@ -211,8 +220,8 @@ class TwoVars(Problem):
     def __init__(self, args):
         super(TwoVars, self).__init__(args=args)
         with tf.variable_scope(self.variable_scope):
-            self.x = self.create_variable('x', initializer=tf.random_normal_initializer(), dims=[1, self.dims])
-            self.y = self.create_variable('y', initializer=tf.random_normal_initializer())
+            self.x = self.create_variable('x', initializer=get_default_init(args), dims=[1, self.dims])
+            self.y = self.create_variable('y', initializer=get_default_init(args))
 
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.matmul(tf.square(variables[0], name='x_square'), tf.square(variables[1], name='y_square'), name='matmul'))
