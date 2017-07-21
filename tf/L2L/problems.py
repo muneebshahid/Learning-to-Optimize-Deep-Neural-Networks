@@ -41,18 +41,21 @@ def create_batches_all(train=True):
         # batches.append(Mnist({}))
     else:
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant([100, 500, 600, 1000])}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant_initializer([100, 500, 600, 1000])}))
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'init': tf.constant([-100, -500, -600, -1000])}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_1_', 'dims': 4, 'init': tf.constant_initializer([-100, -500, -600, -1000])}))
         batches.append(
-            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'init': tf.constant([-0.5, -.36, 0, .4])}))
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_2_', 'dims': 4, 'init': tf.constant_initializer([-0.5, -.36, 0, .4])}))
+
+        batches.append(
+            ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_3_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
 
         # batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_0_', 'dims': 5, 'minval': -10.0, 'maxval': 10.0}))
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([-3]), tf.constant([3.0])]}))
+        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant_initializer([-3]), tf.constant_initializer([3.0])]}))
         batches.append(
-            Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([0]), tf.constant([0.0])]}))
+            Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'init': [tf.constant_initializer([0]), tf.constant_initializer([0.0])]}))
         batches.append(
-            Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant([10]), tf.constant([-10])]}))
+            Rosenbrock({'prefix': Rosenbrock.__name__ + '_2_', 'init': [tf.constant_initializer([10]), tf.constant_initializer([-10])]}))
         # batches.append(Mnist({}))
     return batches
 
