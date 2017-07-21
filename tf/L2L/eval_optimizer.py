@@ -6,12 +6,18 @@ import meta_optimizers
 import util
 from preprocess import Preprocess
 
+
+def write_to_file(f_name, list_var):
+    with open(f_name, 'a') as log_file:
+        for variable in list_var:
+            log_file.write(str(variable) + ' ')
+        log_file.write('\n')
+results_dir = 'tf_summary/'
+model_id = '1000_FINAL'
+
 l2l = tf.Graph()
 with l2l.as_default():
     preprocess = [Preprocess.log_sign, {'k': 10}]
-
-
-    model_id = '1000_FINAL'
 
     #########################
     epochs = 100
@@ -24,7 +30,6 @@ with l2l.as_default():
     layer_width = 50
     momentum = False
     #########################
-
     num_unrolls_per_epoch = 1
     io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
     problem_batches = problems.create_batches_all(train=False)
@@ -50,17 +55,17 @@ with l2l.as_default():
                     # tf.summary.histogram('variable_' + str(j), variable)
                     tf.summary.histogram('variable_history_scl_' + str(j), variable_history)
         all_summ = tf.summary.merge_all()
-        writer = tf.summary.FileWriter('tf_summary/')
+        writer = tf.summary.FileWriter(results_dir)
         writer.add_graph(sess.graph)
         l2l.finalize()
         print('---- Starting Evaluation ----')
         optim.load(io_path)
         print('Optimizer loaded.')
-        total_itr = 1000
+        total_itr = 10000
         for i in range(total_itr):
             print(str(i) + '/' + str(total_itr))
             _, curr_loss, summaries = sess.run([optim.ops_updates, l, all_summ])
+            write_to_file(results_dir + 'loss', curr_loss)
             print(curr_loss)
-            writer.add_summary(summaries, i)
-
-
+            if (i + 10) % 10 == 0:
+                writer.add_summary(summaries, i)
