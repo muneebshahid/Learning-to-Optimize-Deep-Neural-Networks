@@ -1,11 +1,11 @@
 import tensorflow as tf
 import numpy as np
-from optimizers import XHistorySign, XSign
+from optimizers import *
 from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti, DifferentPowers
 tf.set_random_seed(0)
 prob = Rosenbrock(args={'meta': False, 'minval':-10, 'maxval':10, 'dims': 2})
 
-optim = XHistorySign(prob, {'limit': 5, 'beta': 0.8})
+optim = XHistorySign(prob, args={'limit': 5, 'beta': 0.8})
 
 optim.build()
 
@@ -13,13 +13,13 @@ iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
 
 optim.set_session(iis)
-optim.init_with_session()
+optim.run_init()
 
 p = optim.problem.variables
 
 hist = optim.variable_history
 
-gs = optim.grad_sign_history
+gs = optim.grad_history
 
 x_n = optim.ops_step['x_next']
 

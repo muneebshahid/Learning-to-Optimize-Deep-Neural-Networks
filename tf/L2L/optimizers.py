@@ -5,6 +5,7 @@ from tensorflow.python.util import nest
 import pickle
 from preprocess import Preprocess
 from timeit import default_timer as timer
+import numpy as np
 
 class Optimizer():
 
@@ -41,11 +42,20 @@ class Optimizer():
     def build(self):
         pass
 
-class XHistorySign(Optimizer):
 
-    limit = None
+class XHistoryGradNorm(Optimizer):
+
+
+    variable_history = None
+    grad_history = None
+    history_ptr = None
+    update_window = None
+    guide_optimizer = None
+    guide_step = None
+    ops_init = None
+
     def __init__(self, problem, args):
-        super(XHistorySign, self).__init__(problem, args)
+        super(XHistoryGradNorm, self).__init__(problem, args)
         self.limit = args['limit']
         with tf.name_scope('optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
@@ -54,29 +64,55 @@ class XHistorySign(Optimizer):
                                                             var_list=self.problem.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
-            self.grad_sign_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
-                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
-            for i, variable in enumerate(self.variable_history):
-                tf.summary.histogram('variable_history_' + str(i), variable)
+            self.grad_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
+                                 for i, shape in enumerate(self.problem.variables_flattened_shape)]
 
-    def init_with_session(self, args=None):
+    def run_init(self, args=None):
         with tf.name_scope('mlp_x_init_with_session'):
             for col in range(self.global_args['limit']):
-                for variable_ptr, (variable, gradient) in enumerate(zip(self.problem.variables_flat, self.problem.get_gradients())):
-                    update_ops = self.update_history_ops(variable_ptr, (variable, tf.sign(gradient)))
-                    self.session.run(update_ops)
+                self.session.run(self.ops_init)
                 if col < self.global_args['limit'] - 1:
                     self.session.run(self.guide_step)
-                    self.session.run(tf.assign_add(self.history_ptr, 1))
-            self.session.run(tf.assign(self.history_ptr, 0))
 
-    def step(self):
+    @staticmethod
+    def normalize_values(history_tensor, switch=0):
+        with tf.name_scope('mlp_x_normalize_variable_history'):
+            if switch == 0:
+                norm = tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True)
+                ones = tf.ones(tf.shape(norm))
+                divisor = tf.where(tf.equal(norm, 0.0), ones, norm)
+                normalized_values = tf.divide(history_tensor, divisor)
+            else:
+                max_values = tf.reduce_max(history_tensor, 1)
+                min_values = tf.reduce_min(history_tensor, 1)
+                max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
+                min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+                diff = max_values - min_values
+                normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+            return normalized_values
+
+    def sort_input(self, args):
+        with tf.name_scope('mlp_x_sort_input'):
+            inputs = args['inputs']
+            history_ptr = args['history_ptr']
+            read_ptr = history_ptr + 1
+            start = tf.slice(inputs, [0, 0], [-1, read_ptr], name='start')
+            end = tf.slice(inputs, [0, read_ptr], [-1, self.limit - read_ptr], name='start')
+            rev_start = tf.reverse(start, [1])
+            rev_end = tf.reverse(end, [1])
+            return tf.concat([rev_start, rev_end], 1, name='sorted_input')
+
+    def step(self, args=None):
         x_next = list()
         deltas_list = []
-        for i, (variable, variable_history, variable_grad_sign_history) in enumerate(zip(self.problem.variables,
-                                                                                         self.variable_history,
-                                                                                         self.grad_sign_history)):
-            deltas = tf.reduce_mean(variable_grad_sign_history, 1)
+        problem_variables = args['x_next']
+        variables_history = args['variable_history']
+        grads_history = args['grad_history']
+        for i, (variable, variable_history, variable_grad_history) in enumerate(zip(problem_variables,
+                                                                                         variables_history,
+                                                                                         grads_history)):
+            normalized_grad_history = XHistoryGradNorm.normalize_values(variable_grad_history)
+            deltas = tf.reduce_mean(normalized_grad_history, 1)
             deltas = tf.expand_dims(deltas, 1)
             deltas_list.append(deltas)
             max_values = tf.expand_dims(tf.reduce_max(variable_history, 1), 1)
@@ -91,34 +127,52 @@ class XHistorySign(Optimizer):
             x_next.append(new_points)
         return {'x_next': x_next, 'deltas': deltas_list}
 
-    def update_history_ops(self, variable_ptr, inputs):
-        variable, grad_sign = inputs
+    def update_history_ops(self, batch_variables, batch_gradients_sign, batch_variables_history, batch_grad_sign_history, history_ptr):
         history_ops = []
-        shape = variable.shape[0].value
-        indices = [[i, self.history_ptr] for i in range(shape)]
-        history_ops.append(tf.scatter_nd_update(self.variable_history[variable_ptr], indices, tf.reshape(variable, [shape])))
-        history_ops.append(tf.scatter_nd_update(self.grad_sign_history[variable_ptr], indices, tf.reshape(grad_sign, [shape])))
+        shape = batch_variables.shape[0].value
+        indices = [[i, history_ptr] for i in range(shape)]
+        history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
+        history_ops.append(tf.scatter_nd_update(batch_grad_sign_history, indices, tf.reshape(batch_gradients_sign, [shape])))
         return history_ops
 
-    def updates(self, args):
-        update_list = [tf.assign(variable, updated_var) for variable, updated_var in
-                       zip(self.problem.variables, args['x_next'])]
-        flat_gradients = self.problem.get_gradients(args['x_next'])
-        flat_variables = [self.problem.flatten_input(i, variable) for i, variable in enumerate(args['x_next'])]
-        for i, (variable, grads) in enumerate(zip(flat_variables, flat_gradients)):
-            new_input = [variable, tf.sign(grads)]
-            update_list.extend(self.update_history_ops(i, new_input))
-        with tf.control_dependencies(update_list):
-            update_itr = tf.cond(self.history_ptr < self.global_args['limit'] - 1,
-                                 lambda: tf.assign_add(self.history_ptr, 1),
-                                 lambda: tf.assign(self.history_ptr, 0))
-        return update_list + [update_itr]
+    def updates(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_updates'):
+            x_next = args['x_next']
+            variable_history = args['variable_history']
+            grad_history = args['grad_history']
+            history_ptr = args['history_ptr']
+            update_list = [tf.cond(history_ptr < self.global_args['limit'] - 1,
+                                lambda: tf.assign_add(history_ptr, 1),
+                                lambda: tf.assign(history_ptr, 0))]
+            with tf.control_dependencies(update_list):
+                if not args['init_ops']:
+                    update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
+                                        zip(self.problem.variables, args['x_next'])])
+                flat_gradients = self.problem.get_gradients(x_next)
+                flat_variables = [self.problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
+                for variable, grads, batch_variable_history, batch_grad_history in zip(flat_variables, flat_gradients, variable_history, grad_history):
+                    update_list.extend(self.update_history_ops(variable, grads, batch_variable_history, batch_grad_history, history_ptr))
+            return update_list
 
     def build(self):
-        self.ops_step = self.step()
-        self.ops_updates = self.updates({'x_next': self.ops_step['x_next']})
-        self.ops_loss = self.loss(self.ops_step['x_next'])
+        args = {'x_next': [variable.initialized_value() for variable in self.problem.variables],
+                'variable_history': self.variable_history, 'grad_history': self.grad_history,
+                'history_ptr': self.history_ptr, 'init_ops': True}
+        self.ops_init = self.updates(args)
+        step = self.step(args)
+        args['x_next'] = step['x_next']
+        args['init_ops'] = False
+        updates = self.updates(args)
+        self.ops_step = step
+        self.ops_updates = updates
+        self.ops_loss = self.problem.loss(step['x_next'])
 
+class XHistorySign(XHistoryGradNorm):
+
+    def step(self, args=None):
+        args_xhistory_sign = dict(args)
+        args_xhistory_sign['grad_history'] = [tf.sign(grad) for grad in args_xhistory_sign['grad_history']]
+        return super(XHistorySign, self).step(args_xhistory_sign)
 
 
 class XSign(Optimizer):
