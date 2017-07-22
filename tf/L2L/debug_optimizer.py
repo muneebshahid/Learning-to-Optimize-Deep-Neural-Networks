@@ -3,40 +3,30 @@ import numpy as np
 from optimizers import *
 from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti, DifferentPowers
 tf.set_random_seed(0)
-prob = Rosenbrock(args={'meta': False, 'minval':-10, 'maxval':10, 'dims': 2})
+prob = Rosenbrock(args={'minval':-10, 'maxval':10, 'dims': 2})
 
-optim = XHistorySign(prob, args={'limit': 5, 'beta': 0.8})
+optim_pre = tf.train.AdamOptimizer(.01)
+optim_pre_loss = prob.loss(prob.variables)
+optim_pre_step = optim_pre.minimize(optim_pre_loss, var_list=prob.variables)
 
-optim.build()
 
+optim_self = XHistorySign(prob, args={'limit': 5, 'beta': 0.8})
+optim_self.build()
 iis = tf.InteractiveSession()
 iis.run(tf.global_variables_initializer())
+optim_self.set_session(iis)
+optim_self.run_init()
+p = optim_self.problem.variables
+hist = optim_self.variable_history
+gs = optim_self.grad_history
+x_n = optim_self.ops_step['x_next']
+d_n = optim_self.ops_step['deltas']
 
-optim.set_session(iis)
-optim.run_init()
-
-p = optim.problem.variables
-
-hist = optim.variable_history
-
-gs = optim.grad_history
-
-x_n = optim.ops_step['x_next']
-
-d_n = optim.ops_step['deltas']
-
-def itr(itera, x_s=True, g_s=False):
-    updates = optim.ops_updates
-    step = optim.ops_step
-    loss = optim.ops_loss
-    # if g_s:
-    updates_adam = []
-    step_adam = optim.guide_step
-    loss_adam = optim.loss()
+def itr(itera, x_s=False, g_s=False):
     for i in range(itera):
         if x_s:
-            s, u, l = iis.run([updates, step, loss])
+            s, u, l = iis.run([optim_self.ops_updates, optim_self.ops_step, optim_self.ops_loss])
             print('Xloss', np.log10(l))
         if g_s:
-            s, u, l = iis.run([updates_adam, step_adam, loss_adam])
+            s, l = iis.run([optim_pre_step, optim_pre_loss])
             print('Aloss', np.log10(l))
