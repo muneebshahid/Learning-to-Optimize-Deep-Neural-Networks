@@ -36,7 +36,7 @@ def itr(itera, x_s=True, g_s=False):
     for i in range(itera):
         if x_s:
             s, u, l = iis.run([updates, step, loss])
-            print('Xloss', np.log(l))
+            print('Xloss', np.log10(l))
         if g_s:
             s, u, l = iis.run([updates_adam, step_adam, loss_adam])
-            print('Aloss', np.log(l))
+            print('Aloss', np.log10(l))
