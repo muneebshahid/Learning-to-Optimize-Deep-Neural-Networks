@@ -294,6 +294,7 @@ class Mnist(Problem):
 
 
     def __init__(self, args):
+        args['var_count'] = 4
         super(Mnist, self).__init__(args=args)
         self.conv = False if 'conv' not in args else args['conv']
 
