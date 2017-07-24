@@ -3,8 +3,9 @@ import numpy as np
 from optimizers import *
 from problems import ElementwiseSquare, FitX, Mnist, Rosenbrock, RosenbrockMulti, DifferentPowers
 tf.set_random_seed(0)
-prob = Rosenbrock(args={'minval':-10, 'maxval':10, 'dims': 2})
-
+# prob = ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_3_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0})
+prob = Rosenbrock({'prefix': Rosenbrock.__name__ + '_0_', 'init': [tf.constant_initializer([-3]), tf.constant_initializer([3.0])]})
+# prob = Mnist({'minval': 0, 'maxval':0})
 optim_pre = tf.train.AdamOptimizer(.01)
 optim_pre_loss = prob.loss(prob.variables)
 optim_pre_step = optim_pre.minimize(optim_pre_loss, var_list=prob.variables)
@@ -28,7 +29,10 @@ def itr(itera, x_s=False, g_s=False, print_itr=1):
 
     def print_loss(name, i, loss):
         if (i + 1) % print_itr == 0:
-            print(name + ' :', np.log10(loss / print_itr))
+            log_loss = np.log10(loss / print_itr)
+            print(name + ' ' + str(i) + ' :', log_loss)
+            with open('loss_file_upd', 'a') as log_file:
+                log_file.write("{:.5f}".format(float(log_loss))  + "\n")
             return 0
         return loss
 
@@ -42,4 +46,4 @@ def itr(itera, x_s=False, g_s=False, print_itr=1):
             loss += l
             loss = print_loss('Aloss', i, loss)
 
-itr(1000, x_s=True, print_itr=100)
+itr(20000, x_s=True, print_itr=50)
