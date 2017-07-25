@@ -32,7 +32,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches = problems.create_batches_all()
-        optim = meta_optimizers.MlpHistoryGradNormEXP(problem_batches, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpHistoryGradSign(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,

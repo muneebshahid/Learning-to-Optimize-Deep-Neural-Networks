@@ -466,23 +466,6 @@ class MlpXGradNormHistory(MlpSimple):
                     self.session.run(ops_init)
                     if col < self.global_args['limit'] - 1:
                         self.session.run(guide_step)
-            # for problem, problem_gradients, guide_step, problem_variable_history, problem_grad_sign_history, history_ptr in zip(self.problems,
-            #                                                                                                  self.ops_gradients,
-            #                                                                                                  self.guide_step,
-            #                                                                                                  self.variable_history,
-            #                                                                                                  self.grad_history,
-            #                                                                                                  self.history_ptr):
-            #     for col in range(self.global_args['limit']):
-            #         for batch_variables, batch_gradients, batch_variables_history, batch_grad_sign_history in zip(problem.variables_flat,
-            #                                                                                                       problem_gradients,
-            #                                                                                                       problem_variable_history,
-            #                                                                                                       problem_grad_sign_history):
-            #             update_ops = self.update_history_ops(batch_variables, batch_gradients, batch_variables_history, batch_grad_sign_history, history_ptr)
-            #             self.session.run(update_ops)
-            #         if col < self.global_args['limit'] - 1:
-            #             self.session.run(guide_step)
-            #             self.session.run(tf.assign_add(history_ptr, 1))
-            #     self.session.run(tf.assign(history_ptr, 0))
 
     def run_reset(self, optimizer=False):
         reset_ops = self.ops_reset if optimizer else self.ops_reset[:-1]
@@ -531,8 +514,6 @@ class MlpXGradNormHistory(MlpSimple):
             activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
             activations = tf.nn.softmax(activations, 1)
             output = tf.matmul(activations, self.step_dist)
-            # output = tf.tanh(activations)
-            # output = Preprocess.clamp(activations, {'min':-1, 'max':1})
             return [output]
 
     def step(self, args=None):
@@ -566,10 +547,10 @@ class MlpXGradNormHistory(MlpSimple):
                 # noisey_mean = mean * (1 + noise)
 
                 # for same effect use .001 as multiplier for mean.
+                # noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
 
                 mean = tf.multiply(deltas, diff)
-                noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
-                new_points = tf.add(ref, noisey_mean, 'new_points')
+                new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas': deltas_list}
@@ -670,6 +651,15 @@ class MlpHistoryGradNorm(MlpXGradNormHistory):
             activations = tf.nn.softmax(activations, 1)
             output = tf.matmul(activations, self.step_dist)
             return [output]
+
+
+class MlpHistoryGradSign(MlpHistoryGradNorm):
+
+    def network(self, args=None):
+        _, variable_grad_history = args['inputs']
+        mod_args = dict(args)
+        mod_args['inputs'][1] = tf.sign(variable_grad_history)
+        return super(MlpHistoryGradSign, self).network(args)
 
 
 
