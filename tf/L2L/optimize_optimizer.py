@@ -69,10 +69,10 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 800
+        epochs = 600
         epoch_interval = 100
-        eval_interval = 200
-        validation_epochs = 50
+        eval_interval = 100
+        validation_epochs = 25
         test_epochs = 500
         #########################
         learning_rate = 0.0001
