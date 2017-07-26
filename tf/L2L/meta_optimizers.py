@@ -42,7 +42,7 @@ class Meta_Optimizer():
                                                                                       if 'learning_rate' in self.global_args
                                                                                       else .0001,
                                                                                       dtype=tf.float32), trainable=False)
-        self.meta_optimizer_optimizer = tf.train.AdamOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
+        self.meta_optimizer_optimizer = tf.train.RMSPropOptimizer(self.global_args['meta_learning_rate'] if 'meta_learning_rate' in
                                                                                                          self.global_args else .01, name='meta_optimizer_optimizer')
         self.optimizer_variables = []
 
@@ -628,7 +628,6 @@ class MlpXGradNormHistory(MlpSimple):
             self.ops_step.append(step)
             self.ops_updates.append(updates)
             loss = tf.squeeze(loss_next - loss_curr)
-            # loss = tf.cond(tf.logical_or(tf.is_nan(loss), tf.is_inf(loss)), lambda: 0.0, lambda: loss)
             self.ops_loss.append(loss)
             self.ops_meta_step.append(self.minimize(loss))
             self.ops_reset.append(reset)
