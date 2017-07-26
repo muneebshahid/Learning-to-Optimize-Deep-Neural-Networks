@@ -119,7 +119,7 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss_value = optim.run({'num_steps': 50,
+            time, loss_value = optim.run({'num_steps': 100,
                                           'ops_loss': True,
                                           'ops_reset': True,
                                           'ops_meta_step': True,
