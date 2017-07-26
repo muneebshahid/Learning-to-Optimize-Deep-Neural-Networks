@@ -30,23 +30,22 @@ def create_batches_all(train=True):
 
     if train:
         # ElementSquare
-        original_mirror(ElementwiseSquare, '0', 4, -1000, 1000)
-        original_mirror(ElementwiseSquare, '1', 4, -0.5, 0.5)
-        original_mirror(ElementwiseSquare, '2', 4, -10, 10)
-
+        batches.append(
+            ElementwiseSquare(
+                {'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
         # #
         # # Rosenbrock
-        original_mirror(Rosenbrock, '0', None, -3.0, 3.0)
-        batches.append(Rosenbrock({'prefix': Rosenbrock.__name__ + '_1_', 'minval': 0, 'maxval': 0}))
-        for i in range(4):
-            original_mirror(Rosenbrock, str(i + 2), None, -10, 10)
+        original_mirror(Rosenbrock, '0', None, -10, 10)
+        batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
+        original_mirror(Booth, '0', 2, -10.0, 10.0)
+        # batches.append(
+        #     Booth({'prefix': Booth.__name__ + '_0_', 'dims': 2, 'minval': -10.0, 'maxval': 10.0}))
         #
         # # DifferentPower
         for i in range(4):
             batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
-        # #
-        for i in range(4):
-            batches.append(FitX({'prefix': FitX.__name__ + '_' + str(i) + '_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+
+        batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
         # batches.append(Mnist({}))
     else:
@@ -168,6 +167,20 @@ class ElementwiseSquare(Problem):
     def loss(self, variables, mode='train'):
         return tf.reduce_sum(tf.square(variables[0], name='x_squared'))
 
+
+class Booth(Problem):
+
+    def __init__(self, args):
+        args['var_count'] = 2
+        super(Booth, self).__init__(args=args)
+        with tf.variable_scope(self.variable_scope):
+            self.create_variable('x_0', initializer=self.init[0], dims=[1, 1])
+            self.create_variable('x_1', initializer=self.init[1], dims=[1, 1])
+
+    def loss(self, variables, mode='train'):
+        x_1, x_2 = variables[0], variables[1]
+        return tf.square(x_1 + 2 * x_2 - 7) + tf.square(2 * x_1 + x_2 - 5)
+
 class Rosenbrock(Problem):
     def __init__(self, args):
         args['var_count'] = 2
@@ -185,6 +198,7 @@ class RosenbrockMulti(Problem):
     def __init__(self, args):
         if 'dims' not in args:
             args['dims'] = 2
+        args['var_count'] = args['dims']
         super(RosenbrockMulti, self).__init__(args)
         for i, dim in enumerate(range(self.dims)):
             self.create_variable('var_' + str(i), initializer=self.init[0], dims=[1, 1])
