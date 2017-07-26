@@ -32,7 +32,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches = problems.create_batches_all()
-        optim = meta_optimizers.MlpHistoryGradSign(problem_batches, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpHistoryGradNorm(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -61,7 +61,7 @@ else:
     loss = problem.loss(problem.variables)
     meta_step = optim.minimize(loss)
     updates = []
-
+# check_op = tf.add_check_numerics_ops()
 norm_problem_variables = [tf.norm(variable) for problem in optim.problems for variable in problem.variables]
 # input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 # input_grads_norm = [tf.norm(grad) for grad in input_grads]
@@ -100,6 +100,9 @@ def write_to_file(f_name, all_variables):
             log_file.write(str(variable) + ' ')
         log_file.write('\n')
 
+check_nan_prob = tf.is_nan(norm_problem_variables)
+check_nan_optim = tf.is_nan(norm_optim_variables)
+
 def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
     loss_final = np.zeros(len(loss))
@@ -116,6 +119,12 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
                                                                optim.ops_step,
                                                                optim.grad_history,
                                                                optim_grad_norm])
+        if True in iis.run(check_nan_prob):
+            print('NAN found prob after, exit')
+            break
+        if True in iis.run(check_nan_optim):
+            print('NAN found optim after, exit')
+            break
         if update_summaries:
             writer.add_summary(summaries, i)
         end = timer()
@@ -146,4 +155,3 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
 #
-# itr(40, 1)
