@@ -694,7 +694,7 @@ class MlpHistoryGradSign(MlpHistoryGradNormEXP):
         mod_args['inputs'][1] = tf.sign(variable_grad_history)
         return super(MlpHistoryGradSign, self).network(args)
 
-class MlpHistoryGradNormNewStep(MlpXGradNormHistory):
+class MlpHistoryGradNormMinStep(MlpXGradNormHistory):
 
     sign_dist = None
     lr_dist = None
@@ -709,7 +709,7 @@ class MlpHistoryGradNormNewStep(MlpXGradNormHistory):
         args['step_dist_dims'] = 10
         args['step_dist_minval'] = 0
         args['step_dist_maxval'] = 1.0
-        super(MlpHistoryGradNormNewStep, self).__init__(problems, path, args)
+        super(MlpHistoryGradNormMinStep, self).__init__(problems, path, args)
 
 
     def network(self, args=None):
