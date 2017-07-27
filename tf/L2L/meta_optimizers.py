@@ -432,19 +432,23 @@ class MlpXGradNormHistory(MlpSimple):
     guide_optimizer = None
     guide_step = None
     li, lr = None, None
-
+    sign_dist = None
     def __init__(self, problems, path, args):
         self.limit = args['limit']
-        output_dims = 21 if 'output_dim' not in args else args['output_dim']
+        output_dims = 12 if 'output_dim' not in args else args['output_dim']
         input_dims = self.limit * 2 if 'input_dim' not in args else args['input_dim']
         args['dims'] = (input_dims, output_dims)
-        step_dist_minval = -1.0 if 'step_dist_minval' not in args else args['step_dist_minval']
+        step_dist_minval = 0 if 'step_dist_minval' not in args else args['step_dist_minval']
         step_dist_maxval = 1.0 if 'step_dist_maxval' not in args else args['step_dist_maxval']
-        step_dist_dims = output_dims if 'step_dist_dims' not in args else args['step_dist_dims']
+        step_dist_dims = 10 if 'step_dist_dims' not in args else args['step_dist_dims']
+
         super(MlpXGradNormHistory, self).__init__(problems, path, args)
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.step_dist = tf.Variable(tf.constant(np.linspace(step_dist_minval, step_dist_maxval, step_dist_dims), shape=[step_dist_dims, 1], dtype=tf.float32),
                                          name='step_dist')
+            self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
+                                         name='sign_dist')
+
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
             self.guide_step, self.variable_history, self.grad_history, self.history_ptr= [], [], [], []
@@ -506,15 +510,25 @@ class MlpXGradNormHistory(MlpSimple):
             variable_history, variable_grad_history = args['inputs']
             normalized_variable_history = self.normalize_values(variable_history)
             normalized_grad_history = self.normalize_values(variable_grad_history)
+
             final_var_history = self.sort_input({'inputs': normalized_variable_history,
                                                  'history_ptr': args['history_ptr']})
             final_var_grad_history = self.sort_input({'inputs': normalized_grad_history,
                                                       'history_ptr': args['history_ptr']})
+
             final_input = tf.concat([final_var_history, final_var_grad_history], 1, name='final_input')
             activations = final_input
             activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
-            activations = tf.nn.softmax(activations, 1)
-            output = tf.matmul(activations, self.step_dist)
+
+            magnitude = tf.slice(activations, [0, 0], [-1, 10])
+            magnitude = tf.nn.softmax(magnitude, 1)
+            magnitude = tf.matmul(magnitude, self.step_dist)
+
+            sign = tf.slice(activations, [0, 10], [-1, -1])
+            sign = tf.nn.softmax(sign, 1)
+            sign = tf.matmul(sign, self.sign_dist)
+
+            output = magnitude * sign
             return [output]
 
     def step(self, args=None):
@@ -649,31 +663,6 @@ class MlpHistoryGradNorm(MlpXGradNormHistory):
             final_input = final_var_grad_history
             activations = final_input
             activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
-            activations = tf.nn.softmax(activations, 1)
-            output = tf.matmul(activations, self.step_dist)
-            return [output]
-
-class MlpHistoryGradNormEXP(MlpXGradNormHistory):
-    sign_dist = None
-    def __init__(self, problems, path, args):
-        self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
-                                         name='sign_dist')
-        args['input_dim'] = args['limit']
-        args['output_dim'] = 12
-        args['step_dist_dims'] = 10
-        args['step_dist_minval'] = 0
-        args['step_dist_maxval'] = 1.0
-        super(MlpHistoryGradNormEXP, self).__init__(problems, path, args)
-
-    def network(self, args=None):
-        with tf.name_scope('mlp_x_optimizer_network'):
-            _, variable_grad_history = args['inputs']
-            normalized_grad_history = self.normalize_values(variable_grad_history)
-            final_var_grad_history = self.sort_input({'inputs': normalized_grad_history,
-                                                      'history_ptr': args['history_ptr']})
-            final_input = final_var_grad_history
-            activations = final_input
-            activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
 
             magnitude = tf.slice(activations, [0, 0], [-1, 10])
             magnitude = tf.nn.softmax(magnitude, 1)
@@ -686,7 +675,7 @@ class MlpHistoryGradNormEXP(MlpXGradNormHistory):
             output = magnitude * sign
             return [output]
 
-class MlpHistoryGradSign(MlpHistoryGradNormEXP):
+class MlpHistoryGradSign(MlpHistoryGradNorm):
 
     def network(self, args=None):
         _, variable_grad_history = args['inputs']

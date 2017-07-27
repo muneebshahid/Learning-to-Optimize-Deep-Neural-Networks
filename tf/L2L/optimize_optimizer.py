@@ -69,9 +69,9 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 600
+        epochs = 1000
         epoch_interval = 100
-        eval_interval = 100
+        eval_interval = 200
         validation_epochs = 25
         test_epochs = 500
         #########################
@@ -85,7 +85,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.MlpHistoryGradNorm(problem_batches, path=io_path, args={'second_derivatives': second_derivatives,
+        optim = meta_optimizers.MlpXGradNormHistory(problem_batches, path=io_path, args={'second_derivatives': second_derivatives,
                                                                       'hidden_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.0001,
                                                                       'momentum': momentum, 'layer_width': layer_width,
