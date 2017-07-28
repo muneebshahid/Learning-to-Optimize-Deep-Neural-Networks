@@ -290,11 +290,12 @@ class MlpSimple(Meta_Optimizer):
                 b = tf.get_variable('b_' + name, shape=[1, dims[-1]], initializer=initializers[1])
                 linear = tf.add(tf.matmul(inputs, w), b, name='activations_' + 'layer_' + str(name))
                 layer_output = linear if activation is None else activation(linear)
-                tf.summary.histogram('weights', w)
-                tf.summary.histogram('bias', b)
-                tf.summary.histogram('activation', layer_output)
+
                 if not reuse:
                     self.optimizer_variables.extend([w, b])
+                    tf.summary.histogram('weights', w)
+                    tf.summary.histogram('bias', b)
+                    tf.summary.histogram('activation', layer_output)
         return layer_output
 
     def __init__(self, problems, path, args):
@@ -691,10 +692,10 @@ class MlpHistoryGradNormMinStep(MlpXGradNormHistory):
     def __init__(self, problems, path, args):
         self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
                                      name='sign_dist')
-        self.lr_dist = tf.Variable(tf.constant(np.linspace(0, .000001, 10), shape=[10, 1], dtype=tf.float32),
+        self.lr_dist = tf.Variable(tf.constant([.1, .05, .001, .0005, 0], shape=[5, 1], dtype=tf.float32),
                                    name='grad_dist')
         args['input_dim'] = args['limit']
-        args['output_dim'] = 22
+        args['output_dim'] = 19
         args['step_dist_dims'] = 10
         args['step_dist_minval'] = 0
         args['step_dist_maxval'] = 1.0
@@ -711,23 +712,28 @@ class MlpHistoryGradNormMinStep(MlpXGradNormHistory):
             activations = final_input
             activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
 
-            lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10])
+            lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
             lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
             lr_x_step_magnitude = tf.matmul(lr_x_step_magnitude, self.step_dist)
 
-            lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2])
+            lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2], 'x_step_sign')
             lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
             lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
             delta_x_step = lr_x_step_magnitude * lr_x_step_sign
 
-            lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 10])
+            lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
             lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
             lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
 
-            lr_grad_step_sign = tf.slice(activations, [0, 22], [-1, 2])
+            lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
             lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
             lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
             delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
+
+            # rows = tf.shape(lr_grad_step_sign)[0]
+            # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
+            # flags = tf.equal(max_values, lr_grad_step_sign)
+            # max_sign = tf.where(flags, tf.ones([rows, 2]), tf.zeros([rows, 2]))
 
             return [delta_x_step, delta_lr]
 
@@ -745,20 +751,14 @@ class MlpHistoryGradNormMinStep(MlpXGradNormHistory):
                                                                                              problem_grad_history):
                 deltas_x, deltas_lr = self.network({'inputs': [batch_variable_history, batch_variable_grad_history], 'history_ptr': history_ptr})
                 deltas_list.append(deltas_x)
-                avg_gradients = tf.reduce_mean(batch_variable_grad_history, 1)
                 max_values = tf.reduce_max(batch_variable_history, 1)
                 min_values = tf.reduce_min(batch_variable_history, 1)
                 max_values = tf.expand_dims(max_values, 1)
                 min_values = tf.expand_dims(min_values, 1)
                 diff = max_values - min_values
                 ref = (max_values + min_values) / 2.0
-                # deterministic
-                # ref_points = (max_values + min_values) / 2.0
-                # new_points = tf.add(variable_flat, tf.multiply(deltas, diff), 'new_points')
-                # noise = tf.random_normal([mean.shape[0].value, 1], 0, .0001)
-                # noisey_mean = mean * (1 + noise)
 
-                step_mean = tf.multiply(deltas_x, diff) + deltas_lr
+                step_mean = deltas_lr + tf.multiply(deltas_x, diff)
                 new_points = tf.add(ref, step_mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
