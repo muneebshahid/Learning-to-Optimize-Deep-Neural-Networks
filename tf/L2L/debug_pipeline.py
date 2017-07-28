@@ -32,7 +32,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches = problems.create_batches_all()
-        optim = meta_optimizers.MlpHistoryGradNorm(problem_batches, path=io_path, args={'second_derivatives': False,
+        optim = meta_optimizers.MlpHistoryGradNormMinStep(problem_batches, path=io_path, args={'second_derivatives': False,
                                                                               'num_layers': 1, 'learning_rate': learning_rate,
                                                                               'meta_learning_rate': meta_learning_rate,
                                                                               'layer_width': layer_width,
@@ -115,7 +115,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, l, summaries, run_step, hist, grad_norm = iis.run([meta_step, updates, loss, all_summ,
+        _, _, l, run_step, hist, grad_norm = iis.run([meta_step, updates, loss,
                                                                optim.ops_step,
                                                                optim.grad_history,
                                                                optim_grad_norm])
@@ -125,8 +125,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         if True in iis.run(check_nan_optim):
             print('NAN found optim after, exit')
             break
-        if update_summaries:
-            writer.add_summary(summaries, i)
+
         end = timer()
         total_time += (end - start)
         loss_final += np.array(l)
@@ -134,6 +133,9 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             variables = iis.run(tf.squeeze(optim.problems.variables_flat))
             write_to_file('variables_updates.txt', variables)
         if (i + 1) % print_interval == 0:
+            summaries = iis.run(all_summ)
+            if update_summaries:
+                writer.add_summary(summaries, i)
             print(i + 1)
             # print('problem: ', problem_index)
             print('-----------')
