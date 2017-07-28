@@ -38,8 +38,8 @@ def create_batches_all(train=True):
         original_mirror(Rosenbrock, '0', None, -10, 10)
         batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
         original_mirror(Booth, '0', 2, -10.0, 10.0)
-        # batches.append(
-        #     Booth({'prefix': Booth.__name__ + '_0_', 'dims': 2, 'minval': -10.0, 'maxval': 10.0}))
+        batches.append(
+            Booth({'prefix': Booth.__name__ + '_0_', 'dims': 2, 'minval': -10.0, 'maxval': 10.0}))
         #
         # # DifferentPower
         for i in range(4):
