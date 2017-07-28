@@ -47,7 +47,7 @@ def create_batches_all(train=True):
 
         batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
 
-        # batches.append(Mnist({}))
+        # batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant_initializer([100, 500, 600, 1000])}))
