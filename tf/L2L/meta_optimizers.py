@@ -57,7 +57,7 @@ class Meta_Optimizer():
 
     def is_availble(self, param, args=None):
         args = self.global_args if args is None else args
-        return param in args and args[param] is not None
+        return param in args and args[param] is not None and args['moving_avg']
 
     def get_preprocessed_gradients(self, problem, variables=None):
         return [self.preprocess_input(gradient) for gradient in problem.get_gradients(variables)]
@@ -428,22 +428,27 @@ class MlpXGradNormHistory(MlpSimple):
 
     variable_history = None
     grad_history = None
+    moving_avg = None
     history_ptr = None
     update_window = None
     guide_optimizer = None
     guide_step = None
     li, lr = None, None
     sign_dist = None
+    enable_moving_avg = False
+
     def __init__(self, problems, path, args):
         self.limit = args['limit']
         output_dims = 12 if 'output_dim' not in args else args['output_dim']
         input_dims = self.limit * 2 if 'input_dim' not in args else args['input_dim']
+        self.enable_moving_avg = self.is_availble('moving_avg', args)
+        input_dims += (1 if self.enable_moving_avg else 0)
         args['dims'] = (input_dims, output_dims)
         step_dist_minval = 0 if 'step_dist_minval' not in args else args['step_dist_minval']
         step_dist_maxval = 1.0 if 'step_dist_maxval' not in args else args['step_dist_maxval']
         step_dist_dims = 10 if 'step_dist_dims' not in args else args['step_dist_dims']
-
         super(MlpXGradNormHistory, self).__init__(problems, path, args)
+
         with tf.name_scope('mlp_x_optimizer_input_init'):
             self.step_dist = tf.Variable(tf.constant(np.linspace(step_dist_minval, step_dist_maxval, step_dist_dims), shape=[step_dist_dims, 1], dtype=tf.float32),
                                          name='step_dist')
@@ -452,7 +457,7 @@ class MlpXGradNormHistory(MlpSimple):
 
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
-            self.guide_step, self.variable_history, self.grad_history, self.history_ptr= [], [], [], []
+            self.guide_step, self.variable_history, self.grad_history, self.history_ptr, self.moving_avg = [], [], [], [], []
             for i, problem in enumerate(self.problems):
                 with tf.variable_scope('problem_' + str(i)):
                     self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables),
@@ -462,6 +467,12 @@ class MlpXGradNormHistory(MlpSimple):
                     self.grad_history.append([tf.get_variable('gradients_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                               for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.history_ptr.append(tf.Variable(4, 'history_ptr'))
+                    if self.enable_moving_avg:
+                        self.moving_avg.append([tf.get_variable('moving_avg' + str(i), initializer=tf.zeros_initializer,
+                                                                shape=[shape, 1], trainable=False)
+                                                for i, shape in enumerate(problem.variables_flattened_shape)])
+                    else:
+                        self.moving_avg.append([None for variable in problem.variables])
 
 
 
@@ -508,7 +519,7 @@ class MlpXGradNormHistory(MlpSimple):
 
     def network(self, args=None):
         with tf.name_scope('mlp_x_optimizer_network'):
-            variable_history, variable_grad_history = args['inputs']
+            variable_history, variable_grad_history, variable_moving_avg = args['inputs']
             normalized_variable_history = self.normalize_values(variable_history)
             normalized_grad_history = self.normalize_values(variable_grad_history)
 
@@ -516,6 +527,9 @@ class MlpXGradNormHistory(MlpSimple):
                                                  'history_ptr': args['history_ptr']})
             final_var_grad_history = self.sort_input({'inputs': normalized_grad_history,
                                                       'history_ptr': args['history_ptr']})
+            if variable_moving_avg is not None:
+                final_var_grad_history = tf.concat([final_var_grad_history, variable_moving_avg], 1,
+                                                   name='concat_moving_avg')
 
             final_input = tf.concat([final_var_history, final_var_grad_history], 1, name='final_input')
             activations = final_input
@@ -538,13 +552,16 @@ class MlpXGradNormHistory(MlpSimple):
             problem_variable_history = args['variable_history']
             problem_grad_history = args['grad_history']
             history_ptr = args['history_ptr']
+            problem_moving_avg = args['moving_avg']
             x_next = list()
             deltas_list = []
-            for variable, variable_flat, batch_variable_history, batch_variable_grad_history in zip(problem.variables,
-                                                                                             problem.variables_flat,
-                                                                                             problem_variable_history,
-                                                                                             problem_grad_history):
-                deltas = self.network({'inputs': [batch_variable_history, batch_variable_grad_history], 'history_ptr': history_ptr})[0]
+            for variable, variable_flat, batch_variable_history, batch_variable_grad_history, batch_moving_avg in zip(problem.variables,
+                                                                                                    problem.variables_flat,
+                                                                                                    problem_variable_history,
+                                                                                                    problem_grad_history,
+                                                                                                    problem_moving_avg):
+                deltas = self.network({'inputs': [batch_variable_history, batch_variable_grad_history, batch_moving_avg],
+                                       'history_ptr': history_ptr})[0]
                 deltas_list.append([deltas])
                 max_values = tf.reduce_max(batch_variable_history, 1)
                 min_values = tf.reduce_min(batch_variable_history, 1)
@@ -571,12 +588,20 @@ class MlpXGradNormHistory(MlpSimple):
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas': deltas_list}
 
-    def update_history_ops(self, batch_variables, batch_gradients_sign, batch_variables_history, batch_grad_sign_history, history_ptr):
+    def update_history_ops(self, batch_variables, batch_gradients, batch_variables_history, batch_grad_history, history_ptr, batch_moving_avg):
+        moving_avg_dep_ops = []
         history_ops = []
         shape = batch_variables.shape[0].value
         indices = [[i, history_ptr] for i in range(shape)]
-        history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
-        history_ops.append(tf.scatter_nd_update(batch_grad_sign_history, indices, tf.reshape(batch_gradients_sign, [shape])))
+
+        if batch_moving_avg is not None:
+            oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
+            oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
+            moving_avg_dep_ops.append(tf.assign(batch_moving_avg, batch_moving_avg * 0.9 + oldest_history_slice * 0.1))
+
+        with tf.control_dependencies(moving_avg_dep_ops):
+            history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
+            history_ops.append(tf.scatter_nd_update(batch_grad_history, indices, tf.reshape(batch_gradients, [shape])))
         return history_ops
 
     def updates(self, args=None):
@@ -585,6 +610,7 @@ class MlpXGradNormHistory(MlpSimple):
             problem = args['problem']
             problem_variables_history = args['variable_history']
             problem_grad_history = args['grad_history']
+            problem_moving_avg = args['moving_avg']
             history_ptr = args['history_ptr']
             update_list = [tf.cond(history_ptr < self.global_args['limit'] - 1,
                                 lambda: tf.assign_add(history_ptr, 1),
@@ -594,8 +620,13 @@ class MlpXGradNormHistory(MlpSimple):
                     update_list.extend(super(MlpXGradNormHistory, self).updates(args))
                 flat_gradients = problem.get_gradients(x_next)
                 flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
-                for variable, grads, batch_variable_history, batch_grad_history in zip(flat_variables, flat_gradients, problem_variables_history, problem_grad_history):
-                    update_list.extend(self.update_history_ops(variable, grads, batch_variable_history, batch_grad_history, history_ptr))
+                for variable, grads, batch_variable_history, batch_grad_history, batch_moving_avg in zip(flat_variables,
+                                                                                                         flat_gradients,
+                                                                                                         problem_variables_history,
+                                                                                                         problem_grad_history,
+                                                                                                         problem_moving_avg):
+                    update_list.extend(self.update_history_ops(variable, grads, batch_variable_history,
+                                                               batch_grad_history, history_ptr, batch_moving_avg))
             return update_list
 
     def reset_optimizer(self):
@@ -622,16 +653,16 @@ class MlpXGradNormHistory(MlpSimple):
         self.ops_final_loss = 0
         self.ops_reset = []
         self.ops_init = []
-        for problem, variable_history, grad_sign_history, history_ptr in zip(self.problems,
-                                                                             self.variable_history,
-                                                                             self.grad_history,
-                                                                             self.history_ptr):
+        for problem, variable_history, grad_sign_history, history_ptr, moving_avg in zip(self.problems,
+                                                                                         self.variable_history,
+                                                                                         self.grad_history,
+                                                                                         self.history_ptr,
+                                                                                         self.moving_avg):
             args = {'problem': problem, 'variable_history': variable_history,
                     'grad_history': grad_sign_history, 'history_ptr': history_ptr,
                     'x_next': [variable.initialized_value() for variable in problem.variables],
-                    'init_ops': True,}
+                    'init_ops': True, 'moving_avg': moving_avg}
             self.ops_init.append(self.updates(args))
-
             loss_curr = tf.log(self.loss(args) + 1e-20)
             step = self.step(args)
             args['x_next'] = step['x_next']
