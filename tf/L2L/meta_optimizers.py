@@ -57,7 +57,7 @@ class Meta_Optimizer():
 
     def is_availble(self, param, args=None):
         args = self.global_args if args is None else args
-        return param in args and args[param] is not None and args['moving_avg']
+        return param in args and args[param] is not None
 
     def get_preprocessed_gradients(self, problem, variables=None):
         return [self.preprocess_input(gradient) for gradient in problem.get_gradients(variables)]
@@ -503,7 +503,8 @@ class MlpXGradNormHistory(MlpSimple):
                 max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
                 min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
                 diff = max_values - min_values
-                normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+                # normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+                normalized_values = (history_tensor - min_values) / diff
             return normalized_values
 
     def sort_input(self, args):
@@ -519,19 +520,19 @@ class MlpXGradNormHistory(MlpSimple):
 
     def network(self, args=None):
         with tf.name_scope('mlp_x_optimizer_network'):
-            variable_history, variable_grad_history, variable_moving_avg = args['inputs']
-            normalized_variable_history = self.normalize_values(variable_history)
-            normalized_grad_history = self.normalize_values(variable_grad_history)
-
-            final_var_history = self.sort_input({'inputs': normalized_variable_history,
+            variable_history, grad_history, variable_moving_avg = args['inputs']
+            sorted_variable_history = self.sort_input({'inputs': variable_history,
                                                  'history_ptr': args['history_ptr']})
-            final_var_grad_history = self.sort_input({'inputs': normalized_grad_history,
+            sorted_grad_history = self.sort_input({'inputs': grad_history,
                                                       'history_ptr': args['history_ptr']})
-            if variable_moving_avg is not None:
-                final_var_grad_history = tf.concat([final_var_grad_history, variable_moving_avg], 1,
+            normalized_variable_history = self.normalize_values(sorted_variable_history)
+
+            if self.enable_moving_avg:
+                sorted_grad_history = tf.concat([sorted_grad_history, variable_moving_avg], 1,
                                                    name='concat_moving_avg')
 
-            final_input = tf.concat([final_var_history, final_var_grad_history], 1, name='final_input')
+            normalized_grad_history = self.normalize_values(sorted_grad_history)
+            final_input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
             activations = final_input
             activations = super(MlpXGradNormHistory, self).network({'preprocessed_gradient': activations})[0]
 
