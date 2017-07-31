@@ -85,7 +85,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.MlpXGradNormHistory(problem_batches, path=io_path, args={'second_derivatives': second_derivatives,
+        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args={'second_derivatives': second_derivatives,
                                                                       'hidden_layers': 1, 'learning_rate': learning_rate,
                                                                       'meta_learning_rate': 0.0001,
                                                                       'momentum': momentum, 'layer_width': layer_width,
