@@ -154,4 +154,4 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
 #
-itr(itr=10000, print_interval=100, reset_interval=50)
+# itr(itr=10000, print_interval=100, reset_interval=50)
