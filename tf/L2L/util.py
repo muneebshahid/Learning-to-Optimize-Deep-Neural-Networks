@@ -1,6 +1,6 @@
 from __future__ import print_function
 from timeit import default_timer as timer
-
+import numpy as np
 
 
 def run_epoch(sess, loss, ops, reset, num_unrolls):
@@ -19,26 +19,28 @@ def run_epoch(sess, loss, ops, reset, num_unrolls):
     return timer() - start, cost / num_unrolls
 
 
-def print_update(epoch, epochs, loss, epoch_interval, time, optim_norm=None, optim_grad_norm=None):
+def print_update(epoch, epochs, optim_loss, prob_loss, epoch_interval, time, optim_norm=None, optim_grad_norm=None):
     print('Epoch/Total Epocs: ', epoch + 1, '/', epochs)
-    print('Mean Log Loss: ', loss)
+    print('Mean O Log Loss: ', optim_loss)
+    print('Mean P Log Loss', np.log10(prob_loss))
     print('Mean Epoch Time: ', time / epoch_interval)
     print('Optim Norm: ', optim_norm)
     print('Optim Grad Norm: ', optim_grad_norm)
     print('--------------------------------------------------------------------\n')
 
 
-def write_update(loss, time, problem_norm, deltas_norm, grads_norm):
+def write_update(loss, time, problem_norm=None, deltas_norm=None, grads_norm=None):
     def write_to_file(f_name, list_var):
         with open(f_name, 'a') as log_file:
             for variable in list_var:
                 log_file.write(str(variable) + ' ')
             log_file.write('\n')
-    with open('loss_file_upd', 'a') as log_file:
-        log_file.write("{:.5f}".format(loss) + " " + "{:.2f}".format(time) + "\n")
-    write_to_file('norm_prob', problem_norm)
-    write_to_file('norm_delta', deltas_norm)
-    write_to_file('norm_grads', grads_norm)
+    # with open('loss_file_upd', 'a') as log_file:
+    #     log_file.write("{:.5f}".format(loss) + " " + "{:.2f}".format(time) + "\n")
+    write_to_file('loss', loss)
+    # write_to_file('norm_prob', problem_norm)
+    # write_to_file('norm_delta', deltas_norm)
+    # write_to_file('norm_grads', grads_norm)
 
 
 def get_model_path(flag_optimizer, model_id):

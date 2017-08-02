@@ -46,7 +46,7 @@ with l2l.as_default():
     if flag_optimizer == 'L2L':
         print('Using MLP')
         #########################
-        epochs = 10000
+        epochs = 15000
         epoch_interval = 1000
         eval_interval = 5000
         validation_epochs = 500
@@ -90,9 +90,9 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 10000
-        epoch_interval = 1000
-        eval_interval = 5000
+        epochs = 15000
+        epoch_interval = 100
+        eval_interval = 500
         validation_epochs = 500
         test_epochs = 500
         #########################
@@ -113,9 +113,10 @@ with l2l.as_default():
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
     optim_norm = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
-    reset_upper_limit = np.array([np.random.uniform(reset_limit[0], reset_limit[1]) for reset_limit in reset_limits])
+    reset_upper_limit = np.array([np.random.uniform(reset_limit[0][0], reset_limit[0][1]) for reset_limit in reset_limits])
     reset_counter = np.zeros(len(optim.problems))
     optim_loss_record = np.ones(len(optim.problems)) * np.inf
+    prob_loss_record =  np.ones(len(optim.problems)) * np.inf
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
@@ -147,31 +148,39 @@ with l2l.as_default():
                 curr_loss_flatten = np.squeeze(curr_loss_prob)
                 if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i]:
                     optim.run_reset(index=i)
+                    if epoch < 15000:
+                        reset_index = 0
+                    else:
+                        reset_index = 1
                     optim_loss_record[i] = total_loss_optim[i] / reset_counter[i]
-                    reset_upper_limit[i] = np.random.uniform(reset_limits[i][0], reset_limits[i][1])
+                    prob_loss_record[i] = total_loss_prob[i] / reset_counter[i]
+                    reset_upper_limit[i] = np.random.uniform(reset_limits[i][reset_index][0], reset_limits[i][reset_index][1])
                     reset_counter[i] = 0
                 else:
                     reset_counter[i] += 1
 
-
-            #  optim_loss_record[i] = np.log10()
-
             if (epoch + 1) % epoch_interval == 0:
                 indices = np.where(optim_loss_record == np.inf)
                 optim_loss_record[indices] = total_loss_optim[indices] / epoch_interval
+                prob_loss_record[indices] = total_loss_prob[indices] / epoch_interval
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
-                util.print_update(epoch, epochs, optim_loss_record, epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                util.print_update(epoch, epochs, optim_loss_record, prob_loss_record, epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
                 total_loss_optim = 0
+                total_loss_prob = 0
                 total_time = 0
                 mean_mats_values_list = list()
 
             if (epoch + 1) % eval_interval == 0:
                 print('--- VALIDATION ---')
-                avg_eval_loss = 0
+                total_eval_loss = 0
+                total_eval_time = 0
                 for eval_epoch in range(validation_epochs):
-                    time_eval, loss_eval, _ = optim.run({'train': True})
-                    avg_eval_loss += loss_eval
-                avg_eval_loss = avg_eval_loss / validation_epochs
+                    time_eval, _, loss_eval = optim.run({'train': False})
+                    total_eval_loss += loss_eval
+                    total_eval_time += time_eval
+                avg_eval_loss = total_eval_loss / validation_epochs
+                avg_eval_time = total_eval_time / validation_epochs
+                util.write_update(np.log10(avg_eval_loss), avg_eval_time)
                 print('VALIDATION LOSS: ', avg_eval_loss)
 
                 # print('TEST')

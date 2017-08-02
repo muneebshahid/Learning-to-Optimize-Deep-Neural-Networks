@@ -31,32 +31,33 @@ def create_batches_all(train=True):
 
     if train:
         # ElementSquare
-        batches.append(
-            ElementwiseSquare(
-                {'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
-        reset_limit.append([50, 300])
+        # batches.append(
+        #     ElementwiseSquare(
+        #         {'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
+        # reset_limit.append([[50, 300], [100, 500]])
         # #
         # # Rosenbrock
-        original_mirror(Rosenbrock, '_0_', None, -10, 10)
-        reset_limit.append([50, 60])
-        reset_limit.append([50, 60])
-        #
-        batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
-        reset_limit.append([50, 500])
+        # original_mirror(Rosenbrock, '_0_', None, -10, 10)
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # #
+        # batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # #
+        # original_mirror(Booth, '_0_', 2, -10.0, 10.0)
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # # #
+        # # # # DifferentPower
+        # for i in range(4):
+        #     batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+        #     reset_limit.append([[50, 200], [100, 500]])
+        # #
+        # batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+        # reset_limit.append([[50, 200], [100, 500]])
 
-        original_mirror(Booth, '_0_', 2, -10.0, 10.0)
-        reset_limit.append([50, 500])
-        reset_limit.append([50, 500])
-        #
-        # # DifferentPower
-        for i in range(4):
-            batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
-            reset_limit.append([50, 200])
-
-        batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
-        reset_limit.append([50, 200])
-
-        # batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
+        batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
+        reset_limit.append([[50, 200], [200, 10000]])
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant_initializer([100, 500, 600, 1000])}))
