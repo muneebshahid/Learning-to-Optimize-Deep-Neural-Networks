@@ -32,7 +32,7 @@ problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'max
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
-        problem_batches = problems.create_batches_all()
+        problem_batches, _ = problems.create_batches_all()
         optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args=config.norm_history())
     else:
         optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
@@ -154,3 +154,4 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
 #
+itr(itr=10000, print_interval=100, reset_interval=50)

@@ -24,7 +24,7 @@ class Meta_Optimizer():
     ops_updates = None
     ops_loss = None
     ops_meta_step = None
-    ops_reset = None
+    ops_reset_problem = None
 
     def __init__(self, problems, path, args):
         if path is not None:
@@ -128,13 +128,13 @@ class Meta_Optimizer():
     def set_session(self, session):
         self.session = session
 
-    def run_reset(self, optimizer=False):
+    def run_reset(self, index=None, optimizer=False):
         pass
 
     def run(self, args=None):
         set_arg = lambda op, op_key: op if op_key in args and args[op_key] else []
         num_steps = 1 if 'num_steps' not in args else args['num_steps']
-        ops_reset = set_arg(self.ops_reset, 'ops_reset')
+        ops_reset = set_arg(self.ops_reset_problem, 'ops_reset')
         ops_loss = set_arg(self.ops_loss, 'ops_loss')
         ops_meta_step = set_arg(self.ops_meta_step, 'ops_meta_step')
         ops_updates = set_arg(self.ops_updates, 'ops_updates')
@@ -481,17 +481,28 @@ class NormHistory(Meta_Optimizer):
                         self.moving_avg.append([None for variable in problem.variables])
 
     def run_init(self, args=None):
+        if args is None or args['problem_index'] is None:
+            problems = self.problems
+            guide_steps = self.guide_step
+            ops_init = self.ops_init
+        else:
+            index = args['problem_index']
+            problems = [self.problems[index]]
+            guide_steps = [self.guide_step[index]]
+            ops_init = [self.ops_init[index]]
         with tf.name_scope('Init_With_Session'):
-            for problem, guide_step, ops_init in zip(self.problems, self.guide_step, self.ops_init):
+            for problem, guide_step, op_init in zip(problems, guide_steps, ops_init):
                 for col in range(self.limit):
-                    self.session.run(ops_init)
+                    self.session.run(op_init)
                     if col < self.limit - 1:
                         self.session.run(guide_step)
 
-    def run_reset(self, optimizer=False):
-        reset_ops = self.ops_reset if optimizer else self.ops_reset[:-1]
+    def run_reset(self, index=None, optimizer=False):
+        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
         self.session.run(reset_ops)
-        self.run_init()
+        if optimizer:
+            self.session.run(self.ops_reset_optim)
+        self.run_init({'problem_index': index})
 
     @staticmethod
     def normalize_values(history_tensor, switch=0):
@@ -670,14 +681,25 @@ class NormHistory(Meta_Optimizer):
             variables = args['x_next'] if 'x_next' in args else problem.variables
             return problem.loss(variables)
 
+    def run(self, args=None):
+        if args['train']:
+            ops_meta_step = self.ops_meta_step
+        else:
+            ops_meta_step = []
+        start = timer()
+        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        return timer() - start, np.array(op_loss), np.array(pr_loss)
+
     def build(self):
         self.ops_step = []
         self.ops_updates = []
         self.ops_loss = []
         self.ops_meta_step = []
         self.ops_final_loss = 0
-        self.ops_reset = []
+        self.ops_reset_problem = []
+        self.ops_reset_optim = None
         self.ops_init = []
+        self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
         for problem, variable_history, grad_sign_history, history_ptr, moving_avg in zip(self.problems,
                                                                                          self.variable_history,
                                                                                          self.grad_history,
@@ -700,8 +722,8 @@ class NormHistory(Meta_Optimizer):
             loss = tf.squeeze(loss_next - loss_curr)
             self.ops_loss.append(loss)
             self.ops_meta_step.append(self.minimize(loss))
-            self.ops_reset.append(reset)
-        self.ops_reset.append(self.reset_optimizer())
+            self.ops_reset_problem.append(reset)
+        self.ops_reset_optim = self.reset_optimizer()
         self.init_saver_handle()
 
 class MlpHistoryGradNormMinStep(NormHistory):

@@ -4,6 +4,7 @@ import numpy as np
 import problems
 import meta_optimizers
 import util
+import config
 from preprocess import Preprocess
 
 l2l = tf.Graph()
@@ -41,38 +42,14 @@ with l2l.as_default():
     problem = problems.ElementwiseSquare(args={'minval':-100, 'maxval':100, 'dims':2, 'gog': False, 'path': 'cifar', 'conv': True})
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
-    problem_batches = problems.create_batches_all()
+    problem_batches, reset_limits = problems.create_batches_all()
     if flag_optimizer == 'L2L':
-        print('Using L2L')
-        #########################
-        epochs = 10000
-        num_optim_steps_per_epoch = 100
-        unroll_len = 20
-        epoch_interval = 1
-        eval_interval = 10000
-        validation_epochs = 5
-        test_epochs = 5
-        #########################
-        num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-                                      # preprocess_args=preprocess,
-                                      # learning_rate=learning_rate, layer_width=layer_width,
-                                      # momentum=momentum, second_derivative=second_derivatives)
-
-        optim = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
-                                                                 'state_size': 20, 'num_layers': 2,
-                                                                 'unroll_len': unroll_len,
-                                                                 'learning_rate': 0.001,
-                                                                 'meta_learning_rate': 0.01,
-                                                                  'preprocess': preprocess})
-        optim.build()
-    else:
         print('Using MLP')
         #########################
-        epochs = 1000
-        epoch_interval = 100
-        eval_interval = 200
-        validation_epochs = 25
+        epochs = 10000
+        epoch_interval = 1000
+        eval_interval = 5000
+        validation_epochs = 500
         test_epochs = 500
         #########################
         learning_rate = 0.0001
@@ -85,18 +62,60 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args={'second_derivatives': second_derivatives,
-                                                                      'hidden_layers': 1, 'learning_rate': learning_rate,
-                                                                      'meta_learning_rate': 0.0001,
-                                                                      'momentum': momentum, 'layer_width': layer_width,
-                                                                      'preprocess': preprocess, 'limit': 5})
+        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args=config.norm_history())
+        optim.build()
+        # print('Using L2L')
+        # #########################
+        # epochs = 10000
+        # num_optim_steps_per_epoch = 100
+        # unroll_len = 20
+        # epoch_interval = 1
+        # eval_interval = 10000
+        # validation_epochs = 5
+        # test_epochs = 5
+        # #########################
+        # num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
+        # io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
+        #                               # preprocess_args=preprocess,
+        #                               # learning_rate=learning_rate, layer_width=layer_width,
+        #                               # momentum=momentum, second_derivative=second_derivatives)
+        #
+        # optim = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
+        #                                                          'state_size': 20, 'num_layers': 2,
+        #                                                          'unroll_len': unroll_len,
+        #                                                          'learning_rate': 0.001,
+        #                                                          'meta_learning_rate': 0.01,
+        #                                                           'preprocess': preprocess})
+        # optim.build()
+    else:
+        print('Using MLP')
+        #########################
+        epochs = 10000
+        epoch_interval = 1000
+        eval_interval = 5000
+        validation_epochs = 500
+        test_epochs = 500
+        #########################
+        learning_rate = 0.0001
+        layer_width = 50
+        momentum = False
+        #########################
+
+        num_unrolls_per_epoch = 1
+        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
+                                      # preprocess_args=preprocess,
+                                      # learning_rate=learning_rate, layer_width=layer_width,
+                                      # momentum=momentum) if restore_network else None
+        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args=config.norm_history())
         optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
     optim_norm = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
-
+    reset_upper_limit = np.array([np.random.uniform(reset_limit[0], reset_limit[1]) for reset_limit in reset_limits])
+    reset_counter = np.zeros(len(optim.problems))
+    optim_loss_record = np.ones(len(optim.problems)) * np.inf
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
@@ -110,7 +129,8 @@ with l2l.as_default():
         print('Optim Norm: ', sess.run(optim_norm))
         print('Init Optim Grad Norm: ', sess.run(optim_grad_norm))
         # print 'Init Optim Vars: ', sess.run(mean_optim_variables)
-        total_loss = 0
+        total_loss_optim = 0
+        total_loss_prob = 0
         total_time = 0
         time = 0
 
@@ -119,18 +139,29 @@ with l2l.as_default():
 
         print('---------------------------------\n')
         for epoch in range(epochs):
-            time, loss_value = optim.run({'num_steps': 100,
-                                          'ops_loss': True,
-                                          'ops_reset': True,
-                                          'ops_meta_step': True,
-                                          'ops_updates': True})
-            total_loss += loss_value
+            time, loss_optim, loss_prob = optim.run({'train': True})
+            total_loss_optim += loss_optim
+            total_loss_prob += loss_prob
             total_time += time
+            for i, (ops_reset, curr_loss_prob) in enumerate(zip(optim.ops_reset_problem, loss_prob)):
+                curr_loss_flatten = np.squeeze(curr_loss_prob)
+                if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i]:
+                    optim.run_reset(index=i)
+                    optim_loss_record[i] = total_loss_optim[i] / reset_counter[i]
+                    reset_upper_limit[i] = np.random.uniform(reset_limits[i][0], reset_limits[i][1])
+                    reset_counter[i] = 0
+                else:
+                    reset_counter[i] += 1
+
+
+            #  optim_loss_record[i] = np.log10()
+
             if (epoch + 1) % epoch_interval == 0:
+                indices = np.where(optim_loss_record == np.inf)
+                optim_loss_record[indices] = total_loss_optim[indices] / epoch_interval
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
-                avg_epoch_loss = total_loss / epoch_interval
-                util.print_update(epoch, epochs, avg_epoch_loss, epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
-                total_loss = 0
+                util.print_update(epoch, epochs, optim_loss_record, epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                total_loss_optim = 0
                 total_time = 0
                 mean_mats_values_list = list()
 
@@ -138,10 +169,7 @@ with l2l.as_default():
                 print('--- VALIDATION ---')
                 avg_eval_loss = 0
                 for eval_epoch in range(validation_epochs):
-                    time_eval, loss_eval = optim.run({'num_steps': 100,
-                                                      'ops_loss': True,
-                                                      'ops_reset': True,
-                                                      'ops_updates': True})
+                    time_eval, loss_eval, _ = optim.run({'train': True})
                     avg_eval_loss += loss_eval
                 avg_eval_loss = avg_eval_loss / validation_epochs
                 print('VALIDATION LOSS: ', avg_eval_loss)

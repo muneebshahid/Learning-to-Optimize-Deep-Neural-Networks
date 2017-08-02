@@ -18,6 +18,7 @@ def create_batches(problem, batches=5, dims=5, args={}):
 
 def create_batches_all(train=True):
     batches = []
+    reset_limit = []
     def original_mirror(class_ref, name, dims, minval, maxval):
         original = class_ref(
             {'prefix': class_ref.__name__ + '_' + name, 'dims': dims, 'minval': minval, 'maxval': maxval})
@@ -33,19 +34,27 @@ def create_batches_all(train=True):
         batches.append(
             ElementwiseSquare(
                 {'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
+        reset_limit.append([50, 300])
         # #
         # # Rosenbrock
-        original_mirror(Rosenbrock, '0', None, -10, 10)
+        original_mirror(Rosenbrock, '_0_', None, -10, 10)
+        reset_limit.append([50, 60])
+        reset_limit.append([50, 60])
+        #
         batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
-        original_mirror(Booth, '0', 2, -10.0, 10.0)
-        batches.append(
-            Booth({'prefix': Booth.__name__ + '_0_', 'dims': 2, 'minval': -10.0, 'maxval': 10.0}))
+        reset_limit.append([50, 500])
+
+        original_mirror(Booth, '_0_', 2, -10.0, 10.0)
+        reset_limit.append([50, 500])
+        reset_limit.append([50, 500])
         #
         # # DifferentPower
         for i in range(4):
             batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
+            reset_limit.append([50, 200])
 
         batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+        reset_limit.append([50, 200])
 
         # batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
     else:
@@ -66,7 +75,7 @@ def create_batches_all(train=True):
         batches.append(
             Rosenbrock({'prefix': Rosenbrock.__name__ + '_2_', 'init': [tf.constant_initializer([10]), tf.constant_initializer([-10])]}))
         # batches.append(Mnist({}))
-    return batches
+    return batches, reset_limit
 
 
 class Problem():
