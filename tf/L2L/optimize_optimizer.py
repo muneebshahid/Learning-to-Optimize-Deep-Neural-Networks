@@ -43,6 +43,8 @@ with l2l.as_default():
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
+    save_network_interval = 50000
+    reset_epoch_ext = 15000
     if flag_optimizer == 'L2L':
         print('Using MLP')
         #########################
@@ -92,7 +94,7 @@ with l2l.as_default():
         #########################
         epochs = 15000
         epoch_interval = 100
-        eval_interval = 500
+        eval_interval = 5000
         validation_epochs = 500
         test_epochs = 500
         #########################
@@ -148,7 +150,7 @@ with l2l.as_default():
                 curr_loss_flatten = np.squeeze(curr_loss_prob)
                 if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i]:
                     optim.run_reset(index=i)
-                    if epoch < 15000:
+                    if epoch < reset_epoch_ext:
                         reset_index = 0
                     else:
                         reset_index = 1
@@ -182,7 +184,10 @@ with l2l.as_default():
                 avg_eval_time = total_eval_time / validation_epochs
                 util.write_update(np.log10(avg_eval_loss), avg_eval_time)
                 print('VALIDATION LOSS: ', avg_eval_loss)
-
+            if (epoch + 1) % save_network_interval == 0:
+                print('SAVING NETWORK')
+                save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
+                optim.save(save_path)
                 # print('TEST')
                 # loss_test_total = 0
                 # for eval_epoch in range(test_epochs):
