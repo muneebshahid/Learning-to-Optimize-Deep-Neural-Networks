@@ -166,7 +166,7 @@ with l2l.as_default():
                 optim_loss_record[indices] = total_loss_optim[indices] / epoch_interval
                 prob_loss_record[indices] = total_loss_prob[indices] / epoch_interval
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
-                util.print_update(epoch, epochs, optim_loss_record, prob_loss_record, epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                util.print_update(epoch, epochs, optim_loss_record, np.log10(prob_loss_record), epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
                 total_loss_optim = 0
                 total_loss_prob = 0
                 total_time = 0
@@ -180,9 +180,9 @@ with l2l.as_default():
                     time_eval, _, loss_eval = optim.run({'train': False})
                     total_eval_loss += loss_eval
                     total_eval_time += time_eval
-                avg_eval_loss = total_eval_loss / validation_epochs
+                avg_eval_loss = np.log10(total_eval_loss / validation_epochs)
                 avg_eval_time = total_eval_time / validation_epochs
-                util.write_update(np.log10(avg_eval_loss), avg_eval_time)
+                util.write_update(avg_eval_loss, avg_eval_time)
                 print('VALIDATION LOSS: ', avg_eval_loss)
             if (epoch + 1) % save_network_interval == 0:
                 print('SAVING NETWORK')
