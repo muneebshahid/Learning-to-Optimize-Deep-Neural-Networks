@@ -22,7 +22,7 @@ def run_epoch(sess, loss, ops, reset, num_unrolls):
 def print_update(epoch, epochs, optim_loss, prob_loss, epoch_interval, time, optim_norm=None, optim_grad_norm=None):
     print('Epoch/Total Epocs: ', epoch + 1, '/', epochs)
     print('Mean O Log Loss: ', optim_loss)
-    print('Mean P Log Loss', np.log10(prob_loss))
+    print('Mean P Log Loss', prob_loss)
     print('Mean Epoch Time: ', time / epoch_interval)
     print('Optim Norm: ', optim_norm)
     print('Optim Grad Norm: ', optim_grad_norm)
