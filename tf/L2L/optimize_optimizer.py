@@ -44,7 +44,7 @@ with l2l.as_default():
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
     save_network_interval = 50000
-    reset_epoch_ext = 15000
+    reset_epoch_ext = 20000
     if flag_optimizer == 'L2L':
         print('Using MLP')
         #########################
@@ -92,10 +92,10 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 15000
-        epoch_interval = 100
-        eval_interval = 5000
-        validation_epochs = 500
+        epochs = 1000000
+        epoch_interval = 500
+        eval_interval = 20000
+        validation_epochs = 1000
         test_epochs = 500
         #########################
         learning_rate = 0.0001
