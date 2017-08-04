@@ -13,7 +13,7 @@ def common():
 def norm_history():
     args = common()
     args['limit'] = 20
-    args['grad_only'] = True
+    args['grad_only'] = False
     args['grad_sign_only'] = False
     args['moving_avg'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2

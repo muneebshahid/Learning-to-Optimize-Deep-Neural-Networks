@@ -53,8 +53,8 @@ def create_batches_all(train=True):
         #     batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
         #     reset_limit.append([[50, 200], [100, 500]])
         # #
-        batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
-        reset_limit.append([[50, 200], [100, 500]])
+        # batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+        # reset_limit.append([[50, 200], [100, 500]])
 
         batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
         reset_limit.append([[50, 200], [200, 10000]])

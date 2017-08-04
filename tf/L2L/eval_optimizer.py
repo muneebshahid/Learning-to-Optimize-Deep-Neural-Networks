@@ -14,7 +14,7 @@ def write_to_file(f_name, list_var):
             log_file.write(str(variable) + ' ')
         log_file.write('\n')
 results_dir = 'tf_summary/'
-model_id = '1000_FINAL'
+model_id = '1000000_FINAL'
 
 l2l = tf.Graph()
 with l2l.as_default():
@@ -65,7 +65,7 @@ with l2l.as_default():
 
         l2l.finalize()
         print('---- Starting Evaluation ----')
-        # optim.load(io_path)
+        optim.load(io_path)
         print('Optimizer loaded.')
         total_loss = 0
         total_itr = 10000
