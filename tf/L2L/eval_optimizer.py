@@ -44,6 +44,7 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
         optim.set_session(sess)
+        optim.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars/mnist_variables')
         optim.run_init()
         l = []
         for i, (problem, problem_variables_history) in enumerate(zip(optim.problems, optim.variable_history)):

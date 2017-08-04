@@ -102,6 +102,9 @@ class Meta_Optimizer():
             reset_problem_ops.extend(self.reset_problem(problem))
         return reset_problem_ops
 
+    def restore_problem(self, index, path):
+        self.problems[index].restore(self.session, path)
+
     @staticmethod
     def load_args(path):
         pickled_args = pickle.load(open(path + '_config.p', 'rb'))

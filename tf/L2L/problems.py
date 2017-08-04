@@ -53,8 +53,8 @@ def create_batches_all(train=True):
         #     batches.append(DifferentPowers({'prefix': DifferentPowers.__name__ + '_'+ str(i) + '_', 'dims': i + 3, 'minval': -10.0, 'maxval': 10.0}))
         #     reset_limit.append([[50, 200], [100, 500]])
         # #
-        # batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
-        # reset_limit.append([[50, 200], [100, 500]])
+        batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
+        reset_limit.append([[50, 200], [100, 500]])
 
         batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
         reset_limit.append([[50, 200], [200, 10000]])
@@ -95,6 +95,7 @@ class Problem():
     problem_prefix = None
     var_count = None
     init = None
+    io_handle = None
 
     def __init__(self, args={}):
         self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
@@ -162,6 +163,13 @@ class Problem():
         gradients = self.get_gradients_raw(variables)
         gradients = [self.flatten_input(i, gradient) for i, gradient in enumerate(gradients)]
         return gradients
+
+    def end_init(self):
+        self.io_handle = tf.train.Saver(self.variables)
+
+    def restore(self, sess, path):
+        if self.io_handle is not None:
+            self.io_handle.restore(sess, path)
 
 
 class ElementwiseSquare(Problem):
@@ -338,7 +346,6 @@ class Mnist(Problem):
         self.training_data['images'], self.training_data['labels'] = get_data(data, 'train')
         self.test_data['images'], self.test_data['labels'] = get_data(data, 'test')
         self.validation_data['images'], self.validation_data['labels'] = get_data(data, 'validation')
-
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
                 if self.conv:
@@ -365,6 +372,8 @@ class Mnist(Problem):
 
                     self.create_variable('w_out', dims=[20, 10])
                     self.create_variable('b_out', dims=[1, 10])
+        self.end_init()
+
 
 
     def __xent_loss(self, output, labels):
