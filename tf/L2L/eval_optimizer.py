@@ -70,7 +70,7 @@ with l2l.as_default():
             optim_meta.load(io_path)
             print('Optimizer loaded.')
         total_loss = 0
-        total_itr = 10000
+        total_itr = 20000
         for i in range(total_itr):
             if meta:
                 _, curr_loss, summaries = sess.run([optim_meta.ops_updates, l, all_summ])
