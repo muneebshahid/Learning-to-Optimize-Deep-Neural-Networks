@@ -15,6 +15,7 @@ def write_to_file(f_name, list_var):
         log_file.write('\n')
 results_dir = 'tf_summary/'
 model_id = '1000000_FINAL'
+meta = False
 
 l2l = tf.Graph()
 with l2l.as_default():
@@ -29,7 +30,6 @@ with l2l.as_default():
     #########################
     learning_rate = 0.0001
     layer_width = 50
-    momentum = False
     #########################
     num_unrolls_per_epoch = 1
     io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
@@ -37,17 +37,18 @@ with l2l.as_default():
     writer = None
     problem_batches, _ = problems.create_batches_all(train=True)
     enable_summaries = False
-    optim = meta_optimizers.NormHistory(problem_batches, path=None, args=config.norm_history())
-    optim.build()
-
+    optim_meta = meta_optimizers.NormHistory(problem_batches, path=None, args=config.norm_history())
+    optim_meta.build()
+    optim_adam = tf.train.AdamOptimizer(.01)
+    adam_min_step = optim_adam.minimize(optim_meta.ops_loss_problem[0], var_list=optim_meta.problems[0].variables)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
-        optim.set_session(sess)
-        optim.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars/mnist_variables')
-        optim.run_init()
+        optim_meta.set_session(sess)
+        optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars/mnist_variables')
+        optim_meta.run_init()
         l = []
-        for i, (problem, problem_variables_history) in enumerate(zip(optim.problems, optim.variable_history)):
+        for i, (problem, problem_variables_history) in enumerate(zip(optim_meta.problems, optim_meta.variable_history)):
             name_prefix = problem.__class__.__name__ + "_" + str(i)
             with tf.name_scope(name_prefix):
                 loss = tf.squeeze(problem.loss(problem.variables))
@@ -65,12 +66,16 @@ with l2l.as_default():
 
         l2l.finalize()
         print('---- Starting Evaluation ----')
-        optim.load(io_path)
-        print('Optimizer loaded.')
+        if meta:
+            optim_meta.load(io_path)
+            print('Optimizer loaded.')
         total_loss = 0
         total_itr = 10000
         for i in range(total_itr):
-            _, curr_loss, summaries = sess.run([optim.ops_updates, l, all_summ])
+            if meta:
+                _, curr_loss, summaries = sess.run([optim_meta.ops_updates, l, all_summ])
+            else:
+                _, curr_loss, summaries = sess.run([adam_min_step, l, all_summ])
             total_loss += np.array(curr_loss)
             if (i + 1) % 50 == 0:
                 print(str(i + 1) + '/' + str(total_itr))
