@@ -16,6 +16,7 @@ def norm_history():
     args['grad_only'] = False
     args['grad_sign_only'] = False
     args['moving_avg'] = False
+    args['history_range'] = 10
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_in_dims'] += (1 if args['moving_avg'] else 0)
     args['network_out_dims'] = 19

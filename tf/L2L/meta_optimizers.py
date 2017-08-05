@@ -445,6 +445,7 @@ class NormHistory(Meta_Optimizer):
     li, lr = None, None
     sign_dist = None
     lr_dist = None
+    history_range = None
 
     def __init__(self, problems, path, args):
         super(NormHistory, self).__init__(problems, path, args)
@@ -457,6 +458,7 @@ class NormHistory(Meta_Optimizer):
         self.network_in_dims =  args['network_in_dims']
         self.network_out_dims = args['network_out_dims']
         self.enable_moving_avg = args['moving_avg']
+        self.history_range = args['history_range']
 
 
         with tf.name_scope('Optim_Init'):
@@ -612,8 +614,12 @@ class NormHistory(Meta_Optimizer):
 
                 deltas_x, deltas_g = self.network({'inputs': input})
                 deltas_list.append([deltas_x])
-                max_values = tf.reduce_max(batch_variable_history, 1)
-                min_values = tf.reduce_min(batch_variable_history, 1)
+                if self.history_range is not None and self.history_range:
+                    batch_variable_history_range = tf.slice(sorted_variable_history, [0, 0], [-1, self.history_range])
+                else:
+                    batch_variable_history_range = batch_variable_history
+                max_values = tf.reduce_max(batch_variable_history_range, 1)
+                min_values = tf.reduce_min(batch_variable_history_range, 1)
                 max_values = tf.expand_dims(max_values, 1)
                 min_values = tf.expand_dims(min_values, 1)
                 diff = max_values - min_values
