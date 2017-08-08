@@ -94,7 +94,7 @@ with l2l.as_default():
         #########################
         epochs = 1000000
         epoch_interval = 500
-        eval_interval = 20000
+        eval_interval = save_network_interval
         validation_epochs = 1000
         test_epochs = 500
         #########################

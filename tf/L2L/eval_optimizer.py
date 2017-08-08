@@ -15,7 +15,7 @@ def write_to_file(f_name, list_var):
         log_file.write('\n')
 results_dir = 'tf_summary/'
 model_id = '1000000_FINAL'
-meta = False
+meta = True
 
 l2l = tf.Graph()
 with l2l.as_default():

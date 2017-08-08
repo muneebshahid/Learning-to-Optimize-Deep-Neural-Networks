@@ -459,6 +459,7 @@ class NormHistory(Meta_Optimizer):
         self.network_out_dims = args['network_out_dims']
         self.enable_moving_avg = args['moving_avg']
         self.history_range = args['history_range']
+        self.min_step = args['min_step']
 
 
         with tf.name_scope('Optim_Init'):
@@ -466,8 +467,9 @@ class NormHistory(Meta_Optimizer):
                                          name='step_dist')
             self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
                                          name='sign_dist')
-            self.lr_dist = tf.Variable(tf.constant([.1, .05, .001, .0005, 1.0], shape=[5, 1], dtype=tf.float32),
-                                   name='grad_dist')
+            if self.min_step is None:
+                self.lr_dist = tf.Variable(tf.constant([.1, .05, .001, .0005, 1.0], shape=[5, 1], dtype=tf.float32),
+                                       name='grad_dist')
 
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
@@ -561,15 +563,17 @@ class NormHistory(Meta_Optimizer):
             lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
             lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
             delta_x_step = lr_x_step_magnitude * lr_x_step_sign
+            if self.min_step is None:
+                lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
+                lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
+                lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
 
-            lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
-            lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
-            lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
-
-            lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
-            lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
-            lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
-            delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
+                lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
+                lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
+                lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
+                delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
+            else:
+                delta_lr = 0
 
             # rows = tf.shape(lr_grad_step_sign)[0]
             # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
@@ -636,8 +640,8 @@ class NormHistory(Meta_Optimizer):
 
                 # for same effect use .001 as multiplier for mean.
                 # noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
-
-                mean = tf.multiply(deltas_x, diff) + deltas_g
+                max_step = tf.maximum(diff, self.min_step)
+                mean = tf.multiply(deltas_x, max_step) + deltas_g
                 new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
