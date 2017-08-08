@@ -476,8 +476,10 @@ class NormHistory(Meta_Optimizer):
             self.guide_step, self.variable_history, self.grad_history, self.history_ptr, self.moving_avg = [], [], [], [], []
             for i, problem in enumerate(self.problems):
                 with tf.variable_scope('problem_' + str(i)):
-                    self.guide_step.append([])#self.guide_optimizer.minimize(problem.loss(problem.variables),
-                                               #                     var_list=problem.variables, name='guide_step'))
+                    if self.min_step is None:
+                        self.guide_step.append([])
+                    else:
+                        self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables), var_list=problem.variables, name='guide_step'))
                     self.variable_history.append([tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                              for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.grad_history.append([tf.get_variable('gradients_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
