@@ -95,7 +95,7 @@ with l2l.as_default():
         epochs = 1000000
         epoch_interval = 500
         eval_interval = save_network_interval
-        validation_epochs = 1000
+        validation_epochs = 10000
         test_epochs = 500
         #########################
         learning_rate = 0.0001
