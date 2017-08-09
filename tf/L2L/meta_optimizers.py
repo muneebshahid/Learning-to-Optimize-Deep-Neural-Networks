@@ -446,6 +446,8 @@ class MlpNormHistory(Meta_Optimizer):
     sign_dist = None
     lr_dist = None
     history_range = None
+    min_step = None
+    min_step_max = None
 
     def __init__(self, problems, path, args):
         super(MlpNormHistory, self).__init__(problems, path, args)
@@ -460,6 +462,7 @@ class MlpNormHistory(Meta_Optimizer):
         self.enable_moving_avg = args['moving_avg']
         self.history_range = args['history_range']
         self.min_step = args['min_step']
+        self.min_step_max = args['min_step_max']
 
 
         with tf.name_scope('Optim_Init'):
@@ -476,10 +479,11 @@ class MlpNormHistory(Meta_Optimizer):
             self.guide_step, self.variable_history, self.grad_history, self.history_ptr, self.moving_avg = [], [], [], [], []
             for i, problem in enumerate(self.problems):
                 with tf.variable_scope('problem_' + str(i)):
-                    if self.min_step is None:
-                        self.guide_step.append([])
-                    else:
-                        self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables), var_list=problem.variables, name='guide_step'))
+                    self.guide_step.append([])
+                    # if self.min_step is None:
+                    #     self.guide_step.append([])
+                    # else:
+                    #     self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables), var_list=problem.variables, name='guide_step'))
                     self.variable_history.append([tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
                                              for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.grad_history.append([tf.get_variable('gradients_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, args['limit']], trainable=False)
@@ -642,8 +646,13 @@ class MlpNormHistory(Meta_Optimizer):
 
                 # for same effect use .001 as multiplier for mean.
                 # noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
-                max_step = tf.maximum(diff, self.min_step)
-                mean = tf.multiply(deltas_x, max_step) + deltas_g
+                default_step = diff
+                if self.min_step is not None:
+                    if self.min_step_max:
+                        default_step = tf.maximum(diff, self.min_step)
+                    else:
+                        default_step = diff + self.min_step
+                mean = tf.multiply(deltas_x, default_step) + deltas_g
                 new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
