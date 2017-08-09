@@ -23,3 +23,8 @@ def norm_history():
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
     return args
 
+
+def gru_norm_history():
+    args = norm_history()
+    args['state_size'] = 5
+    return args

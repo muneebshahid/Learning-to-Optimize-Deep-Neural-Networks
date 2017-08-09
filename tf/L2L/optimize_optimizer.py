@@ -64,7 +64,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args=config.norm_history())
+        optim = meta_optimizers.MlpNormHistory(problem_batches, path=io_path, args=config.norm_history())
         optim.build()
         # print('Using L2L')
         # #########################
@@ -108,7 +108,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.NormHistory(problem_batches, path=io_path, args=config.norm_history())
+        optim = meta_optimizers.MlpNormHistory(problem_batches, path=io_path, args=config.norm_history())
         optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)

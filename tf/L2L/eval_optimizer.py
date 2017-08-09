@@ -37,7 +37,7 @@ with l2l.as_default():
     writer = None
     problem_batches, _ = problems.create_batches_all(train=True)
     enable_summaries = False
-    optim_meta = meta_optimizers.NormHistory(problem_batches, path=None, args=config.norm_history())
+    optim_meta = meta_optimizers.GRUNormHistory(problem_batches, path=None, args=config.norm_history())
     optim_meta.build()
     optim_adam = tf.train.AdamOptimizer(.01)
     adam_min_step = optim_adam.minimize(optim_meta.ops_loss_problem[0], var_list=optim_meta.problems[0].variables)

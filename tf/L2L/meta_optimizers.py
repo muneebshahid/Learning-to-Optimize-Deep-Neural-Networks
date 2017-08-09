@@ -424,7 +424,7 @@ class MlpMovingAverage(MlpSimple):
         reset.append(tf.variables_initializer(self.avg_gradients))
         return reset
 
-class NormHistory(Meta_Optimizer):
+class MlpNormHistory(Meta_Optimizer):
 
     network_in_dims = None
     network_out_dims = None
@@ -448,7 +448,7 @@ class NormHistory(Meta_Optimizer):
     history_range = None
 
     def __init__(self, problems, path, args):
-        super(NormHistory, self).__init__(problems, path, args)
+        super(MlpNormHistory, self).__init__(problems, path, args)
         self.gradients_only = args['grad_only']
         self.gradient_sign_only = args['grad_sign_only']
         self.layer_width = args['layer_width']
@@ -692,7 +692,7 @@ class NormHistory(Meta_Optimizer):
             return update_list
 
     def reset_optimizer(self):
-        reset = super(NormHistory, self).reset_optimizer()
+        reset = super(MlpNormHistory, self).reset_optimizer()
         return reset
 
     def reset_problem(self, args):
@@ -701,7 +701,7 @@ class NormHistory(Meta_Optimizer):
         problem_grad_history = args['grad_history']
         problem_history_ptr = args['history_ptr']
         reset = []
-        reset.append(super(NormHistory, self).reset_problem(problem))
+        reset.append(super(MlpNormHistory, self).reset_problem(problem))
         reset.append(tf.variables_initializer(problem_variable_history, name='reset_variable_history'))
         reset.append(tf.variables_initializer(problem_grad_history, name='reset_grad_history'))
         reset.append(tf.variables_initializer([problem_history_ptr], name='reset_history_ptr'))
@@ -758,7 +758,178 @@ class NormHistory(Meta_Optimizer):
         self.ops_reset_optim = self.reset_optimizer()
         self.init_saver_handle()
 
-class MlpHistoryGradNormMinStep(NormHistory):
+
+class GRUNormHistory(MlpNormHistory):
+    state_size = None
+    hidden_states = None
+    rnn = None
+    rnn_w, rnn_b = None, None
+
+    def __init__(self, problems, path, args):
+        super(GRUNormHistory, self).__init__(problems, path, args)
+        self.state_size = args['state_size']
+        self.hidden_states = []
+
+        # initialize for later use.
+        with tf.variable_scope('optimizer_core'):
+            # Formulate variables for all states as it allows to use tf.assign() for states
+            def get_states(batch_size):
+                state_variable = []
+                for state in self.rnn.zero_state(batch_size, tf.float32):
+                    state_variable.append(tf.Variable(state, trainable=False))
+                return tuple(state_variable)
+
+            self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+            self.rnn = tf.contrib.rnn.MultiRNNCell(
+                [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+
+
+            with tf.variable_scope('hidden_states'):
+                for problem in self.problems:
+                    self.hidden_states.append([get_states(problem.get_shape(variable=variable)) for variable in
+                                          problem.variables_flat])
+
+            with tf.variable_scope('rnn_linear'):
+                self.rnn_w = tf.get_variable('softmax_w', [self.state_size, 19])
+                self.rnn_b = tf.get_variable('softmax_b', [19])
+
+    def network(self, args=None):
+        with tf.name_scope('Optimizer_network'):
+            activations = args['inputs']
+            hidden_states = args['hidden_states']
+            reuse = args['reuse']
+            if not reuse:
+                with tf.variable_scope('core'):
+                    activations, hidden_states = self.rnn(activations, hidden_states)
+                    scope = tf.get_variable_scope().name
+                    rnn_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='core')
+                    self.optimizer_variables.extend(rnn_variables)
+                    self.optimizer_variables.append(self.rnn_w)
+                    self.optimizer_variables.append(self.rnn_b)
+            else:
+                with tf.variable_scope('core', reuse=True):
+                    activations, hidden_states = self.rnn(activations, hidden_states)
+
+            activations = tf.add(tf.matmul(activations, self.rnn_w), self.rnn_b)
+
+            lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
+            lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
+            lr_x_step_magnitude = tf.matmul(lr_x_step_magnitude, self.step_dist)
+
+            lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2], 'x_step_sign')
+            lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
+            lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
+            delta_x_step = lr_x_step_magnitude * lr_x_step_sign
+
+            lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
+            lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
+            lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
+
+            lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
+            lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
+            lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
+            delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
+            return [delta_x_step, delta_lr]
+
+    def step(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_step'):
+            problem = args['problem']
+            problem_variable_history = args['variable_history']
+            problem_grad_history = args['grad_history']
+            history_ptr = args['history_ptr']
+            problem_moving_avg = args['moving_avg']
+            problem_hidden_states = args['hidden_states']
+            x_next = list()
+            deltas_list = []
+            i = 0
+            for variable, variable_flat, \
+                batch_variable_history, batch_variable_grad_history, \
+                batch_moving_avg, batch_hidden_states in zip(problem.variables, problem.variables_flat,
+                                                            problem_variable_history, problem_grad_history,
+                                                            problem_moving_avg, problem_hidden_states):
+                sorted_variable_history = self.sort_input({'inputs': batch_variable_history,
+                                                           'history_ptr': history_ptr})
+
+                sorted_grad_history = self.sort_input({'inputs': batch_variable_grad_history,
+                                                       'history_ptr': history_ptr})
+                normalized_variable_history = self.normalize_values(sorted_variable_history)
+
+                if self.enable_moving_avg:
+                    sorted_grad_history = tf.concat([sorted_grad_history, batch_moving_avg], 1,
+                                                    name='concat_moving_avg')
+
+                normalized_grad_history = self.normalize_values(sorted_grad_history)
+
+                if self.gradient_sign_only:
+                    normalized_grad_history = tf.sign(normalized_grad_history)
+
+                normalized_variable_history = tf.reshape(normalized_variable_history, shape=tf.shape(batch_variable_history))
+                normalized_grad_history = tf.reshape(normalized_grad_history,
+                                                         shape=tf.shape(batch_variable_grad_history))
+                if self.gradients_only:
+                    input = normalized_grad_history
+                else:
+                    input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
+
+                deltas_x, deltas_g = self.network({'inputs': input, 'hidden_states': batch_hidden_states, 'reuse': i > 0})
+                deltas_list.append([deltas_x])
+                if self.history_range is not None and self.history_range:
+                    batch_variable_history_range = tf.slice(sorted_variable_history, [0, 0],
+                                                            [-1, self.history_range])
+                else:
+                    batch_variable_history_range = batch_variable_history
+                max_values = tf.reduce_max(batch_variable_history_range, 1)
+                min_values = tf.reduce_min(batch_variable_history_range, 1)
+                max_values = tf.expand_dims(max_values, 1)
+                min_values = tf.expand_dims(min_values, 1)
+                diff = max_values - min_values
+                ref = (max_values + min_values) / 2.0
+                mean = tf.multiply(deltas_x, diff) + deltas_g
+                new_points = tf.add(ref, mean, 'new_points')
+                new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
+                x_next.append(new_points)
+                i += 1
+            return {'x_next': x_next, 'deltas': deltas_list}
+
+    def build(self):
+        self.ops_step = []
+        self.ops_updates = []
+        self.ops_loss = []
+        self.ops_meta_step = []
+        self.ops_final_loss = 0
+        self.ops_reset_problem = []
+        self.ops_reset_optim = None
+        self.ops_init = []
+        self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
+        for problem, variable_history, grad_sign_history, history_ptr, moving_avg, hidden_states in zip(self.problems,
+                                                                                         self.variable_history,
+                                                                                         self.grad_history,
+                                                                                         self.history_ptr,
+                                                                                         self.moving_avg,
+                                                                                         self.hidden_states):
+            args = {'problem': problem, 'variable_history': variable_history,
+                    'grad_history': grad_sign_history, 'history_ptr': history_ptr,
+                    'x_next': [variable.initialized_value() for variable in problem.variables],
+                    'init_ops': True, 'moving_avg': moving_avg, 'hidden_states': hidden_states}
+            self.ops_init.append(self.updates(args))
+            loss_curr = tf.log(self.loss(args) + 1e-20)
+            step = self.step(args)
+            args['x_next'] = step['x_next']
+            args['init_ops'] = False
+            updates = self.updates(args)
+            loss_next = tf.log(self.loss(args) + 1e-20)
+            reset = self.reset_problem(args)
+            self.ops_step.append(step)
+            self.ops_updates.append(updates)
+            loss = tf.squeeze(loss_next - loss_curr)
+            self.ops_loss.append(loss)
+            self.ops_meta_step.append(self.minimize(loss))
+            self.ops_reset_problem.append(reset)
+        self.ops_reset_optim = self.reset_optimizer()
+        self.init_saver_handle()
+
+
+class MlpHistoryGradNormMinStep(MlpNormHistory):
 
     sign_dist = None
     lr_dist = None
@@ -784,7 +955,7 @@ class MlpHistoryGradNormMinStep(NormHistory):
                                                       'history_ptr': args['history_ptr']})
             final_input = final_var_grad_history
             activations = final_input
-            activations = super(NormHistory, self).network({'preprocessed_gradient': activations})[0]
+            activations = super(MlpNormHistory, self).network({'preprocessed_gradient': activations})[0]
 
             lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
             lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
@@ -839,7 +1010,7 @@ class MlpHistoryGradNormMinStep(NormHistory):
             return {'x_next': x_next, 'deltas': deltas_list}
 
 
-class MlpXHistoryGradSign(NormHistory):
+class MlpXHistoryGradSign(MlpNormHistory):
 
     def network(self, args=None):
         with tf.name_scope('mlp_x_optimizer_network'):
