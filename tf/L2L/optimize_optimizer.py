@@ -115,6 +115,12 @@ with l2l.as_default():
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
     optim_norm = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
+    problem_norms = []
+    for problem in optim.problems:
+        norm = 0
+        for variable in problem.variables:
+            norm += tf.norm(variable)
+        problem_norms.append(norm)
     reset_upper_limit = np.array([np.random.uniform(reset_limit[0][0], reset_limit[0][1]) for reset_limit in reset_limits])
     reset_counter = np.zeros(len(optim.problems))
     optim_loss_record = np.ones(len(optim.problems)) * np.inf
@@ -143,12 +149,13 @@ with l2l.as_default():
         print('---------------------------------\n')
         for epoch in range(epochs):
             time, loss_optim, loss_prob = optim.run({'train': True})
+            problem_norms_run = sess.run(problem_norms)
             total_loss_optim += loss_optim
             total_loss_prob += loss_prob
             total_time += time
-            for i, (ops_reset, curr_loss_prob) in enumerate(zip(optim.ops_reset_problem, loss_prob)):
+            for i, (ops_reset, curr_loss_prob, norm) in enumerate(zip(optim.ops_reset_problem, loss_prob, problem_norms_run)):
                 curr_loss_flatten = np.squeeze(curr_loss_prob)
-                if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i]:
+                if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i] or norm > 1e6:
                     optim.run_reset(index=i)
                     if epoch < reset_epoch_ext:
                         reset_index = 0
