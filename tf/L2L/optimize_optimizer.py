@@ -174,6 +174,7 @@ with l2l.as_default():
                 prob_loss_record[indices] = total_loss_prob[indices] / epoch_interval
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
                 util.print_update(epoch, epochs, optim_loss_record, np.log10(prob_loss_record), epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                print('PROBLEM NORM: ', problem_norms_run)
                 total_loss_optim = 0
                 total_loss_prob = 0
                 total_time = 0
