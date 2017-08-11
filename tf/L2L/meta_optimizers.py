@@ -533,7 +533,7 @@ class NormHistory(Meta_Optimizer):
                 min_values = tf.reduce_min(history_tensor, 1)
                 max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
                 min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-                diff = max_values - min_values
+                diff = (max_values - min_values) + 1e-15
                 # normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
                 normalized_values = (history_tensor - min_values) / diff
             return normalized_values
