@@ -694,10 +694,10 @@ class NormHistory(Meta_Optimizer):
             # oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
             oldest_history_slice = batch_variables
 
-            updated_grad_mom = batch_grad_mom * self.momentum_alpha + oldest_history_slice * self.momentum_alpha_inv
+            updated_grad_mom = batch_grad_mom * self.momentum_alpha + batch_gradients * self.momentum_alpha_inv
             mom_ops.append(tf.assign(batch_grad_mom, updated_grad_mom))
 
-            updated_vari_mom = batch_vari_mom * self.momentum_alpha + oldest_history_slice * self.momentum_alpha_inv
+            updated_vari_mom = batch_vari_mom * self.momentum_alpha + batch_variables * self.momentum_alpha_inv
             mom_ops.append(tf.assign(batch_vari_mom, updated_vari_mom))
 
         with tf.control_dependencies(mom_ops):
