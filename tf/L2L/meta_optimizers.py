@@ -505,6 +505,13 @@ class NormHistory(Meta_Optimizer):
                                               for i, shape in enumerate(problem.variables_flattened_shape)])
                     self.history_ptr.append(tf.Variable(4, 'history_ptr'))
                     if self.use_momentums:
+                        # for flat
+                        # self.vari_mom.append([tf.get_variable('vari_mom' + str(i),
+                        #                       initializer=tf.tile(flat_variable, [1, self.momentum_limit]))
+                        #                       for i, flat_variable in enumerate(problem.variables_flat)])
+                        # self.grad_mom.append([tf.get_variable('grad_mom' + str(i),
+                        #                       initializer=tf.tile(flat_variable, [1, self.momentum_limit]))
+                        #                       for i, flat_variable in enumerate(problem.variables_flat)])
                         self.vari_mom.append([tf.get_variable('vari_mom' + str(i), initializer=tf.zeros_initializer,
                                                               shape=[shape, self.momentum_limit], trainable=False)
                                               for i, shape in enumerate(problem.variables_flattened_shape)])
@@ -683,7 +690,7 @@ class NormHistory(Meta_Optimizer):
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas': deltas_list}
 
-    def update_history_ops(self, batch_variables, batch_gradients, batch_variables_history, batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom):
+    def update_history_ops(self, batch_variables, batch_gradients, batch_variables_history, batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom, init_ops):
         mom_ops = []
         history_ops = []
         shape = batch_variables.shape[0].value
@@ -693,11 +700,13 @@ class NormHistory(Meta_Optimizer):
             # oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
             # oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
             oldest_history_slice = batch_variables
-
-            updated_grad_mom = batch_grad_mom * self.momentum_alpha + batch_gradients * self.momentum_alpha_inv
+            if init_ops:
+                updated_grad_mom = tf.tile(batch_gradients, [1, self.momentum_limit])
+                updated_vari_mom = tf.tile(batch_variables, [1, self.momentum_limit])
+            else:
+                updated_grad_mom = batch_grad_mom * self.momentum_alpha + batch_gradients * self.momentum_alpha_inv
+                updated_vari_mom = batch_vari_mom * self.momentum_alpha + batch_variables * self.momentum_alpha_inv
             mom_ops.append(tf.assign(batch_grad_mom, updated_grad_mom))
-
-            updated_vari_mom = batch_vari_mom * self.momentum_alpha + batch_variables * self.momentum_alpha_inv
             mom_ops.append(tf.assign(batch_vari_mom, updated_vari_mom))
 
         with tf.control_dependencies(mom_ops):
@@ -714,11 +723,12 @@ class NormHistory(Meta_Optimizer):
             problem_vari_mom = args['vari_mom']
             problem_grad_mom = args['grad_mom']
             history_ptr = args['history_ptr']
+            init_ops = args['init_ops']
             update_list = [tf.cond(history_ptr < self.limit - 1,
                                 lambda: tf.assign_add(history_ptr, 1),
                                 lambda: tf.assign(history_ptr, 0))]
             with tf.control_dependencies(update_list):
-                if not args['init_ops']:
+                if not init_ops:
                     update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
                                    zip(problem.variables, x_next)])
                 flat_gradients = problem.get_gradients(x_next)
@@ -730,7 +740,7 @@ class NormHistory(Meta_Optimizer):
                                                                                                        problem_vari_mom,
                                                                                                        problem_grad_mom):
                     update_list.extend(self.update_history_ops(variable, grads, batch_variable_history,
-                                                               batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom))
+                                                               batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom, init_ops))
             return update_list
 
     def reset_optimizer(self):
