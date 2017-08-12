@@ -12,15 +12,19 @@ def common():
 
 def norm_history():
     args = common()
-    args['limit'] = 20
+    args['limit'] = 1
     args['grad_only'] = True
     args['grad_sign_only'] = False
-    args['moving_avg'] = False
+    args['use_momentum'] = True
+    args['momentum_limit'] = 5 if args['use_momentum'] else None
+    args['momentum_base'] = 1.2
     args['history_range'] = None
-    args['min_step'] = 1e-5
+    args['min_step'] = 1e-4
     args['min_step_max'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
-    args['network_in_dims'] += (1 if args['moving_avg'] else 0)
+    momentum_input_dims = args['momentum_limit'] if args['use_momentum'] else 0
+    momentum_input_dims *= 1 if args['grad_only'] else 2
+    args['network_in_dims'] += (momentum_input_dims)
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
     return args
 
