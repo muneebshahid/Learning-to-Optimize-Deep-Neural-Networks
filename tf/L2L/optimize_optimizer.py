@@ -155,7 +155,7 @@ with l2l.as_default():
             total_time += time
             for i, (ops_reset, curr_loss_prob, norm) in enumerate(zip(optim.ops_reset_problem, loss_prob, problem_norms_run)):
                 curr_loss_flatten = np.squeeze(curr_loss_prob)
-                if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i] or norm > 1e6:
+                if curr_loss_flatten < 1e-15 or reset_counter[i] >= reset_upper_limit[i] or norm > 1e4:
                     optim.run_reset(index=i)
                     if epoch < reset_epoch_ext:
                         reset_index = 0
