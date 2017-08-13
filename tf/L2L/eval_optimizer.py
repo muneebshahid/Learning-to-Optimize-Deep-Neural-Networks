@@ -41,6 +41,12 @@ with l2l.as_default():
     optim_meta.build()
     optim_adam = tf.train.AdamOptimizer(.01)
     adam_min_step = optim_adam.minimize(optim_meta.ops_loss_problem[0], var_list=optim_meta.problems[0].variables)
+    problem_norms = []
+    for problem in optim_meta.problems:
+        norm = 0
+        for variable in problem.variables:
+            norm += tf.norm(variable)
+        problem_norms.append(norm)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
@@ -82,6 +88,7 @@ with l2l.as_default():
                 avg_loss = np.log10(total_loss / 50.0)
                 write_to_file(results_dir + 'loss', avg_loss)
                 print(avg_loss)
+                print('PROB NORM: ', sess.run(problem_norms))
                 total_loss = 0
                 if enable_summaries and ((i + 10) % 10 == 0):
                     writer.add_summary(summaries, i)
