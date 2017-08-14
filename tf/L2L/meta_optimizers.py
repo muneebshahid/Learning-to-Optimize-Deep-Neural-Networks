@@ -657,9 +657,9 @@ class MlpNormHistory(Meta_Optimizer):
                 deltas_list.append([deltas_x])
 
                 if self.history_range is not None and self.history_range:
-                    batch_variable_history_range = tf.slice(network_input, [0, 0], [-1, self.history_range])
+                    batch_variable_history_range = tf.slice(sorted_vari_history, [0, 0], [-1, self.history_range])
                 else:
-                    batch_variable_history_range = network_input
+                    batch_variable_history_range = sorted_vari_history
                 max_values = tf.reduce_max(batch_variable_history_range, 1)
                 min_values = tf.reduce_min(batch_variable_history_range, 1)
                 max_values = tf.expand_dims(max_values, 1)
@@ -690,7 +690,15 @@ class MlpNormHistory(Meta_Optimizer):
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas': deltas_list}
 
-    def update_history_ops(self, batch_variables, batch_gradients, batch_variables_history, batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom, init_ops):
+    def update_history_ops(self, args):
+        batch_variables = args['batch_variable']
+        batch_gradients = args['batch_gradients']
+        batch_variables_history = args['batch_variables_hitory']
+        batch_grad_history = args['batch_grad_history']
+        history_ptr = args['history_ptr']
+        batch_vari_mom = args['batch_vari_mom']
+        batch_grad_mom = args['batch_grad_mom']
+        init_ops = args['init_ops']
         mom_ops = []
         history_ops = []
         shape = batch_variables.shape[0].value
@@ -739,8 +747,11 @@ class MlpNormHistory(Meta_Optimizer):
                                                                                                        problem_grad_history,
                                                                                                        problem_vari_mom,
                                                                                                        problem_grad_mom):
-                    update_list.extend(self.update_history_ops(variable, grads, batch_variable_history,
-                                                               batch_grad_history, history_ptr, batch_vari_mom, batch_grad_mom, init_ops))
+                    update_list.extend(self.update_history_ops({'batch_variable': variable, 'batch_gradients': grads,
+                                                                'batch_variables_hitory': batch_variable_history,
+                                                                'batch_grad_history': batch_grad_history,
+                                                                'history_ptr': history_ptr, 'batch_vari_norm': batch_vari_mom,
+                                                                'batch_grad_norm': batch_grad_mom, 'init_ops': init_ops}))
             return update_list
 
     def reset_optimizer(self):
@@ -851,15 +862,17 @@ class GRUNormHistory(MlpNormHistory):
                 self.rnn_w = tf.get_variable('softmax_w', [self.state_size, 19])
                 self.rnn_b = tf.get_variable('softmax_b', [19])
 
+            network_input = self.get_network_input(self.variable_history[0][0], self.grad_history[0][0], history_ptr=0)
+            self.network({'inputs': network_input, 'hidden_states': self.hidden_states[0][0], 'init': True})
+
     def network(self, args=None):
         with tf.name_scope('Optimizer_network'):
             activations = args['inputs']
             hidden_states = args['hidden_states']
-            reuse = args['reuse']
-            if not reuse:
+            init = args['init'] if 'init' in args else False
+            if init:
                 with tf.variable_scope('core'):
                     activations, hidden_states = self.rnn(activations, hidden_states)
-                    scope = tf.get_variable_scope().name
                     rnn_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='core')
                     self.optimizer_variables.extend(rnn_variables)
                     self.optimizer_variables.append(self.rnn_w)
@@ -878,76 +891,204 @@ class GRUNormHistory(MlpNormHistory):
             lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
             lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
             delta_x_step = lr_x_step_magnitude * lr_x_step_sign
+            if self.min_step is None:
+                lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
+                lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
+                lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
 
-            lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
-            lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
-            lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
+                lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
+                lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
+                lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
+                delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
+            else:
+                delta_lr = tf.constant(0.0)
+            return [delta_x_step, delta_lr, hidden_states]
 
-            lr_grad_step_sign = tf.slice(activations, [0, 17], [-1, -1], 'grad_step_sign')
-            lr_grad_step_sign = tf.nn.softmax(lr_grad_step_sign, 1)
-            lr_grad_step_sign = tf.matmul(lr_grad_step_sign, self.sign_dist)
-            delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
-            return [delta_x_step, delta_lr]
+    def get_network_input(self, variable_history, grad_history, history_ptr, vari_mom=None, grad_mom=None):
+
+        sorted_vari_history = self.sort_input({'inputs': variable_history,
+                                                           'history_ptr': history_ptr})
+        sorted_vari_history.set_shape(shape=variable_history.get_shape())
+        sorted_grad_history = self.sort_input({'inputs': grad_history,
+                                                       'history_ptr': history_ptr})
+        sorted_grad_history.set_shape(shape=grad_history.get_shape())
+
+        if self.use_momentums:
+            sorted_vari_history = tf.concat([sorted_vari_history, vari_mom], 1,
+                                            name='concat_vari_mom')
+            sorted_grad_history = tf.concat([sorted_grad_history, grad_mom], 1,
+                                            name='concat_grad_mom')
+
+        normalized_variable_history = self.normalize_values(sorted_vari_history)
+        normalized_grad_history = self.normalize_values(sorted_grad_history)
+
+        if self.gradient_sign_only:
+            normalized_grad_history = tf.sign(normalized_grad_history)
+
+        if self.gradients_only:
+            network_input = normalized_grad_history
+        else:
+            network_input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
+        return network_input
 
     def step(self, args=None):
         with tf.name_scope('mlp_x_optimizer_step'):
+            problem_no = args['problem_no']
             problem = args['problem']
             problem_variable_history = args['variable_history']
             problem_grad_history = args['grad_history']
             history_ptr = args['history_ptr']
-            problem_moving_avg = args['moving_avg']
+            problem_vari_mom = args['vari_mom']
+            problem_grad_mom = args['grad_mom']
             problem_hidden_states = args['hidden_states']
             x_next = list()
             deltas_list = []
-            i = 0
-            for variable, variable_flat, \
-                batch_variable_history, batch_variable_grad_history, \
-                batch_moving_avg, batch_hidden_states in zip(problem.variables, problem.variables_flat,
-                                                            problem_variable_history, problem_grad_history,
-                                                            problem_moving_avg, problem_hidden_states):
-                sorted_variable_history = self.sort_input({'inputs': batch_variable_history,
-                                                           'history_ptr': history_ptr})
+            def update(itr, loss, problem_variables, problem_variable_history, problem_grad_history, problem_vari_mom,
+                       problem_grad_mom, problem_hidden_states):
+                for batch_no, (variable, batch_variable_history, batch_variable_grad_history, batch_vari_mom, batch_grad_mom,
+                               batch_hidden_states) in enumerate(zip(problem_variables,
+                                                                           problem_variable_history, problem_grad_history,
+                                                                           problem_vari_mom, problem_grad_mom, problem_hidden_states)):
+                    network_input = self.get_network_input(batch_variable_history, batch_variable_grad_history,
+                                                           history_ptr, batch_vari_mom)
+                    deltas_x, deltas_g, problem_hidden_states[batch_no] = self.network({'inputs': network_input,
+                                                                            'hidden_states': batch_hidden_states})
+                    # if self.history_range is not None and self.history_range:
+                    #     batch_variable_history_range = tf.slice(sorted_variable_history, [0, 0],
+                    #                                             [-1, self.history_range])
+                    # else:
+                    if self.use_momentums:
+                        batch_variable_history_range = tf.concat([batch_variable_history, batch_vari_mom], axis=1)
+                    else:
+                        batch_variable_history_range = batch_variable_history
+                    max_values = tf.reduce_max(batch_variable_history_range, 1)
+                    min_values = tf.reduce_min(batch_variable_history_range, 1)
+                    max_values = tf.expand_dims(max_values, 1)
+                    min_values = tf.expand_dims(min_values, 1)
+                    diff = max_values - min_values
+                    ref = (max_values + min_values) / 2.0
 
-                sorted_grad_history = self.sort_input({'inputs': batch_variable_grad_history,
-                                                       'history_ptr': history_ptr})
-                normalized_variable_history = self.normalize_values(sorted_variable_history)
+                    default_step = diff
+                    if self.min_step is not None:
+                        if self.min_step_max:
+                            default_step = tf.maximum(diff, self.min_step)
+                        else:
+                            default_step = diff + self.min_step
+                    mean = tf.multiply(deltas_x, default_step) + deltas_g
+                    problem_variables[batch_no] = tf.add(ref, mean, 'new_points')
+                gradients = self.get_preprocessed_gradients(problem, problem_variables)
+                for i, (batch_variable, batch_variable_history, batch_variable_grad_history, batch_vari_mom, batch_grad_mom, gradient) \
+                        in enumerate(zip(problem_variables, problem_variable_history, problem_grad_history, problem_vari_mom, problem_grad_mom, gradients)):
+                    problem_variable_history[i] = tf.concat([batch_variable_history[:, 1:], batch_variable], axis=1)
+                    problem_grad_history[i] = tf.concat([batch_variable_grad_history[:, 1:], gradient], axis=1)
+                    if self.use_momentums:
+                        problem_vari_mom[i] = batch_vari_mom * self.momentum_alpha + batch_variable * self.momentum_alpha_inv
+                        problem_grad_mom[i] = batch_grad_mom * self.momentum_alpha + gradient * self.momentum_alpha_inv
+                # loss = self.loss({'problem': problem, 'x_next': problem_variables})
+                return itr + 1, loss, problem_variables, problem_variable_history, problem_grad_history, problem_vari_mom, problem_grad_mom, problem_hidden_states
 
-                if self.enable_moving_avg:
-                    sorted_grad_history = tf.concat([sorted_grad_history, batch_moving_avg], 1,
-                                                    name='concat_moving_avg')
 
-                normalized_grad_history = self.normalize_values(sorted_grad_history)
-
-                if self.gradient_sign_only:
-                    normalized_grad_history = tf.sign(normalized_grad_history)
-
-                normalized_variable_history = tf.reshape(normalized_variable_history, shape=tf.shape(batch_variable_history))
-                normalized_grad_history = tf.reshape(normalized_grad_history,
-                                                         shape=tf.shape(batch_variable_grad_history))
-                if self.gradients_only:
-                    input = normalized_grad_history
-                else:
-                    input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
-
-                deltas_x, deltas_g = self.network({'inputs': input, 'hidden_states': batch_hidden_states, 'reuse': i > 0})
-                deltas_list.append([deltas_x])
-                if self.history_range is not None and self.history_range:
-                    batch_variable_history_range = tf.slice(sorted_variable_history, [0, 0],
-                                                            [-1, self.history_range])
-                else:
-                    batch_variable_history_range = batch_variable_history
-                max_values = tf.reduce_max(batch_variable_history_range, 1)
-                min_values = tf.reduce_min(batch_variable_history_range, 1)
-                max_values = tf.expand_dims(max_values, 1)
-                min_values = tf.expand_dims(min_values, 1)
-                diff = max_values - min_values
-                ref = (max_values + min_values) / 2.0
-                mean = tf.multiply(deltas_x, diff) + deltas_g
-                new_points = tf.add(ref, mean, 'new_points')
-                new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
+            _, _, variables_next, variable_history_next, grad_history_next, problem_vari_mom_next, \
+            problem_grad_mom_next, hidden_states_next = tf.while_loop(
+                cond=lambda t, *_: t < 1,
+                body=update,
+                loop_vars=([0, 0, problem.variables_flat, problem_variable_history, problem_grad_history,
+                            problem_vari_mom, problem_grad_mom, problem_hidden_states]),
+                parallel_iterations=1,
+                swap_memory=True,
+                name="unroll")
+            # _, _, variables_next, variable_history_next, grad_history_next, problem_vari_mom_next, problem_grad_mom_next, hidden_state_next = \
+            #     update(0, 0, problem.variables_flat, problem_variable_history, problem_grad_history,
+            #                 problem_vari_mom, problem_grad_mom, problem_hidden_states)
+            for variable_next_flat, variable_orig in zip(variables_next, problem.variables):
+                new_points = problem.set_shape(variable_next_flat, like_variable=variable_orig, op_name='reshaped_new_points')
                 x_next.append(new_points)
-                i += 1
-            return {'x_next': x_next, 'deltas': deltas_list}
+            return {'x_next': x_next, 'deltas': deltas_list, 'variable_history_next': variable_history_next,
+                    'grad_history_next': grad_history_next, 'vari_mom_next': problem_vari_mom_next,
+                    'grad_mom_next':problem_grad_mom_next, 'hidden_states_next': hidden_states_next}
+
+    def update_history_ops(self, args):
+        batch_variables = args['batch_variable']
+        batch_gradients = args['batch_gradients']
+        batch_variables_history = args['batch_variables_hitory']
+        batch_grad_history = args['batch_grad_history']
+        history_ptr = args['history_ptr']
+        batch_vari_mom = args['batch_vari_mom']
+        batch_grad_mom = args['batch_grad_mom']
+        init_ops = args['init_ops']
+        variable_history_next = args['variable_history_next']
+        grad_history_next = args['grad_history_next']
+        vari_mom_next = args['vari_mom_next']
+        grad_mom_next = args['grad_mom_next']
+        mom_ops = []
+        history_ops = []
+        shape = batch_variables.shape[0].value
+        indices = [[i, history_ptr] for i in range(shape)]
+
+        if self.use_momentums:
+            # oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
+            # oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
+            oldest_history_slice = batch_variables
+            if init_ops:
+                updated_grad_mom = tf.tile(batch_gradients, [1, self.momentum_limit])
+                updated_vari_mom = tf.tile(batch_variables, [1, self.momentum_limit])
+            else:
+                updated_grad_mom = grad_mom_next
+                updated_vari_mom = vari_mom_next
+            mom_ops.append(tf.assign(batch_grad_mom, updated_grad_mom))
+            mom_ops.append(tf.assign(batch_vari_mom, updated_vari_mom))
+
+        with tf.control_dependencies(mom_ops):
+            if init_ops:
+                history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
+                history_ops.append(tf.scatter_nd_update(batch_grad_history, indices, tf.reshape(batch_gradients, [shape])))
+            else:
+                history_ops.append(tf.assign(batch_variables_history, variable_history_next))
+                history_ops.append(tf.assign(batch_grad_history, grad_history_next))
+        return history_ops
+
+    def updates(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_updates'):
+            x_next = args['x_next']
+            problem = args['problem']
+            problem_variables_history = args['variable_history']
+            problem_grad_history = args['grad_history']
+            problem_vari_mom = args['vari_mom']
+            problem_grad_mom = args['grad_mom']
+            history_ptr = args['history_ptr']
+            init_ops = args['init_ops']
+            variable_history_next, grad_history_next, vari_mom_next, grad_mom_next = None, None, None, None
+            if not init_ops:
+                variable_history_next = args['variable_history_next']
+                gard_history_next = args['grad_history_next']
+                if self.use_momentums:
+                    vari_mom_next = args['vari_mom_next']
+                    grad_mom_next = args['grad_mom_next']
+            update_list = [tf.cond(history_ptr < self.limit - 1,
+                                lambda: tf.assign_add(history_ptr, 1),
+                                lambda: tf.assign(history_ptr, 0))]
+            with tf.control_dependencies(update_list):
+                if not init_ops:
+                    update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
+                                   zip(problem.variables, x_next)])
+                flat_gradients = problem.get_gradients(x_next)
+                flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
+                for variable, grads, batch_variable_history, batch_grad_history, batch_vari_mom, batch_grad_mom in zip(flat_variables,
+                                                                                                       flat_gradients,
+                                                                                                       problem_variables_history,
+                                                                                                       problem_grad_history,
+                                                                                                       problem_vari_mom,
+                                                                                                       problem_grad_mom):
+                    update_list.extend(self.update_history_ops({'batch_variable': variable, 'batch_gradients': grads,
+                                                                'batch_variables_hitory': batch_variable_history,
+                                                                'batch_grad_history': batch_grad_history,
+                                                                'history_ptr': history_ptr, 'batch_vari_norm': batch_vari_mom,
+                                                                'batch_grad_norm': batch_grad_mom, 'init_ops': init_ops,
+                                                                 'variable_history_next': variable_history_next,
+        grad_history_next = args['grad_history_next']
+        vari_mom_next = args['vari_mom_next']
+        grad_mom_next = args['grad_mom_next']}))
+            return update_list
 
     def build(self):
         self.ops_step = []
@@ -959,16 +1100,17 @@ class GRUNormHistory(MlpNormHistory):
         self.ops_reset_optim = None
         self.ops_init = []
         self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
-        for problem, variable_history, grad_sign_history, history_ptr, moving_avg, hidden_states in zip(self.problems,
-                                                                                         self.variable_history,
-                                                                                         self.grad_history,
-                                                                                         self.history_ptr,
-                                                                                         self.moving_avg,
-                                                                                         self.hidden_states):
-            args = {'problem': problem, 'variable_history': variable_history,
+        for problem_no, (problem, variable_history, grad_sign_history, history_ptr, vari_mom, grad_mom, hidden_states) in enumerate(zip(self.problems,
+                                                                                                 self.variable_history,
+                                                                                       self.grad_history,
+                                                                                       self.history_ptr,
+                                                                                       self.vari_mom,
+                                                                                       self.grad_mom,
+                                                                                        self.hidden_states)):
+            args = {'problem_no': problem_no, 'problem': problem, 'variable_history': variable_history,
                     'grad_history': grad_sign_history, 'history_ptr': history_ptr,
                     'x_next': [variable.initialized_value() for variable in problem.variables],
-                    'init_ops': True, 'moving_avg': moving_avg, 'hidden_states': hidden_states}
+                    'init_ops': True, 'vari_mom': vari_mom, 'grad_mom': grad_mom, 'hidden_states': hidden_states}
             self.ops_init.append(self.updates(args))
             loss_curr = tf.log(self.loss(args) + 1e-20)
             step = self.step(args)
@@ -985,7 +1127,6 @@ class GRUNormHistory(MlpNormHistory):
             self.ops_reset_problem.append(reset)
         self.ops_reset_optim = self.reset_optimizer()
         self.init_saver_handle()
-
 
 class MlpHistoryGradNormMinStep(MlpNormHistory):
 

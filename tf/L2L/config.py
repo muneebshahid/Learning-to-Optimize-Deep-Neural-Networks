@@ -12,10 +12,10 @@ def common():
 
 def norm_history():
     args = common()
-    args['limit'] = 1
+    args['limit'] = 5
     args['grad_only'] = True
     args['grad_sign_only'] = False
-    args['use_momentum'] = True
+    args['use_momentum'] = False
     args['momentum_limit'] = 5 if args['use_momentum'] else None
     args['momentum_base'] = 1.2
     args['history_range'] = None
