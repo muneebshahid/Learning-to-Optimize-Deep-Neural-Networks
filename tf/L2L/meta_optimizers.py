@@ -829,6 +829,7 @@ class MlpNormHistory(Meta_Optimizer):
 
 
 class GRUNormHistory(MlpNormHistory):
+    unroll_len = None
     state_size = None
     hidden_states = None
     rnn = None
@@ -837,6 +838,7 @@ class GRUNormHistory(MlpNormHistory):
     def __init__(self, problems, path, args):
         super(GRUNormHistory, self).__init__(problems, path, args)
         self.state_size = args['state_size']
+        self.unroll_len = args['unroll_len']
         self.hidden_states = []
 
         # initialize for later use.
@@ -844,13 +846,15 @@ class GRUNormHistory(MlpNormHistory):
             # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
                 state_variable = []
-                for state in self.rnn.zero_state(batch_size, tf.float32):
-                    state_variable.append(tf.Variable(state, trainable=False))
-                return tuple(state_variable)
-
+                # for state in self.rnn.zero_state(batch_size, tf.float32):
+                # state_variable.append(tf.Variable(self.rnn.zero_state(batch_size, tf.float32), trainable=False))
+                # for state in self.rnn.zero_state(batch_size, tf.float32):
+                #     state_variable.append(tf.Variable(state, trainable=False))
+                # return tuple(state_variable)
+                return tf.Variable(self.rnn.zero_state(batch_size, tf.float32), trainable=False)
             self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
-            self.rnn = tf.contrib.rnn.MultiRNNCell(
-                [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+            # self.rnn = tf.contrib.rnn.MultiRNNCell(
+            #     [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
 
 
             with tf.variable_scope('hidden_states'):
@@ -862,7 +866,7 @@ class GRUNormHistory(MlpNormHistory):
                 self.rnn_w = tf.get_variable('softmax_w', [self.state_size, 19])
                 self.rnn_b = tf.get_variable('softmax_b', [19])
 
-            network_input = self.get_network_input(self.variable_history[0][0], self.grad_history[0][0], history_ptr=0)
+            network_input = self.get_network_input(self.variable_history[0][0], self.grad_history[0][0], 0, self.vari_mom[0][0], self.grad_mom[0][0])
             self.network({'inputs': network_input, 'hidden_states': self.hidden_states[0][0], 'init': True})
 
     def network(self, args=None):
@@ -950,7 +954,7 @@ class GRUNormHistory(MlpNormHistory):
                                                                            problem_variable_history, problem_grad_history,
                                                                            problem_vari_mom, problem_grad_mom, problem_hidden_states)):
                     network_input = self.get_network_input(batch_variable_history, batch_variable_grad_history,
-                                                           history_ptr, batch_vari_mom)
+                                                           history_ptr, batch_vari_mom, batch_grad_mom)
                     deltas_x, deltas_g, problem_hidden_states[batch_no] = self.network({'inputs': network_input,
                                                                             'hidden_states': batch_hidden_states})
                     # if self.history_range is not None and self.history_range:
@@ -984,15 +988,15 @@ class GRUNormHistory(MlpNormHistory):
                     if self.use_momentums:
                         problem_vari_mom[i] = batch_vari_mom * self.momentum_alpha + batch_variable * self.momentum_alpha_inv
                         problem_grad_mom[i] = batch_grad_mom * self.momentum_alpha + gradient * self.momentum_alpha_inv
-                # loss = self.loss({'problem': problem, 'x_next': problem_variables})
+                loss = tf.squeeze(loss + self.loss({'problem': problem, 'x_next': problem_variables}))
                 return itr + 1, loss, problem_variables, problem_variable_history, problem_grad_history, problem_vari_mom, problem_grad_mom, problem_hidden_states
 
 
             _, _, variables_next, variable_history_next, grad_history_next, problem_vari_mom_next, \
             problem_grad_mom_next, hidden_states_next = tf.while_loop(
-                cond=lambda t, *_: t < 1,
+                cond=lambda t, *_: t < self.unroll_len,
                 body=update,
-                loop_vars=([0, 0, problem.variables_flat, problem_variable_history, problem_grad_history,
+                loop_vars=([0, tf.constant(0.0), problem.variables_flat, problem_variable_history, problem_grad_history,
                             problem_vari_mom, problem_grad_mom, problem_hidden_states]),
                 parallel_iterations=1,
                 swap_memory=True,
@@ -1005,7 +1009,7 @@ class GRUNormHistory(MlpNormHistory):
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas': deltas_list, 'variable_history_next': variable_history_next,
                     'grad_history_next': grad_history_next, 'vari_mom_next': problem_vari_mom_next,
-                    'grad_mom_next':problem_grad_mom_next, 'hidden_states_next': hidden_states_next}
+                    'grad_mom_next': problem_grad_mom_next, 'hidden_states_next': hidden_states_next}
 
     def update_history_ops(self, args):
         batch_variables = args['batch_variable']
@@ -1057,38 +1061,58 @@ class GRUNormHistory(MlpNormHistory):
             problem_grad_mom = args['grad_mom']
             history_ptr = args['history_ptr']
             init_ops = args['init_ops']
-            variable_history_next, grad_history_next, vari_mom_next, grad_mom_next = None, None, None, None
-            if not init_ops:
-                variable_history_next = args['variable_history_next']
-                gard_history_next = args['grad_history_next']
-                if self.use_momentums:
-                    vari_mom_next = args['vari_mom_next']
-                    grad_mom_next = args['grad_mom_next']
-            update_list = [tf.cond(history_ptr < self.limit - 1,
-                                lambda: tf.assign_add(history_ptr, 1),
-                                lambda: tf.assign(history_ptr, 0))]
+            problem_hidden_states = args['hidden_states']
+
+            # Since we use *_next variables for ops other than init, no need to increment history_ptr
+            if init_ops:
+                update_list = [tf.cond(history_ptr < self.limit - 1,
+                                       lambda: tf.assign_add(history_ptr, 1),
+                                       lambda: tf.assign(history_ptr, 0))]
+                problem_variable_history_next = [None for variable in args['variable_history']]
+                problem_grad_history_next = [None for variable in args['grad_history']]
+                problem_vari_mom_next = [None for variable in args['vari_mom']]
+                problem_grad_mom_next = [None for variable in args['grad_mom']]
+            else:
+                problem_hidden_states_next = args['hidden_states_next']
+                problem_variable_history_next = args['variable_history_next']
+                problem_grad_history_next = args['grad_history_next']
+                problem_vari_mom_next = args['vari_mom_next']
+                problem_grad_mom_next = args['grad_mom_next']
+                update_list = [tf.assign(hidden_state, hidden_state_next) for hidden_state, hidden_state_next in
+                               zip(nest.flatten(problem_hidden_states), nest.flatten(problem_hidden_states_next))]
+
             with tf.control_dependencies(update_list):
                 if not init_ops:
                     update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
                                    zip(problem.variables, x_next)])
                 flat_gradients = problem.get_gradients(x_next)
                 flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
-                for variable, grads, batch_variable_history, batch_grad_history, batch_vari_mom, batch_grad_mom in zip(flat_variables,
-                                                                                                       flat_gradients,
-                                                                                                       problem_variables_history,
-                                                                                                       problem_grad_history,
-                                                                                                       problem_vari_mom,
-                                                                                                       problem_grad_mom):
+                for variable, grads, batch_variable_history, batch_grad_history, batch_vari_mom, \
+                    batch_grad_mom, batch_variable_history_next, batch_grad_history_next, \
+                    batch_vari_mom_next, batch_grad_mom_next in zip(flat_variables, flat_gradients, problem_variables_history,
+                                                                                              problem_grad_history,
+                                                                                              problem_vari_mom,
+                                                                                              problem_grad_mom,
+                                                                                              problem_variable_history_next,
+                                                                                              problem_grad_history_next,
+                                                                                              problem_vari_mom_next, problem_grad_mom_next,
+                                                                                              ):
                     update_list.extend(self.update_history_ops({'batch_variable': variable, 'batch_gradients': grads,
                                                                 'batch_variables_hitory': batch_variable_history,
                                                                 'batch_grad_history': batch_grad_history,
-                                                                'history_ptr': history_ptr, 'batch_vari_norm': batch_vari_mom,
-                                                                'batch_grad_norm': batch_grad_mom, 'init_ops': init_ops,
-                                                                 'variable_history_next': variable_history_next,
-        grad_history_next = args['grad_history_next']
-        vari_mom_next = args['vari_mom_next']
-        grad_mom_next = args['grad_mom_next']}))
+                                                                'history_ptr': history_ptr, 'batch_vari_mom': batch_vari_mom,
+                                                                'batch_grad_mom': batch_grad_mom, 'init_ops': init_ops,
+                                                                'variable_history_next': batch_variable_history_next,
+                                                                'grad_history_next': batch_grad_history_next,
+                                                                'vari_mom_next': batch_vari_mom_next,
+                                                                'grad_mom_next': batch_grad_mom_next}))
             return update_list
+
+    def reset_problem(self, args):
+        reset_ops = super(GRUNormHistory, self).reset_problem(args)
+        hidden_states = args['hidden_states']
+        reset_ops.append(tf.variables_initializer(hidden_states, name='reset_states'))
+        return reset_ops
 
     def build(self):
         self.ops_step = []
@@ -1115,6 +1139,11 @@ class GRUNormHistory(MlpNormHistory):
             loss_curr = tf.log(self.loss(args) + 1e-20)
             step = self.step(args)
             args['x_next'] = step['x_next']
+            args['variable_history_next'] = step['variable_history_next']
+            args['grad_history_next'] = step['grad_history_next']
+            args['vari_mom_next'] = step['vari_mom_next']
+            args['grad_mom_next'] = step['grad_mom_next']
+            args['hidden_states_next'] = step['hidden_states_next']
             args['init_ops'] = False
             updates = self.updates(args)
             loss_next = tf.log(self.loss(args) + 1e-20)

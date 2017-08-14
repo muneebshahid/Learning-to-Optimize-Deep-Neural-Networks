@@ -92,10 +92,10 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 1000000
+        epochs = 1000000 / 20
         epoch_interval = 500
         eval_interval = save_network_interval
-        validation_epochs = 10000
+        validation_epochs = 10000 / 20
         test_epochs = 500
         #########################
         learning_rate = 0.0001
@@ -112,8 +112,7 @@ with l2l.as_default():
         optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
-    # optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
-    optim_grad_norm = optim.optimizer_variables
+    optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
     optim_norm = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
     problem_norms = []

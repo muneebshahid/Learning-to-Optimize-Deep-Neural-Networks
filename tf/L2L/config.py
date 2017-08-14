@@ -13,9 +13,9 @@ def common():
 def norm_history():
     args = common()
     args['limit'] = 5
-    args['grad_only'] = True
+    args['grad_only'] = False
     args['grad_sign_only'] = False
-    args['use_momentum'] = False
+    args['use_momentum'] = True
     args['momentum_limit'] = 5 if args['use_momentum'] else None
     args['momentum_base'] = 1.2
     args['history_range'] = None
@@ -32,4 +32,5 @@ def norm_history():
 def gru_norm_history():
     args = norm_history()
     args['state_size'] = 5
+    args['unroll_len'] = args['limit'] * 4
     return args
