@@ -7,15 +7,16 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 1
     args['network_activation'] = tf.nn.relu
+    args['unroll_len'] = 1
     return args
 
 
 def norm_history():
     args = common()
-    args['limit'] = 5
-    args['grad_only'] = False
+    args['limit'] = 1
+    args['grad_only'] = True
     args['grad_sign_only'] = False
-    args['use_momentum'] = True
+    args['use_momentum'] = False
     args['momentum_limit'] = 5 if args['use_momentum'] else None
     args['momentum_base'] = 1.2
     args['history_range'] = None

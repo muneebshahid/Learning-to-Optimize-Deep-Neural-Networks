@@ -63,8 +63,7 @@ norm_problem_variables = [tf.norm(variable) for problem in optim.problems for va
 # input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 # input_grads_norm = [tf.norm(grad) for grad in input_grads]
 optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
-# optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
-optim_grad_norm = []
+optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
 
 # for i, grad in enumerate(grad_optim):
 #     name = 'w' if (i % 2) == 0 else 'b'

@@ -36,10 +36,10 @@ def create_batches_all(train=True):
         #         {'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 1000, 'minval': -10.0, 'maxval': 10.0}))
         # reset_limit.append([[50, 300], [100, 500]])
         # #
-        # # Rosenbrock
-        original_mirror(Rosenbrock, '_0_', None, -10, 10)
-        reset_limit.append([[50, 300], [500, 5000]])
-        reset_limit.append([[50, 300], [500, 5000]])
+        # Rosenbrock
+        # original_mirror(Rosenbrock, '_0_', None, -10, 10)
+        # reset_limit.append([[50, 300], [500, 5000]])
+        # reset_limit.append([[50, 300], [500, 5000]])
         # #
         # batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
         # reset_limit.append([[50, 300], [500, 5000]])
@@ -56,8 +56,8 @@ def create_batches_all(train=True):
         # batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
         # reset_limit.append([[50, 200], [100, 500]])
 
-        # batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
-        # reset_limit.append([[50, 200], [200, 10000]])
+        batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
+        reset_limit.append([[50, 200], [200, 10000]])
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant_initializer([100, 500, 600, 1000])}))
@@ -98,7 +98,7 @@ class Problem():
     io_handle = None
 
     def __init__(self, args={}):
-        self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else False
+        self.allow_gradients_of_gradients = args['gog'] if 'gog' in args else True
         self.dims = args['dims'] if 'dims' in args else 1
         self.dtype = args['dtype'] if 'dtype' in args else tf.float32
         self.meta = args['meta'] if 'meta' in args else True

@@ -33,7 +33,6 @@ with l2l.as_default():
     model_id = '10'
 
 
-
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
     # problem = problems.ElementwiseSquare(args={'dims': dim, 'dtype':tf.float32})
@@ -43,7 +42,8 @@ with l2l.as_default():
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
-    save_network_interval = 50000
+    config_args = config.gru_norm_history()
+    save_network_interval = 50000 / config_args['unroll_len']
     reset_epoch_ext = 20000
     if flag_optimizer == 'L2L':
         print('Using MLP')
@@ -52,11 +52,6 @@ with l2l.as_default():
         epoch_interval = 1000
         eval_interval = 5000
         validation_epochs = 500
-        test_epochs = 500
-        #########################
-        learning_rate = 0.0001
-        layer_width = 50
-        momentum = False
         #########################
 
         num_unrolls_per_epoch = 1
@@ -92,15 +87,10 @@ with l2l.as_default():
     else:
         print('Using MLP')
         #########################
-        epochs = 1000000 / 20
-        epoch_interval = 500
+        epochs = 1000000 / config_args['unroll_len']
+        epoch_interval = 500 / config_args['unroll_len']
         eval_interval = save_network_interval
-        validation_epochs = 10000 / 20
-        test_epochs = 500
-        #########################
-        learning_rate = 0.0001
-        layer_width = 50
-        momentum = False
+        validation_epochs = 10000 / config_args['unroll_len']
         #########################
 
         num_unrolls_per_epoch = 1
