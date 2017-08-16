@@ -306,6 +306,8 @@ class Mnist(Problem):
 
     training_data, test_data, validation_data = None, None, None
     conv = False
+    enable_l2_norm = False
+    weight_norm_loss = None
 
     def weight_variable(self, name, shape):
         initial = tf.truncated_normal(shape, stddev=0.1)
@@ -372,6 +374,9 @@ class Mnist(Problem):
 
                     self.create_variable('w_out', dims=[20, 10])
                     self.create_variable('b_out', dims=[1, 10])
+                self.weight_norm_loss = 0
+                for variable in self.variables:
+                    self.weight_norm_loss += tf.nn.l2_loss(variable)
         self.end_init()
 
 
@@ -416,7 +421,7 @@ class Mnist(Problem):
     def loss(self, variables, mode='train'):
         batch_images, batch_labels = self.get_batch(mode)
         output = self.network(batch_images, variables)
-        return self.__xent_loss(output, batch_labels)
+        return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0)
 
 
 class cifar10(Problem):
