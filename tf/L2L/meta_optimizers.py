@@ -885,7 +885,7 @@ class GRUNormHistory(MlpNormHistory):
                     self.optimizer_variables.append(self.rnn_w)
                     self.optimizer_variables.append(self.rnn_b)
             else:
-                with tf.variable_scope('optimizer_core/rnn', reuse=True):
+                with tf.variable_scope('optimizer_core/network', reuse=True):
                     activations, hidden_states = self.rnn(activations, hidden_states)
 
             activations = tf.add(tf.matmul(activations, self.rnn_w), self.rnn_b)
