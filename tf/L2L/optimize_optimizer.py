@@ -42,7 +42,7 @@ with l2l.as_default():
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
-    config_args = config.gru_norm_history()
+    config_args = config.rnn_norm_history()
     save_network_interval = 50000 / config_args['unroll_len']
     reset_epoch_ext = 20000
     if flag_optimizer == 'L2L':
@@ -59,7 +59,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.norm_history())
+        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.mlp_norm_history())
         optim.build()
         # print('Using L2L')
         # #########################
@@ -98,7 +98,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.gru_norm_history())
+        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.rnn_norm_history())
         optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)

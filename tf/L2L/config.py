@@ -11,7 +11,7 @@ def common():
     return args
 
 
-def norm_history():
+def mlp_norm_history():
     args = common()
     args['limit'] = 1
     args['grad_only'] = True
@@ -30,8 +30,9 @@ def norm_history():
     return args
 
 
-def gru_norm_history():
-    args = norm_history()
+def rnn_norm_history():
+    args = mlp_norm_history()
+    args['gru'] = False
     args['state_size'] = 5
     args['unroll_len'] = args['limit'] * 4
     return args

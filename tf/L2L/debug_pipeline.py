@@ -33,7 +33,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches, _ = problems.create_batches_all()
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.gru_norm_history())
+        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.rnn_norm_history())
     else:
         optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,

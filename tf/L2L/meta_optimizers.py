@@ -838,12 +838,14 @@ class GRUNormHistory(MlpNormHistory):
     state_size = None
     hidden_states = None
     rnn = None
+    gru = None
     rnn_w, rnn_b = None, None
 
     def __init__(self, problems, path, args):
         super(GRUNormHistory, self).__init__(problems, path, args)
         self.state_size = args['state_size']
         self.unroll_len = args['unroll_len']
+        self.gru = args['gru']
         self.hidden_states = []
 
         # initialize for later use.
@@ -851,13 +853,23 @@ class GRUNormHistory(MlpNormHistory):
             # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
                 state_variable = []
-                for state in self.rnn.zero_state(batch_size, tf.float32):
-                    state_variable.append(tf.Variable(state, trainable=False))
+                if self.gru:
+                    for state in self.rnn.zero_state(batch_size, tf.float32):
+                        state_variable.append(tf.Variable(state, trainable=False))
+                else:
+                    for state_c, state_h in self.rnn.zero_state(batch_size, tf.float32):
+                        state_variable.append(tf.contrib.rnn.LSTMStateTuple(tf.Variable(state_c, trainable=False),
+                                                                            tf.Variable(state_h, trainable=False)))
                 return tuple(state_variable)
                 # return tf.Variable(self.rnn.zero_state(batch_size, tf.float32), trainable=False)
             # self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
-            self.rnn = tf.contrib.rnn.MultiRNNCell(
-                [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+            if self.gru:
+                self.rnn = tf.contrib.rnn.MultiRNNCell(
+                    [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+            else:
+                self.rnn = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.LayerNormBasicLSTMCell(self.state_size) for _ in range(2)])
+                # [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+
 
 
             with tf.variable_scope('hidden_states'):
