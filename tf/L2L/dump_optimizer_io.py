@@ -15,7 +15,7 @@ problems, _ = problems.create_batches_all()
 
 model_id = '1000000'
 model_id += '_FINAL'
-load_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
+load_path = '../../../results/mnist/mlp/5/mom/350k/Mlp_model_350000'#util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
 
 epochs = 1
 num_optim_steps_per_epoch = 1
@@ -34,7 +34,7 @@ sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 optimizer.set_session(sess)
 optimizer.run_init()
-# optimizer.load(load_path)
+optimizer.load(load_path)
 
 flatten = lambda mat_array: [element for mat in mat_array for element in mat]
 network_in_dims = configs['network_in_dims']
@@ -49,8 +49,8 @@ output.append(sess.run([optimizer.network({'inputs': p_ones})[0], tf.reduce_mean
 output.append(sess.run([optimizer.network({'inputs': n_ones})[0], tf.reduce_mean(n_ones)]))
 
 for i in range(10000):
-    if (i + 1) % 100:
-        print(i)
+    if (i + 1) % 100 == 0:
+        print(i + 1)
     if is_rnn:
         print('')
     else:
