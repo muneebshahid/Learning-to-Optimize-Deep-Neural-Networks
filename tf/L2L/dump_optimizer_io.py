@@ -4,50 +4,58 @@ from preprocess import Preprocess
 import tensorflow as tf
 import numpy as np
 import util
-from matplotlib.pyplot import scatter, ion, show
+import config
 
 second_derivatives = False
 meta = True
 
 flag_optimizer = 'MLP'
 preprocess = [Preprocess.log_sign, {'k': 10}]
-problem = problems.Mnist(args={'gog': second_derivatives, 'meta': meta, 'mode': 'test'})
+problems, _ = problems.create_batches_all()
 
 model_id = '1000000'
 model_id += '_FINAL'
-load_path = None#util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
+load_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id)
 
 epochs = 1
 num_optim_steps_per_epoch = 1
 unroll_len = 1
 mean_optim_variables = None
-if flag_optimizer == 'MLP':
-    optimizer = meta_optimizers.MlpSimple(problem, path=load_path, args={'preprocess': preprocess})
-    mean_optim_variables = [tf.reduce_mean(optimizer.w_1), tf.reduce_mean(optimizer.w_out),
-                            tf.reduce_mean(optimizer.b_1), optimizer.b_out[0][0]]
+is_rnn = False
+if is_rnn:
+    configs = config.rnn_norm_history()
 else:
-    optimizer = meta_optimizers.l2l(problem, path=load_path, args={})
+    configs = config.mlp_norm_history()
 
-optimizer_inputs = optimizer.meta_optimizer_input_stack
-mean_problem_variables = [tf.reduce_mean(variable) for variable in problem.variables]
+optimizer = meta_optimizers.MlpNormHistory(problems=problems, path=None, args=configs)
+optimizer.build()
 
-flat_gradients, preprocessed_gradients, deltas_list = [], [], []
-iis = tf.InteractiveSession()
-iis.run(tf.global_variables_initializer())
-# optimizer.load(iis, load_path)
-
-print('Init Problem Vars: ', iis.run(mean_problem_variables))
-if mean_optim_variables is not None:
-    print('Init Optim Vars: ', iis.run(mean_optim_variables))
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+optimizer.set_session(sess)
+optimizer.run_init()
+# optimizer.load(load_path)
 
 flatten = lambda mat_array: [element for mat in mat_array for element in mat]
+network_in_dims = configs['network_in_dims']
 
-for gradient in optimizer_inputs:
-    output = optimizer.network(gradient)[0]
-    deltas_list.append(output)
-    flat_gradients.append(gradient['flat_gradient'])
-    preprocessed_gradients.append(gradient['preprocessed_gradient'])
-flat_gradients, preprocessed_gradients, deltas = iis.run([flat_gradients, preprocessed_gradients, deltas_list])
-final_array = np.hstack((np.hstack((flat_gradients, preprocessed_gradients)), deltas))
-np.savetxt(load_path + '_optim_io.txt', final_array, fmt='%7f')
+p_ones = tf.ones([1, network_in_dims], dtype=tf.float32)
+n_ones = -tf.ones([1, network_in_dims], dtype=tf.float32)
+random_ops = tf.random_uniform([1, network_in_dims], maxval=1.0, minval=-1.0)
+random_ops_mean = tf.reduce_mean(random_ops)
+output = []
+
+output.append(sess.run([optimizer.network({'inputs': p_ones})[0], tf.reduce_mean(p_ones)]))
+output.append(sess.run([optimizer.network({'inputs': n_ones})[0], tf.reduce_mean(n_ones)]))
+
+for i in range(10000):
+    if (i + 1) % 100:
+        print(i)
+    if is_rnn:
+        print('')
+    else:
+        output.append(sess.run([optimizer.network({'inputs': random_ops})[0], random_ops_mean]))
+
+output = np.array(output)
+np.savetxt(load_path + '_optim_io.txt', output, fmt='%7f')
 print('Results Dumped')
