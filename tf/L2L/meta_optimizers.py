@@ -1248,7 +1248,7 @@ class L2L2(Meta_Optimizer):
                 norm_grad_moving_avg.append(tf.get_variable(name='norm_grad_moving_avg_' + str(i) + '_' + str(j), initializer=variables_normalized))
                 relative_log_grad_mag.append(tf.get_variable(name='relative_log_grad_mag_' + str(i) + '_' + str(j), initializer=tf.zeros_initializer, shape=[variable_gradient.get_shape()[0], self.num_time_scales]))
                 relative_learning_rate.append(tf.get_variable(name='realtive_learning_rate' + str(i) + '_' + str(j), initializer=tf.zeros_initializer, shape=[variable_gradient.get_shape()[0], 1]))
-                learning_rate_moving_avg.append(tf.get_variable(name='variable_learning_rate' + str(i) + '_' + str(j), initializer=tf.ones([variable_gradient.get_shape()[0], 1]) * 1e-6))
+                learning_rate_moving_avg.append(tf.get_variable(name='variable_learning_rate' + str(i) + '_' + str(j), initializer=tf.ones([variable_gradient.get_shape()[0], 1]) * tf.log(1e-6)))
             self.grad_moving_avg.append(grad_moving_avg)
             self.avg_sq_grad_moving_avg.append(avg_sq_grad_moving_avg)
             self.norm_grad_moving_avg.append(norm_grad_moving_avg)
