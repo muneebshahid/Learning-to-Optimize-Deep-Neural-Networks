@@ -98,7 +98,7 @@ with l2l.as_default():
                                       # preprocess_args=preprocess,
                                       # learning_rate=learning_rate, layer_width=layer_width,
                                       # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.rnn_norm_history())
+        optim = meta_optimizers.L2L2(problem_batches, path=io_path, args=config.l2l2())
         optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)

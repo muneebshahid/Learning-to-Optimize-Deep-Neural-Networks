@@ -36,3 +36,13 @@ def rnn_norm_history():
     args['state_size'] = 5
     args['unroll_len'] = args['limit'] * 4
     return args
+
+def l2l2():
+    args = {}
+    args['meta_learning_rate'] = .00001
+    args['state_size'] = 5
+    args['unroll_len'] = 20
+    args['num_time_scales'] = 5
+    args['network_in_dims'] = args['num_time_scales'] * 2 + 1
+    args['network_out_dims'] = 5
+    return args

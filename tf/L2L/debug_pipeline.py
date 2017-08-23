@@ -33,7 +33,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     if flag_optim == 'mlp':
         problem_batches, _ = problems.create_batches_all()
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.rnn_norm_history())
+        optim = meta_optimizers.L2L2(problem_batches, path=io_path, args=config.l2l2())
     else:
         optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
                                                                  'state_size': 20, 'num_layers': 2,
@@ -47,7 +47,7 @@ if meta:
     updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
-    norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
+    # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
 
 
 else:
@@ -112,9 +112,8 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, l, run_step, hist, grad_norm = iis.run([meta_step, updates, loss,
+        _, _, l, run_step, grad_norm = iis.run([meta_step, updates, loss,
                                                                optim.ops_step,
-                                                               optim.grad_history,
                                                                optim_grad_norm])
         if True in iis.run(check_nan_prob):
             print('NAN found prob after, exit')

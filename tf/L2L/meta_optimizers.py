@@ -1176,6 +1176,366 @@ class GRUNormHistory(MlpNormHistory):
         self.ops_reset_optim = self.reset_optimizer()
         self.init_saver_handle()
 
+class L2L2(Meta_Optimizer):
+
+    grad_moving_avg = None
+    norm_grad_moving_avg = None
+    avg_sq_grad_moving_avg = None
+    relative_log_grad_mag = None
+    relative_learning_rate = None
+    learning_rate_moving_avg = None
+
+    network_in_dims = None
+    num_time_scales = None
+    hidden_states = None
+
+    def __init__(self, problems, path, args):
+        super(L2L2, self).__init__(problems, path, args)
+        self.network_in_dims = args['network_in_dims']
+        self.network_out_dims = args['network_out_dims']
+        self.state_size = args['state_size']
+        self.unroll_len = args['unroll_len']
+        self.num_time_scales = args['num_time_scales']
+        self.grad_moving_avg = []
+        self.norm_grad_moving_avg = []
+        self.avg_sq_grad_moving_avg = []
+        self.relative_log_grad_mag = []
+        self.relative_learning_rate = []
+        self.learning_rate_moving_avg = []
+        self.hidden_states = []
+
+        # initialize for later use.
+        with tf.variable_scope('optimizer_core'):
+            # Formulate variables for all states as it allows to use tf.assign() for states
+            def get_states(batch_size):
+                state_variable = []
+                for state in self.rnn.zero_state(batch_size, tf.float32):
+                    state_variable.append(tf.Variable(state, trainable=False))
+                return tuple(state_variable)
+                # return tf.Variable(self.rnn.zero_state(batch_size, tf.float32), trainable=False)
+
+            # self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+            self.rnn = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+            # [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+
+            with tf.variable_scope('hidden_states'):
+                for problem in self.problems:
+                    self.hidden_states.append([get_states(problem.get_shape(variable=variable)) for variable in
+                                               problem.variables_flat])
+
+            with tf.variable_scope('rnn_linear'):
+                self.rnn_w = tf.get_variable('softmax_w', [self.state_size, self.network_out_dims])
+                self.rnn_b = tf.get_variable('softmax_b', [self.network_out_dims])
+
+            network_input = tf.zeros([self.problems[0].variables[0].get_shape().as_list()[0], self.network_in_dims], dtype=tf.float32)
+            self.network({'inputs': network_input, 'hidden_states': self.hidden_states[0][0], 'init': True})
+
+        for i, problem in enumerate(problems):
+            init_problem_variables = [variable.initialized_value() for variable in problem.variables]
+            gradients = self.get_preprocessed_gradients(problem, variables=init_problem_variables)
+            grad_moving_avg = []
+            avg_sq_grad_moving_avg = []
+            norm_grad_moving_avg = []
+            relative_log_grad_mag = []
+            relative_learning_rate = []
+            learning_rate_moving_avg = []
+            for j, variable_gradient in enumerate(gradients):
+                variables_tiled = tf.tile(variable_gradient, [1, self.num_time_scales])
+                variables_tiled_sq = tf.square(variables_tiled)
+                variables_normalized = tf.divide(variables_tiled, tf.sqrt(variables_tiled_sq))
+                grad_moving_avg.append(tf.get_variable(name='norm_grad_avg_' + str(i) + '_' + str(j), initializer=variables_tiled))
+                avg_sq_grad_moving_avg.append(tf.get_variable(name='avg_sq_grad_moving_avg_' + str(i) + '_' + str(j), initializer=variables_tiled_sq))
+                norm_grad_moving_avg.append(tf.get_variable(name='norm_grad_moving_avg_' + str(i) + '_' + str(j), initializer=variables_normalized))
+                relative_log_grad_mag.append(tf.get_variable(name='relative_log_grad_mag_' + str(i) + '_' + str(j), initializer=tf.zeros_initializer, shape=[variable_gradient.get_shape()[0], self.num_time_scales]))
+                relative_learning_rate.append(tf.get_variable(name='realtive_learning_rate' + str(i) + '_' + str(j), initializer=tf.zeros_initializer, shape=[variable_gradient.get_shape()[0], 1]))
+                learning_rate_moving_avg.append(tf.get_variable(name='variable_learning_rate' + str(i) + '_' + str(j), initializer=tf.ones([variable_gradient.get_shape()[0], 1]) * 1e-6))
+            self.grad_moving_avg.append(grad_moving_avg)
+            self.avg_sq_grad_moving_avg.append(avg_sq_grad_moving_avg)
+            self.norm_grad_moving_avg.append(norm_grad_moving_avg)
+            self.relative_log_grad_mag.append(relative_log_grad_mag)
+            self.relative_learning_rate.append(relative_learning_rate)
+            self.learning_rate_moving_avg.append(learning_rate_moving_avg)
+
+
+    def network(self, args=None):
+        with tf.name_scope('Optimizer_Network'):
+            activations = args['inputs']
+            hidden_states = args['hidden_states']
+            init = args['init'] if 'init' in args else False
+            if init:
+                with tf.variable_scope('network'):
+                    activations, hidden_states = self.rnn(activations, hidden_states)
+                    rnn_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='optimizer_core/network')
+                    self.optimizer_variables.extend(rnn_variables)
+                    self.optimizer_variables.append(self.rnn_w)
+                    self.optimizer_variables.append(self.rnn_b)
+            else:
+                with tf.variable_scope('optimizer_core/network', reuse=True):
+                    activations, hidden_states = self.rnn(activations, hidden_states)
+
+            activations = tf.add(tf.matmul(activations, self.rnn_w), self.rnn_b)
+            variable_direction, attention_direction, delta_learning_rate, beta_grad, beta_scale = tf.expand_dims(activations[:, 0], 1), \
+                                                                                                  tf.expand_dims(activations[:, 1], 1), \
+                                                                                                  tf.expand_dims(activations[:, 2], 1), \
+                                                                                                  tf.expand_dims(activations[:, 3], 1), \
+                                                                                                  tf.expand_dims(activations[:, 4], 1)
+        return variable_direction, attention_direction, delta_learning_rate, beta_grad, beta_scale, hidden_states
+
+    def step(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_step'):
+            problem_no = args['problem_no']
+            problem = args['problem']
+            problem_grad_moving_avg = args['grad_moving_avg']
+            problem_avg_sq_grad_moving_avg = args['avg_sq_grad_moving_avg']
+            problem_norm_grad_moving_avg = args['norm_grad_moving_avg']
+            problem_relative_log_grad_mag = args['relative_log_grad_mag']
+            problem_relative_learning_rate = args['relative_learning_rate']
+            problem_learning_rate_moving_avg = args['learning_rate_moving_avg']
+            problem_hidden_states = args['hidden_states']
+            total_varialbes = 0
+            for variable in problem.variables_flat:
+                total_varialbes += variable.get_shape().as_list()[0]
+            x_next = list()
+
+            def get_beta_matrices(beta):
+                beta_sigmoid = tf.reshape(tf.sigmoid(beta), shape=[beta.get_shape().as_list()[0], 1])
+                def time_scale_entry(time_scale):
+                    return tf.pow(beta_sigmoid, tf.pow(2.0, time_scale))
+                beta_matrix = time_scale_entry(0)
+                for time_scale in range(self.num_time_scales)[1:]:
+                    beta_matrix = tf.concat([beta_matrix, time_scale_entry(time_scale)], axis=1)
+                #tf_beta_matrix = tf.convert_to_tensor(beta_matrix, dtype=tf.float32)#.constant(beta_matrix, shape=[tf.shape(beta)[0], self.num_time_scales], dtype=tf.float32)
+                return [beta_matrix, 1.0 - beta_matrix]
+
+            def update(itr, loss, problem_variables, problem_grad_moving_avg, problem_avg_sq_grad_moving_avg,
+                       problem_norm_grad_moving_avg, problem_relative_log_grad_mag,
+                       problem_relative_learning_rate, problem_learning_rate_moving_avg,
+                       problem_hidden_states):
+                attention_variables = []
+                betas_grad, betas_scale = [], []
+                learning_rates = []
+                learning_rates_sum = 0.0
+                for i, (variable, batch_norm_grad_moving_avg, batch_relative_log_grad_mag, batch_relative_learning_rate,
+                               batch_learning_rate_moving_avg, batch_hidden_states) \
+                                                    in enumerate(zip(problem_variables, problem_norm_grad_moving_avg,
+                                                                     problem_relative_log_grad_mag,
+                                                                     problem_relative_learning_rate,
+                                                                     problem_learning_rate_moving_avg,
+                                                                     problem_hidden_states)):
+                    network_inputs = tf.concat([batch_norm_grad_moving_avg, batch_relative_log_grad_mag, batch_relative_learning_rate], axis=1)
+                    variable_direction, attention_direction, delta_learning_rate, \
+                    beta_grad, beta_scale, problem_hidden_states[i] = self.network({'inputs': network_inputs, 'hidden_states': batch_hidden_states})
+                    number_variables = variable.get_shape().as_list()[0]
+
+                    learning_rate = batch_learning_rate_moving_avg + delta_learning_rate
+                    problem_learning_rate_moving_avg[i] = .7 * batch_learning_rate_moving_avg + .3 * learning_rate
+                    learning_rates.append(learning_rate)
+                    learning_rates_sum += tf.reduce_sum(learning_rate, axis=0)
+
+                    variable_delta = tf.exp(learning_rate) * variable_direction / tf.divide(
+                        tf.norm(variable_direction, ord='euclidean'), number_variables)
+                    attention_delta = tf.exp(learning_rate) * variable_direction / tf.divide(
+                        tf.norm(attention_direction, ord='euclidean'), number_variables)
+
+                    attention_variables.append(variable + variable_delta + attention_delta)
+                    problem_variables[i] = variable + variable_delta
+                    betas_grad.append(get_beta_matrices(beta_grad))
+                    betas_scale.append(get_beta_matrices(beta_scale))
+
+                original_shaped_variables = [problem.set_shape(flat_variable, i=variable_no, op_name='reshape_variable') for variable_no, flat_variable in enumerate(attention_variables)]
+                gradients = self.get_preprocessed_gradients(problem, original_shaped_variables)
+                average_learning_rate = learning_rates_sum / total_varialbes
+
+                for i, (batch_variable, batch_grad_moving_avg, batch_avg_sq_grad_moving_avg,
+                        batch_norm_grad_moving_avg, batch_gradient, beta_grad, beta_scale, learning_rate) \
+                        in enumerate(zip(problem_variables, problem_grad_moving_avg, problem_avg_sq_grad_moving_avg,
+                                         problem_norm_grad_moving_avg, gradients, betas_grad, betas_scale, learning_rates)):
+                    problem_grad_moving_avg[i] = batch_grad_moving_avg * beta_grad[0] + batch_gradient * beta_grad[1]
+                    problem_avg_sq_grad_moving_avg[i] = batch_avg_sq_grad_moving_avg * beta_scale[0] + tf.square(problem_grad_moving_avg[i]) * beta_scale[1]
+                    problem_norm_grad_moving_avg[i] = problem_grad_moving_avg[i] / tf.sqrt(problem_avg_sq_grad_moving_avg[i])
+                    log_avg_sq_grad_moving_avg = tf.log(problem_avg_sq_grad_moving_avg[i])
+                    mean_avg_sq_grad_moving_avg = tf.reduce_mean(log_avg_sq_grad_moving_avg, axis=1, keep_dims=True)
+                    problem_relative_log_grad_mag[i] = log_avg_sq_grad_moving_avg - mean_avg_sq_grad_moving_avg
+                    problem_relative_learning_rate[i] = learning_rate - average_learning_rate
+                loss = tf.squeeze(loss + self.loss({'problem': problem, 'x_next': original_shaped_variables}))
+
+                return itr + 1, loss, problem_variables, problem_grad_moving_avg, problem_avg_sq_grad_moving_avg, \
+                       problem_norm_grad_moving_avg, problem_relative_log_grad_mag, problem_relative_learning_rate, \
+                       problem_learning_rate_moving_avg, problem_hidden_states
+
+
+            _, _, problem_variables_next, problem_grad_moving_avg_next, \
+            problem_avg_sq_grad_moving_avg_next, problem_norm_grad_moving_avg_next,\
+            problem_relative_log_grad_mag_next, problem_relative_learning_rate_next,\
+            problem_learning_rate_moving_avg_next, problem_hidden_states_next = tf.while_loop(
+                cond=lambda t, *_: t < self.unroll_len,
+                body=update,
+                loop_vars=([0, tf.constant(0.0), problem.variables_flat, problem_grad_moving_avg,
+                            problem_avg_sq_grad_moving_avg, problem_norm_grad_moving_avg,
+                            problem_relative_log_grad_mag, problem_relative_learning_rate,
+                            problem_learning_rate_moving_avg, problem_hidden_states]),
+                parallel_iterations=1,
+                swap_memory=True,
+                name="unroll")
+            # _, _, problem_variables_next, problem_grad_moving_avg_next, \
+            # problem_avg_sq_grad_moving_avg_next, problem_norm_grad_moving_avg_next, \
+            # problem_relative_log_grad_mag_next, problem_relative_learning_rate_next, \
+            # problem_learning_rate_moving_avg_next, problem_hidden_states_next = update(0, tf.constant(0.0), problem.variables_flat, problem_grad_moving_avg,
+            #             problem_avg_sq_grad_moving_avg, problem_norm_grad_moving_avg,
+            #             problem_relative_log_grad_mag, problem_relative_learning_rate,
+            #             problem_learning_rate_moving_avg, problem_hidden_states)
+            for variable_next_flat, variable_orig in zip(problem_variables_next, problem.variables):
+                new_points = problem.set_shape(variable_next_flat, like_variable=variable_orig, op_name='reshaped_new_points')
+                x_next.append(new_points)
+            return {'x_next': x_next,
+                    'grad_moving_avg_next': problem_grad_moving_avg_next,
+                    'avg_sq_grad_moving_avg_next': problem_avg_sq_grad_moving_avg_next,
+                    'norm_grad_moving_avg_next': problem_norm_grad_moving_avg_next,
+                    'relative_log_grad_mag_next': problem_relative_log_grad_mag_next,
+                    'relative_learning_rate_next': problem_relative_learning_rate_next,
+                    'learning_rate_moving_avg_next': problem_learning_rate_moving_avg_next,
+                    'hidden_states_next': problem_hidden_states_next}
+
+    def run_reset(self, index=None, optimizer=False):
+        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+        self.session.run(reset_ops)
+        if optimizer:
+            self.session.run(self.ops_reset_optim)
+
+    def run_init(self, args=None):
+        return
+
+    def updates(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_updates'):
+            problem = args['problem']
+            problem_grad_moving_avg = args['grad_moving_avg']
+            problem_avg_sq_grad_moving_avg = args['avg_sq_grad_moving_avg']
+            problem_norm_grad_moving_avg = args['norm_grad_moving_avg']
+            problem_relative_log_grad_mag = args['relative_log_grad_mag']
+            problem_relative_learning_rate = args['relative_learning_rate']
+            problem_learning_rate_moving_avg = args['learning_rate_moving_avg']
+            problem_hidden_states = args['hidden_states']
+
+            x_next = args['x_next']
+            problem_grad_moving_avg_next = args['grad_moving_avg_next']
+            problem_avg_sq_grad_moving_avg_next = args['avg_sq_grad_moving_avg_next']
+            problem_norm_grad_moving_avg_next = args['norm_grad_moving_avg_next']
+            problem_relative_log_grad_mag_next = args['relative_log_grad_mag_next']
+            problem_relative_learning_rate_next = args['relative_learning_rate_next']
+            problem_learning_rate_moving_avg_next = args['learning_rate_moving_avg_next']
+            problem_hidden_states_next = args['hidden_states_next']
+
+            update_list = [tf.assign(hidden_state, hidden_state_next) for hidden_state, hidden_state_next in
+                           # zip(self.hidden_states[0], problem_hidden_states_next)]
+                           zip(nest.flatten(problem_hidden_states), nest.flatten(problem_hidden_states_next))]
+
+            with tf.control_dependencies(update_list):
+                update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
+                               zip(problem.variables, x_next)])
+                flat_gradients = problem.get_gradients(x_next)
+                flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
+                for (variable, grads, batch_grad_moving_avg, batch_grad_moving_avg_next,
+                    batch_avg_sq_grad_moving_avg, batch_avg_sq_grad_moving_avg_next,
+                    batch_norm_grad_moving_avg, batch_norm_grad_moving_avg_next,
+                    batch_relative_log_grad_mag, batch_relative_log_grad_mag_next,
+                    batch_relative_learning_rate, batch_relative_learning_rate_next,
+                    batch_learning_rate_moving_avg, batch_learning_rate_moving_avg_next) in zip(flat_variables, flat_gradients,
+                                                                    problem_grad_moving_avg, problem_grad_moving_avg_next,
+                                                                    problem_avg_sq_grad_moving_avg, problem_avg_sq_grad_moving_avg_next,
+                                                                    problem_norm_grad_moving_avg, problem_norm_grad_moving_avg_next,
+                                                                    problem_relative_log_grad_mag, problem_relative_log_grad_mag_next,
+                                                                    problem_relative_learning_rate, problem_relative_learning_rate_next,
+                                                                    problem_learning_rate_moving_avg, problem_learning_rate_moving_avg_next):
+                    update_list.append(tf.assign(batch_grad_moving_avg, batch_grad_moving_avg_next))
+                    update_list.append(tf.assign(batch_avg_sq_grad_moving_avg, batch_avg_sq_grad_moving_avg_next))
+                    update_list.append(tf.assign(batch_norm_grad_moving_avg, batch_norm_grad_moving_avg_next))
+                    update_list.append(tf.assign(batch_relative_log_grad_mag, batch_relative_log_grad_mag_next))
+                    update_list.append(tf.assign(batch_relative_learning_rate, batch_relative_learning_rate_next))
+                    update_list.append(tf.assign(batch_learning_rate_moving_avg, batch_learning_rate_moving_avg_next))
+            return update_list
+
+    def reset_problem(self, args):
+        reset_ops = super(L2L2, self).reset_problem(args['problem'])
+        hidden_states = args['hidden_states']
+        avg_sq_grad_moving_avg = args['avg_sq_grad_moving_avg']
+        norm_grad_moving_avg = args['norm_grad_moving_avg']
+        relative_log_grad_mag = args['relative_log_grad_mag']
+        relative_learning_rate = args['relative_learning_rate']
+        learning_rate_moving_avg = args['learning_rate_moving_avg']
+        reset_ops.append(tf.variables_initializer(nest.flatten(hidden_states), name='reset_states'))
+        reset_ops.append(tf.variables_initializer(avg_sq_grad_moving_avg))
+        reset_ops.append(tf.variables_initializer(norm_grad_moving_avg))
+        reset_ops.append(tf.variables_initializer(relative_log_grad_mag))
+        reset_ops.append(tf.variables_initializer(relative_learning_rate))
+        reset_ops.append(tf.variables_initializer(learning_rate_moving_avg))
+        return reset_ops
+
+    def run(self, args=None):
+        if args['train']:
+            ops_meta_step = self.ops_meta_step
+        else:
+            ops_meta_step = []
+        start = timer()
+        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        return timer() - start, np.array(op_loss), np.array(pr_loss)
+
+    def loss(self, args=None):
+        with tf.name_scope('Problem_Loss'):
+            problem = args['problem']
+            variables = args['x_next'] if 'x_next' in args else problem.variables
+            return problem.loss(variables)
+
+    def build(self):
+        self.ops_step = []
+        self.ops_updates = []
+        self.ops_loss = []
+        self.ops_meta_step = []
+        self.ops_final_loss = 0
+        self.ops_reset_problem = []
+        self.ops_reset_optim = None
+        self.ops_init = []
+        self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
+        for problem_no, (problem, problem_grad_moving_avg, problem_avg_sq_grad_moving_avg, problem_norm_grad_moving_avg,
+                         problem_relative_log_grad_mag, problem_relative_learning_rate,
+                         problem_learning_rate_moving_avg, problem_hidden_states) in enumerate(zip(self.problems,
+                                                                    self.grad_moving_avg,
+                                                                    self.avg_sq_grad_moving_avg,
+                                                                    self.norm_grad_moving_avg,
+                                                                    self.relative_log_grad_mag,
+                                                                    self.relative_learning_rate,
+                                                                    self.learning_rate_moving_avg,
+                                                                            self.hidden_states)):
+
+            args = {'problem_no': problem_no, 'problem': problem, 'grad_moving_avg': problem_grad_moving_avg,
+                    'avg_sq_grad_moving_avg': problem_avg_sq_grad_moving_avg,
+                    'norm_grad_moving_avg': problem_norm_grad_moving_avg,
+                    'relative_log_grad_mag': problem_relative_log_grad_mag,
+                    'relative_learning_rate': problem_relative_learning_rate,
+                    'learning_rate_moving_avg': problem_learning_rate_moving_avg,
+                    'hidden_states': problem_hidden_states}
+            loss_curr = tf.log(self.loss(args) + 1e-20)
+            step = self.step(args)
+            args['x_next'] = step['x_next']
+            args['grad_moving_avg_next'] = step['grad_moving_avg_next']
+            args['avg_sq_grad_moving_avg_next'] = step['avg_sq_grad_moving_avg_next']
+            args['norm_grad_moving_avg_next'] = step['norm_grad_moving_avg_next']
+            args['relative_log_grad_mag_next'] = step['relative_log_grad_mag_next']
+            args['relative_learning_rate_next'] = step['relative_learning_rate_next']
+            args['learning_rate_moving_avg_next'] = step['learning_rate_moving_avg_next']
+            args['hidden_states_next'] = step['hidden_states_next']
+            updates = self.updates(args)
+            loss_next = tf.log(self.loss(args) + 1e-20)
+            reset = self.reset_problem(args)
+            self.ops_step.append(step)
+            self.ops_updates.append(updates)
+            loss = tf.squeeze(loss_next - loss_curr)
+            self.ops_loss.append(loss)
+            self.ops_meta_step.append(self.minimize(loss))
+            self.ops_reset_problem.append(reset)
+        self.ops_reset_optim = self.reset_optimizer()
+        self.init_saver_handle()
+
+
 class MlpHistoryGradNormMinStep(MlpNormHistory):
 
     sign_dist = None
