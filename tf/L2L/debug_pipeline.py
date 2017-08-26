@@ -5,7 +5,6 @@ import numpy as np
 import problems
 import meta_optimizers
 from preprocess import Preprocess
-import matplotlib.pyplot as plt
 import numpy as np
 import config
 

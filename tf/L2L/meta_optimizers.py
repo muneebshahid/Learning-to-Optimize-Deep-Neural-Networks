@@ -542,22 +542,26 @@ class MlpNormHistory(Meta_Optimizer):
             self.session.run(self.ops_reset_optim)
         self.run_init({'problem_index': index})
 
-    @staticmethod
-    def normalize_values(history_tensor, switch=0):
+
+    def normalize_values(self, history_tensor, squared_history,switch=0):
+        epsilon = 1e-15
         with tf.name_scope('Input_Normalizer'):
-            if switch == 0:
-                norm = tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True)
-                ones = tf.ones(tf.shape(norm))
-                divisor = tf.where(tf.equal(norm, 0.0), ones, norm)
-                normalized_values = tf.divide(history_tensor, divisor)
+            if self.normalize_with_sq_grad:
+                normalized_values = tf.divide(history_tensor, tf.sqrt(squared_history) + epsilon)
             else:
-                max_values = tf.reduce_max(history_tensor, 1)
-                min_values = tf.reduce_min(history_tensor, 1)
-                max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
-                min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
-                diff = (max_values - min_values) + 1e-15
-                # normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
-                normalized_values = (history_tensor - min_values) / diff
+                if switch == 0:
+                    norm = tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True)
+                    ones = tf.ones(tf.shape(norm))
+                    divisor = tf.where(tf.equal(norm, 0.0), ones, norm)
+                    normalized_values = tf.divide(history_tensor, divisor)
+                else:
+                    max_values = tf.reduce_max(history_tensor, 1)
+                    min_values = tf.reduce_min(history_tensor, 1)
+                    max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
+                    min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+                    diff = (max_values - min_values) + epsilon
+                    # normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+                    normalized_values = (history_tensor - min_values) / diff
             return normalized_values
 
     def sort_input(self, args):
@@ -624,8 +628,8 @@ class MlpNormHistory(Meta_Optimizer):
                                                                                                     problem_vari_hist,
                                                                                                     problem_grad_hist, problem_sq_vari_hist, problem_sq_grad_hist):
 
-                normalized_variable_history = self.normalize_values(batch_vari_hist)
-                normalized_grad_history = self.normalize_values(batch_grad_hist)
+                normalized_variable_history = self.normalize_values(batch_vari_hist, batch_sq_vari_hist)
+                normalized_grad_history = self.normalize_values(batch_grad_hist, batch_sq_grad_hist)
 
                 if self.gradient_sign_only:
                     normalized_grad_history = tf.sign(normalized_grad_history)
@@ -683,8 +687,13 @@ class MlpNormHistory(Meta_Optimizer):
         history_ops = []
 
         if init_ops:
-            history_ops.append(tf.assign(batch_vari_hist, tf.tile(batch_variables, [1, self.limit])))
-            history_ops.append(tf.assign(batch_grad_hist, tf.tile(batch_gradients, [1, self.limit])))
+            tiled_batch_variables = tf.tile(batch_variables, [1, self.limit])
+            tiled_batch_grads = tf.tile(batch_gradients, [1, self.limit])
+            history_ops.append(tf.assign(batch_vari_hist, tiled_batch_variables))
+            history_ops.append(tf.assign(batch_grad_hist, tiled_batch_grads))
+            if self.normalize_with_sq_grad:
+                history_ops.append(tf.assign(batch_sq_vari_hist, tf.square(tiled_batch_variables)))
+                history_ops.append(tf.assign(batch_sq_grad_hist, tf.square(tiled_batch_grads)))
         else:
             if self.use_momentums:
                 # oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
@@ -696,14 +705,10 @@ class MlpNormHistory(Meta_Optimizer):
                 history_ops.append(tf.assign(batch_vari_hist, updated_vari_mom))
                 if self.normalize_with_sq_grad:
                     with tf.control_dependencies(history_ops):
-                        if init_ops:
-                            updated_sq_grad_mom = tf.square(updated_grad_mom)
-                            updated_sq_vari_mom = tf.square(updated_vari_mom)
-                        else:
-                            updated_sq_grad_mom = batch_sq_grad_hist * self.momentum_alpha + tf.square(updated_grad_mom) * self.momentum_alpha_inv
-                            updated_sq_vari_mom = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_mom) * self.momentum_alpha_inv
-                        history_ops.append(tf.assign(batch_sq_grad_hist, updated_sq_grad_mom))
+                        updated_sq_vari_mom = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_mom) * self.momentum_alpha_inv
+                        updated_sq_grad_mom = batch_sq_grad_hist * self.momentum_alpha + tf.square(updated_grad_mom) * self.momentum_alpha_inv
                         history_ops.append(tf.assign(batch_sq_vari_hist, updated_sq_vari_mom))
+                        history_ops.append(tf.assign(batch_sq_grad_hist, updated_sq_grad_mom))
             else:
                 updated_batch_variables_history = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
                 updated_batch_grad_history = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)

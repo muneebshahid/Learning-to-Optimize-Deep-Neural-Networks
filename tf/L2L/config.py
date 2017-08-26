@@ -24,7 +24,7 @@ def mlp_norm_history():
     args['min_step_max'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
-    args['normalize_with_sq_grad'] = False
+    args['normalize_with_sq_grad'] = True
     return args
 
 
