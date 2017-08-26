@@ -14,15 +14,13 @@ with l2l.as_default():
 
     second_derivatives = False
     restore_network = False
-    io_path = ''
+    io_path = None
     save_network = True
 
-    epochs = None
+
     num_optim_steps_per_epoch = None
     unroll_len = None
-    epoch_interval = None
-    eval_interval = None
-    validation_epochs = None
+
     test_epochs = None
     learning_rate = None
     layer_width = None
@@ -42,64 +40,21 @@ with l2l.as_default():
     eval_loss = problem.loss(problem.variables, 'validation')
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
-    config_args = config.rnn_norm_history()
+    config_args = config.mlp_norm_history()
     save_network_interval = 50000 / config_args['unroll_len']
     reset_epoch_ext = 20000
-    if flag_optimizer == 'L2L':
-        print('Using MLP')
-        #########################
-        epochs = 15000
-        epoch_interval = 1000
-        eval_interval = 5000
-        validation_epochs = 500
-        #########################
+    #########################
+    epochs = int(1000000 / config_args['unroll_len'])
+    epoch_interval = int(500 / config_args['unroll_len'])
+    eval_interval = int(save_network_interval)
+    validation_epochs = int(10000 / config_args['unroll_len'])
+    #########################
 
-        num_unrolls_per_epoch = 1
+    num_unrolls_per_epoch = 1
+    if restore_network:
         io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-                                      # preprocess_args=preprocess,
-                                      # learning_rate=learning_rate, layer_width=layer_width,
-                                      # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.GRUNormHistory(problem_batches, path=io_path, args=config.mlp_norm_history())
-        optim.build()
-        # print('Using L2L')
-        # #########################
-        # epochs = 10000
-        # num_optim_steps_per_epoch = 100
-        # unroll_len = 20
-        # epoch_interval = 1
-        # eval_interval = 10000
-        # validation_epochs = 5
-        # test_epochs = 5
-        # #########################
-        # num_unrolls_per_epoch = num_optim_steps_per_epoch // unroll_len
-        # io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-        #                               # preprocess_args=preprocess,
-        #                               # learning_rate=learning_rate, layer_width=layer_width,
-        #                               # momentum=momentum, second_derivative=second_derivatives)
-        #
-        # optim = meta_optimizers.l2l(problem, path=None, args={'optim_per_epoch': num_optim_steps_per_epoch,
-        #                                                          'state_size': 20, 'num_layers': 2,
-        #                                                          'unroll_len': unroll_len,
-        #                                                          'learning_rate': 0.001,
-        #                                                          'meta_learning_rate': 0.01,
-        #                                                           'preprocess': preprocess})
-        # optim.build()
-    else:
-        print('Using MLP')
-        #########################
-        epochs = 1000000 / config_args['unroll_len']
-        epoch_interval = 500 / config_args['unroll_len']
-        eval_interval = save_network_interval
-        validation_epochs = 10000 / config_args['unroll_len']
-        #########################
-
-        num_unrolls_per_epoch = 1
-        io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-                                      # preprocess_args=preprocess,
-                                      # learning_rate=learning_rate, layer_width=layer_width,
-                                      # momentum=momentum) if restore_network else None
-        optim = meta_optimizers.L2L2(problem_batches, path=io_path, args=config.l2l2())
-        optim.build()
+    optim = meta_optimizers.MlpNormHistory(problem_batches, path=io_path, args=config.mlp_norm_history())
+    optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]

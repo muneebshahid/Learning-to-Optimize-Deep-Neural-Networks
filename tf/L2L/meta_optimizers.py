@@ -487,7 +487,7 @@ class MlpNormHistory(Meta_Optimizer):
 
             if self.use_momentums:
                 alpha = []
-                for i in np.linspace(1, 10, self.limit, dtype=np.int32):
+                for i in np.linspace(1, 17, self.limit, dtype=np.int32):
                     alpha.append(1 / np.power(self.momentum_base, i))
                 self.momentum_alpha = tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
                 self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)

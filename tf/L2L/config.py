@@ -14,11 +14,11 @@ def common():
 def mlp_norm_history():
     args = common()
     args['limit'] = 6
-    args['grad_only'] = True
+    args['grad_only'] = False
     args['grad_sign_only'] = False
     args['use_momentum'] = True
     args['momentum_limit'] = 5 if args['use_momentum'] else None
-    args['momentum_base'] = 1.2
+    args['momentum_base'] = 1.125
     args['history_range'] = None
     args['min_step'] = 1e-4
     args['min_step_max'] = False
@@ -32,7 +32,7 @@ def rnn_norm_history():
     args = mlp_norm_history()
     args['gru'] = False
     args['state_size'] = 5
-    args['unroll_len'] = args['limit'] * 4
+    args['unroll_len'] = 20
     return args
 
 def l2l2():
