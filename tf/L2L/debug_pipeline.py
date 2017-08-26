@@ -31,17 +31,9 @@ flag_optim = 'mlp'
 problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
-    if flag_optim == 'mlp':
-        problem_batches, _ = problems.create_batches_all()
-        optim = meta_optimizers.L2L2(problem_batches, path=io_path, args=config.l2l2())
-    else:
-        optim = meta_optimizers.l2l(problem, path=None, args={'second_derivatives': False,
-                                                                 'state_size': 20, 'num_layers': 2,
-                                                                 'unroll_len': 20,
-                                                                 'learning_rate': 0.001,
-                                                                 'meta_learning_rate': 0.00001,
-                                                                  'optim_per_epoch': 1,
-                                                                 'preprocess': preprocess})
+
+    problem_batches, _ = problems.create_batches_all()
+    optim = meta_optimizers.MlpNormHistory(problem_batches, path=io_path, args=config.mlp_norm_history())
 
     optim.build()
     updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step

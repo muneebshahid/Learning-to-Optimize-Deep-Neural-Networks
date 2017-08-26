@@ -54,7 +54,7 @@ with l2l.as_default():
         optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars/mnist_variables')
         optim_meta.run_init()
         l = []
-        for i, (problem, problem_variables_history) in enumerate(zip(optim_meta.problems, optim_meta.variable_history)):
+        for i, (problem, problem_variables_history) in enumerate(zip(optim_meta.problems, optim_meta.vari_hist)):
             name_prefix = problem.__class__.__name__ + "_" + str(i)
             with tf.name_scope(name_prefix):
                 loss = tf.squeeze(problem.loss(problem.variables))
