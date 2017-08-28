@@ -41,12 +41,11 @@ with l2l.as_default():
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
     config_args = config.mlp_norm_history()
-    save_network_interval = 50000 / config_args['unroll_len']
     reset_epoch_ext = 20000
     #########################
     epochs = int(1000000 / config_args['unroll_len'])
     epoch_interval = int(500 / config_args['unroll_len'])
-    eval_interval = int(save_network_interval)
+    eval_interval = int( 50000 / config_args['unroll_len'])
     validation_epochs = int(10000 / config_args['unroll_len'])
     #########################
 
@@ -126,6 +125,7 @@ with l2l.as_default():
                 mean_mats_values_list = list()
 
             if (epoch + 1) % eval_interval == 0:
+                potential_nan = False
                 print('--- VALIDATION ---')
                 total_eval_loss = 0
                 total_eval_time = 0
@@ -133,14 +133,20 @@ with l2l.as_default():
                     time_eval, _, loss_eval = optim.run({'train': False})
                     total_eval_loss += loss_eval
                     total_eval_time += time_eval
-                avg_eval_loss = np.log10(total_eval_loss / validation_epochs)
-                avg_eval_time = total_eval_time / validation_epochs
-                util.write_update(avg_eval_loss, avg_eval_time)
-                print('VALIDATION LOSS: ', avg_eval_loss)
-            if (epoch + 1) % save_network_interval == 0:
-                print('SAVING NETWORK')
-                save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
-                optim.save(save_path)
+                    eval_norms = np.array(sess.run(problem_norms))
+                    check = np.sum(np.where(eval_norms > 1e4))
+                    if check > 0:
+                        potential_nan = True
+                        print('Potential Nan')
+                        break
+                if not potential_nan:
+                    avg_eval_loss = np.log10(total_eval_loss / validation_epochs)
+                    avg_eval_time = total_eval_time / validation_epochs
+                    util.write_update(avg_eval_loss, avg_eval_time)
+                    print('VALIDATION LOSS: ', avg_eval_loss)
+                    print('SAVING NETWORK')
+                    save_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=str(epoch + 1))
+                    optim.save(save_path)
                 # print('TEST')
                 # loss_test_total = 0
                 # for eval_epoch in range(test_epochs):
