@@ -490,12 +490,11 @@ class MlpNormHistory(Meta_Optimizer):
 
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
-            if self.use_momentums:
-                alpha = []
-                for i in np.linspace(1, 17, self.limit, dtype=np.int32):
-                    alpha.append(1 / np.power(self.momentum_base, i))
-                self.momentum_alpha = tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
-                self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
+            alpha = []
+            for i in np.linspace(1, 17, self.limit, dtype=np.int32):
+                alpha.append(1 / np.power(self.momentum_base, i))
+            self.momentum_alpha = tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
+            self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
 
             self.guide_step, self.vari_hist, self.grad_hist, \
             self.grad_mom, self.vari_mom, self.sq_vari_hist, self.sq_grad_hist, self.dist_mv_avg = [], [], [], [], [], [], [], []
@@ -726,32 +725,32 @@ class MlpNormHistory(Meta_Optimizer):
                     tiled_diff = tf.tile(diff, [1, self.limit])
                     history_ops.append(tf.assign(batch_dist_mvg_avg, tiled_diff))
         else:
-            updated_vari_mom = None
+            updated_vari_hist = None
             if self.use_momentums:
                 # oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
                 # oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
                 oldest_history_slice = batch_variables
-                updated_vari_mom = batch_vari_hist * self.momentum_alpha + batch_variables * self.momentum_alpha_inv
+                updated_vari_hist = batch_vari_hist * self.momentum_alpha + batch_variables * self.momentum_alpha_inv
                 updated_grad_mom = batch_grad_hist * self.momentum_alpha + batch_gradients * self.momentum_alpha_inv
-                history_ops.append(tf.assign(batch_vari_hist, updated_vari_mom))
+                history_ops.append(tf.assign(batch_vari_hist, updated_vari_hist))
                 history_ops.append(tf.assign(batch_grad_hist, updated_grad_mom))
                 if self.normalize_with_sq_grad:
                     with tf.control_dependencies(history_ops):
-                        updated_sq_vari_mom = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_mom) * self.momentum_alpha_inv
+                        updated_sq_vari_mom = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_hist) * self.momentum_alpha_inv
                         updated_sq_grad_mom = batch_sq_grad_hist * self.momentum_alpha + tf.square(updated_grad_mom) * self.momentum_alpha_inv
                         history_ops.append(tf.assign(batch_sq_vari_hist, updated_sq_vari_mom))
                         history_ops.append(tf.assign(batch_sq_grad_hist, updated_sq_grad_mom))
             else:
-                updated_batch_variables_history = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
-                updated_batch_grad_history = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
-                history_ops.append(tf.assign(batch_vari_hist, updated_batch_variables_history))
-                history_ops.append(tf.assign(batch_grad_hist, updated_batch_grad_history))
+                updated_vari_hist = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
+                updated_grad_hist = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
+                history_ops.append(tf.assign(batch_vari_hist, updated_vari_hist))
+                history_ops.append(tf.assign(batch_grad_hist, updated_grad_hist))
             if self.use_dist_mv_avg:
                 with tf.control_dependencies(history_ops):
-                    max = tf.reduce_max(updated_vari_mom, axis=1, keep_dims=True)
-                    min = tf.reduce_min(updated_vari_mom, axis=1, keep_dims=True)
+                    max = tf.reduce_max(updated_vari_hist, axis=1, keep_dims=True)
+                    min = tf.reduce_min(updated_vari_hist, axis=1, keep_dims=True)
                     diff = max - min
-                    updated_batch_dist_moving_avg = batch_dist_mvg_avg * self.momentum_alpha + diff
+                    updated_batch_dist_moving_avg = batch_dist_mvg_avg * self.momentum_alpha + diff * self.momentum_alpha_inv
                     history_ops.append(tf.assign(batch_dist_mvg_avg, updated_batch_dist_moving_avg))
             # history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
             # history_ops.append(tf.scatter_nd_update(batch_grad_history, indices, tf.reshape(batch_gradients, [shape])))

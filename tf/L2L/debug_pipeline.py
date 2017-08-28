@@ -145,3 +145,22 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
     #     f_data = np.load('variables_updates')
 #
 # itr(itr=10000, print_interval=100, reset_interval=50)
+
+# diff_hist_o = tf.Variable(iis.run(optim.dist_mv_avg[1][0]))
+# vari_hist_o = tf.Variable(iis.run(optim.vari_hist[1][0]))
+# iis.run(tf.variables_initializer([vari_hist_o, diff_hist_o]))
+# x_next = iis.run(optim.ops_step)[0]['x_next'][0]
+# print(x_next)
+#
+# itr(1, print_interval=100, reset_interval=100)
+# diff_hist_n = tf.Variable(iis.run(optim.dist_mv_avg[1][0]))
+# vari_hist_n = tf.Variable(iis.run(optim.vari_hist[1][0]))
+# iis.run(tf.variables_initializer([vari_hist_n, diff_hist_n]))
+#
+# ma = tf.reduce_max(vari_hist_n, axis=1, keep_dims=True)
+# mi = tf.reduce_min(vari_hist_n, axis=1, keep_dims=True)
+# diff = ma - mi
+# n = tf.multiply(diff_hist_o,  optim.momentum_alpha) + tf.multiply(diff, optim.momentum_alpha_inv)
+#
+# print(n.eval())
+# print(diff_hist_n.eval())
