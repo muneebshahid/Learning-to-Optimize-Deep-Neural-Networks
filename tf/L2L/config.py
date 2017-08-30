@@ -24,11 +24,14 @@ def mlp_norm_history():
     args['min_step'] = 1e-4
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
+    args['enable_noise_est'] = True
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
+    args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
     args['network_out_dims'] += (1 if args['learn_momentum_base'] else 0)
     args['normalize_with_sq_grad'] = False
     args['use_dist_mv_avg'] = False
+    args['enable_noise_est'] = True
     return args
 
 

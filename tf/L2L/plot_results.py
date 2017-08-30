@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import os
 
 files = glob.glob('../../../results/plots/conv/*')
-# files = glob.glob('../../../results/plots/mlp/*')
+files = glob.glob('../../../results/plots/mlp/*')
 x = range(400)
 
 legends = []
