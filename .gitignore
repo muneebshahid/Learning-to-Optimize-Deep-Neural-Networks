@@ -115,3 +115,4 @@ tags
 /tf/L2L/tf_summary/*
 /tf/L2L/trained/*
 /tf/L2L/trained/
+mnist_save_vars*/
