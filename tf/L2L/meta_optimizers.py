@@ -460,6 +460,7 @@ class MlpNormHistory(Meta_Optimizer):
     dist_mv_avg = None
     enable_noise_est = None
     use_log_noise = None
+    step_dist_max_step = None
 
 
     def __init__(self, problems, path, args):
@@ -481,12 +482,13 @@ class MlpNormHistory(Meta_Optimizer):
         self.use_dist_mv_avg = args['use_dist_mv_avg']
         self.use_guide_step = args['use_guide_step']
         self.learn_momentum_base = args['learn_momentum_base']
-        self.enable_noise_est = args['enable_nose_est']
+        self.enable_noise_est = args['enable_noise_est']
         self.use_log_noise = args['use_log_noise']
+        self.step_dist_max_step = args['step_dist_max_step']
 
 
         with tf.name_scope('Optim_Init'):
-            self.step_dist = tf.Variable(tf.constant(np.linspace(0.0, 1.0, 10), shape=[10, 1], dtype=tf.float32),
+            self.step_dist = tf.Variable(tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
                                          name='step_dist')
             self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
                                          name='sign_dist')
@@ -572,10 +574,10 @@ class MlpNormHistory(Meta_Optimizer):
         self.run_init({'problem_index': index})
 
 
-    def normalize_values(self, history_tensor, squared_history,switch=0):
+    def normalize_values(self, history_tensor, squared_history=None, switch=0):
         epsilon = 1e-15
         with tf.name_scope('Input_Normalizer'):
-            if self.normalize_with_sq_grad:
+            if self.normalize_with_sq_grad and squared_history is not None:
                 normalized_values = tf.divide(history_tensor, tf.sqrt(squared_history) + epsilon)
             else:
                 if switch == 0:
@@ -663,23 +665,26 @@ class MlpNormHistory(Meta_Optimizer):
                                                                                    problem_sq_vari_hist, problem_sq_grad_hist,
                                                                                    problem_dist_mv_avg):
 
-
                 normalized_variable_history = self.normalize_values(batch_vari_hist, batch_sq_vari_hist)
                 normalized_grad_history = self.normalize_values(batch_grad_hist, batch_sq_grad_hist)
                 if self.enable_noise_est:
                     def noise_measure(inputs):
+                        epsilon = 1e-15
                         if self.use_log_noise:
-                            log_inputs = tf.log(inputs)
+                            log_inputs = tf.log(inputs + epsilon)
                             mean_input = tf.reduce_mean(log_inputs, 1, keep_dims=True)
                             rel_noise = log_inputs - mean_input
                         else:
                             mean_input = tf.reduce_mean(inputs, 1, keep_dims=True)
-                            rel_noise = inputs / mean_input
+                            rel_noise = inputs / (mean_input + epsilon)
                         return rel_noise
-                    noise_vari_hist = self.noisenoise_measure(batch_sq_vari_hist)
+                    noise_vari_hist = noise_measure(batch_sq_vari_hist)
                     noise_grad_hist = noise_measure(batch_sq_grad_hist)
 
-
+                    normalized_noise_vari_hist = self.normalize_values(noise_vari_hist)
+                    normalized_noise_grad_hist = self.normalize_values(noise_grad_hist)
+                    normalized_variable_history = tf.concat([normalized_variable_history, normalized_noise_vari_hist], 1)
+                    normalized_grad_history = tf.concat([normalized_grad_history, normalized_noise_grad_hist], 1)
 
                 if self.gradient_sign_only:
                     normalized_grad_history = tf.sign(normalized_grad_history)
