@@ -3,7 +3,7 @@ args = {'meta_learning_rate'}
 
 def common():
     args = {}
-    args['meta_learning_rate'] = .0001
+    args['meta_learning_rate'] = .00005
     args['layer_width'] = 50
     args['hidden_layers'] = 1
     args['network_activation'] = tf.nn.relu
