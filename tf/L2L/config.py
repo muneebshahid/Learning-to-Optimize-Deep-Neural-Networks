@@ -25,8 +25,9 @@ def mlp_norm_history():
     args['min_step'] = 1e-4
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
-    args['enable_noise_est'] = True
+    args['enable_noise_est'] = False
     args['use_log_noise'] = False
+    args['use_delta_mv_avg'] = True
     args['normalize_with_sq_grad'] = False
     args['use_dist_mv_avg'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
