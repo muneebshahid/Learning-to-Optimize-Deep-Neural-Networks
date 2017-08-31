@@ -463,6 +463,7 @@ class MlpNormHistory(Meta_Optimizer):
     use_delta_mv_avg = None
     step_dist_max_step = None
     delta_mv_avg = None
+    output_min_step = None
 
 
     def __init__(self, problems, path, args):
@@ -488,6 +489,8 @@ class MlpNormHistory(Meta_Optimizer):
         self.use_noise_est = args['enable_noise_est']
         self.use_log_noise = args['use_log_noise']
         self.step_dist_max_step = args['step_dist_max_step']
+        self.output_min_step = args['output_min_step']
+
 
 
 
@@ -496,10 +499,8 @@ class MlpNormHistory(Meta_Optimizer):
                                          name='step_dist')
             self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
                                          name='sign_dist')
-            if self.min_step is None:
-                self.lr_dist = tf.Variable(tf.constant([.1, .05, .001, .0005, 1.0], shape=[5, 1], dtype=tf.float32),
-                                       name='grad_dist')
-
+            self.lr_dist = tf.Variable(tf.constant([1.0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 0.0], shape=[9, 1], dtype=tf.float32),
+                                   name='grad_dist')
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
             if self.learn_momentum_base:
@@ -653,6 +654,11 @@ class MlpNormHistory(Meta_Optimizer):
             else:
                 delta_lr = tf.constant(0.0)
 
+            if self.output_min_step:
+                lr_minstep = tf.slice(activations, [0, 12], [-1, 9], 'lr_min_step')
+                lr_minstep = tf.nn.softmax(lr_minstep, 1)
+                delta_lr = tf.matmul(lr_minstep, self.lr_dist)
+
             if self.learn_momentum_base:
                 delta_lr = tf.slice(activations, [0, 12], [-1, 1])
 
@@ -714,7 +720,7 @@ class MlpNormHistory(Meta_Optimizer):
                 else:
                     network_input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
 
-                deltas_x, momentum_base = self.network({'inputs': network_input})
+                deltas_x, delta_lr = self.network({'inputs': network_input})
                 deltas_list.append([deltas_x])
 
                 if self.history_range is not None and self.history_range:
@@ -752,7 +758,11 @@ class MlpNormHistory(Meta_Optimizer):
                     if self.min_step_max:
                         default_step = tf.maximum(diff, self.min_step)
                     else:
-                        default_step = diff + self.min_step
+                        if self.output_min_step:
+                            minstep = delta_lr
+                        else:
+                            minstep = self.min_step
+                        default_step = diff + minstep
                 mean = tf.multiply(deltas_x, default_step)
                 new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
@@ -771,9 +781,6 @@ class MlpNormHistory(Meta_Optimizer):
         batch_dist_mv_avg = args['batch_dist_mv_avg']
         batch_delta_mv_avg = args['batch_delta_mv_avg']
         batch_delta_mv_avg_next = args['batch_delta_mv_avg_next']
-
-
-
         init_ops = args['init_ops']
         history_ops = []
         momentum_alpha = self.momentum_alpha[problem_no][batch_no] if self.learn_momentum_base else self.momentum_alpha

@@ -23,17 +23,19 @@ def mlp_norm_history():
     args['momentum_base'] = 1.1
     args['history_range'] = None
     args['min_step'] = 1e-4
+    args['output_min_step'] = True
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
     args['enable_noise_est'] = False
     args['use_log_noise'] = False
-    args['use_delta_mv_avg'] = True
+    args['use_delta_mv_avg'] = False
     args['normalize_with_sq_grad'] = False
     args['use_dist_mv_avg'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
     args['network_out_dims'] += (1 if args['learn_momentum_base'] else 0)
+    args['network_out_dims'] += (9 if args['output_min_step'] else 0)
     return args
 
 
