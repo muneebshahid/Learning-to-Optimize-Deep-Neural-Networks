@@ -22,7 +22,7 @@ test_epochs = 500
 learning_rate = 0.0001
 layer_width = 50
 momentum = False
-meta_learning_rate = .0001#05
+meta_learning_rate = .00005#05
 #########################
 meta = True
 flag_optim = 'mlp'
@@ -39,8 +39,6 @@ if meta:
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
-
-
 else:
     if flag_optim == 'Adam':
         optim = tf.train.AdamOptimizer(meta_learning_rate)

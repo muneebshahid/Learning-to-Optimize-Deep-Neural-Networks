@@ -19,12 +19,11 @@ def mlp_norm_history():
     args['grad_only'] = False
     args['grad_sign_only'] = False
     args['use_momentum'] = True
-    args['momentum_limit'] = 5 if args['use_momentum'] else None
     args['momentum_base'] = 1.1
     args['history_range'] = None
     args['min_step'] = 1e-4
-    args['output_min_step'] = False
-    args['output_lr_delta'] = True
+    args['learn_lr'] = False
+    args['learn_lr_delta'] = False
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
     args['enable_noise_est'] = False
@@ -36,7 +35,8 @@ def mlp_norm_history():
     args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
     args['network_out_dims'] = 19 if args['min_step'] is None else 12
     args['network_out_dims'] += (1 if args['learn_momentum_base'] else 0)
-    args['network_out_dims'] += (9 if args['output_min_step'] else 0)
+    args['network_out_dims'] += (9 if args['learn_lr'] else 0)
+    args['network_out_dims'] += (1 if args['learn_lr_delta'] else 0)
     return args
 
 

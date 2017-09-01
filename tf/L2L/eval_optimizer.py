@@ -37,7 +37,7 @@ with l2l.as_default():
     writer = None
     problem_batches, _ = problems.create_batches_all(train=True)
     enable_summaries = False
-    optim_meta = meta_optimizers.GRUNormHistory(problem_batches, path=None, args=config.mlp_norm_history())
+    optim_meta = meta_optimizers.MlpNormHistory(problem_batches, path=None, args=config.mlp_norm_history())
     optim_meta.build()
     optim_adam = tf.train.AdamOptimizer(.01)
     adam_min_step = optim_adam.minimize(optim_meta.ops_loss_problem[0], var_list=optim_meta.problems[0].variables)
@@ -51,7 +51,8 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
         optim_meta.set_session(sess)
-        optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars/mnist_variables')
+        optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
+        # optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
         optim_meta.run_init()
         l = []
         for i, (problem, problem_variables_history) in enumerate(zip(optim_meta.problems, optim_meta.vari_hist)):
