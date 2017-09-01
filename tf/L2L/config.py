@@ -23,7 +23,8 @@ def mlp_norm_history():
     args['momentum_base'] = 1.1
     args['history_range'] = None
     args['min_step'] = 1e-4
-    args['output_min_step'] = True
+    args['output_min_step'] = False
+    args['output_lr_delta'] = True
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
     args['enable_noise_est'] = False

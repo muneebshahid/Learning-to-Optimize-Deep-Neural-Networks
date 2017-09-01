@@ -464,6 +464,8 @@ class MlpNormHistory(Meta_Optimizer):
     step_dist_max_step = None
     delta_mv_avg = None
     output_min_step = None
+    output_lr_delta = None
+    delta_lr_dist = None
 
 
     def __init__(self, problems, path, args):
@@ -490,8 +492,8 @@ class MlpNormHistory(Meta_Optimizer):
         self.use_log_noise = args['use_log_noise']
         self.step_dist_max_step = args['step_dist_max_step']
         self.output_min_step = args['output_min_step']
-
-
+        self.output_lr_delta = args['output_min_step_delta']
+        self.delta_lr_dist = args['delta_lr_dist']
 
 
         with tf.name_scope('Optim_Init'):
@@ -501,6 +503,7 @@ class MlpNormHistory(Meta_Optimizer):
                                          name='sign_dist')
             self.lr_dist = tf.Variable(tf.constant([1.0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 0.0], shape=[9, 1], dtype=tf.float32),
                                    name='grad_dist')
+            self.delta_lr_dist = tf.Variable(tf.constant([1.0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 0.0], shape=[9, 1], dtype=tf.float32), name='delta_lr_dist')
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
 
             if self.learn_momentum_base:
@@ -514,7 +517,7 @@ class MlpNormHistory(Meta_Optimizer):
 
             (self.guide_step, self.vari_hist, self.grad_hist,
              self.grad_mom, self.vari_mom, self.sq_vari_hist,
-             self.sq_grad_hist, self.dist_mv_avg, self.delta_mv_avg) = [], [], [], [], [], [], [], [], []
+             self.sq_grad_hist, self.dist_mv_avg, self.delta_mv_avg, self.lr_mv_avg) = [], [], [], [], [], [], [], [], [], []
 
             for i, problem in enumerate(self.problems):
                 with tf.variable_scope('problem_' + str(i)):
@@ -556,6 +559,11 @@ class MlpNormHistory(Meta_Optimizer):
                                                   for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
                         self.delta_mv_avg.append([0.0 for variable in problem.variables])
+                    if self.output_lr_delta:
+                        self.lr_mv_avg.append([tf.get_variable('min_step_mv_avg' + str(i),
+                                                               initializer=tf.random_uniform(shape[shape, 1], minval=1e-6, maxval=1e-3),
+                                                               trainable=False)
+                                               for i, shape in enumerate(problem.variables_flattened_shape)])
                     if self.learn_momentum_base:
                         self.momentum_alpha.append([tf.get_variable('mom_alpha' + str(i), initializer=tf.zeros_initializer,
                                                               shape=[shape, 1], trainable=False)
@@ -642,7 +650,7 @@ class MlpNormHistory(Meta_Optimizer):
             lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
             lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
             delta_x_step = lr_x_step_magnitude * lr_x_step_sign
-            if self.min_step is None:
+            if self.min_step is None or self.output_lr_delta:
                 lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
                 lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
                 lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
@@ -679,14 +687,16 @@ class MlpNormHistory(Meta_Optimizer):
             problem_sq_grad_hist = args['sq_grad_hist']
             problem_dist_mv_avg = args['dist_mv_avg']
             problem_delta_mv_avg = args['delta_mv_avg']
+            problem_min_step_mv_avg = args['min_step_mv_avg']
             x_next = list()
             deltas_list = []
             deltas_mv_avg_next = []
             for (variable, variable_flat, batch_vari_hist, batch_grad_hist,
-                 batch_sq_vari_hist, batch_sq_grad_hist, batch_dist_mv_avg, batch_delta_mv_avg) in zip(problem.variables, problem.variables_flat,
+                 batch_sq_vari_hist, batch_sq_grad_hist, batch_dist_mv_avg,
+                 batch_delta_mv_avg, batch_min_step_mv_avg) in zip(problem.variables, problem.variables_flat,
                                                                                    problem_vari_hist, problem_grad_hist,
                                                                                    problem_sq_vari_hist, problem_sq_grad_hist,
-                                                                                   problem_dist_mv_avg, problem_delta_mv_avg):
+                                                                                   problem_dist_mv_avg, problem_delta_mv_avg, problem_min_step_mv_avg):
 
                 normalized_variable_history = self.normalize_values(batch_vari_hist, batch_sq_vari_hist)
                 normalized_grad_history = self.normalize_values(batch_grad_hist, batch_sq_grad_hist)
