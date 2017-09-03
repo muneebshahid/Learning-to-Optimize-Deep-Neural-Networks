@@ -1,0 +1,53 @@
+
+6_mom_infnorm
+6_mom_loss_150k_1e-3: fastest at start, diverges
+6_mom_loss_150k_5e-4: fast at start, lowest at end
+6_mom_loss_150k_1e-4, 6_mom_loss_400k_1.1_1e-4, 
+6_mom_loss_850k_5e-4: fast at start, lowest at end
+
+6_mom_sq
+400k_1e-3: fastest, overall
+400k_5e-4: 2nd best
+500k_5e-3: 3rd
+400k_1e-4: slow at start, but still gets to a somewhat good end
+500k_5e-4(default): worst
+
+6_mom_125
+150k_5e-4: Same as 1000k_1e-3
+150k_1e-3: slightly faster, but overall 2nd best
+150k_1e-4: worst
+1000k_1e-4: 2nd worst at start, but becomes almost as good as the best one
+1000k_5e-4: A bit slow at start, but overall best
+1000k_1e-3: A bit fast at start, but overall 2nd best.
+
+6_mom_delta
+900k 1e-4: a bit slow at start, but best overall, performance doesnt imporve when learning 
+           rate is increased
+900k 5e-5: slight faster at start, but then dies out.
+
+6_mom_noise_inf
+50k_1e-4: worst
+50k_5e-4: 2nd best
+50k_1e-3: Almost the same as 400k_5e-4, but at the end slightly worse, 
+          decrease step size at the end?
+400k_5e-4: Best
+400k_1e-3: 2nd Best
+400k_1e-4: Worst
+
+6_mom_sq_noise:
+550k_1e-4: Worst
+550k_5e-4: 2nd Best, a bit slow at start, but then approaches the best curve
+550k_1e-3: Best
+
+using noise measuer helped a lot in the end in particular, In the start they performed equally 
+well as noiseless versoin. Noise inf norm slower than noise less sqnorm at start but noise 
+inf norm eventually achieves the same performance as sq noise.
+Overall sq noise is the best one yet. using delta mv it was slow at start but crosses even 
+the mom_loss_150k. Using 1.25 as step also seems to give some advantage at the end.
+
+so combine 1.25, deltamv, and sq noise. 
+Also try and see what happens as learning rate is tapered off. 
+And find out the average distance in default and increased step cases.
+
+
+
