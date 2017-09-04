@@ -466,6 +466,10 @@ class MlpNormHistory(Meta_Optimizer):
     learn_lr = None
     learn_lr_delta = None
     lr_delta_dist = None
+    decay_min_lr = None
+    decay_min_lr_max = 1e-3
+    decay_min_lr_min = 1e-4
+    decay_min_lr_steps = 20000
 
 
     def __init__(self, problems, path, args):
@@ -480,7 +484,11 @@ class MlpNormHistory(Meta_Optimizer):
         self.network_out_dims = args['network_out_dims']
         self.use_momentums = args['use_momentum']
         self.history_range = args['history_range']
-        self.min_lr = args['min_step']
+        self.min_lr = args['min_lr']
+        self.decay_min_lr = args['decay_min_lr']
+        self.decay_min_lr_max = args['decay_min_lr_max']
+        self.decay_min_lr_min = args['decay_min_lr_min']
+        self.decay_min_lr_steps = args['decay_min_lr_steps']
         self.min_step_max = args['min_step_max']
         self.momentum_base = args['momentum_base']
         self.normalize_with_sq_grad = args['normalize_with_sq_grad']
@@ -494,6 +502,8 @@ class MlpNormHistory(Meta_Optimizer):
         self.learn_lr = args['learn_lr']
         self.learn_lr_delta = args['learn_lr_delta']
 
+        if self.decay_min_lr:
+            self.min_lr = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
 
         with tf.name_scope('Optim_Init'):
             self.step_dist = tf.Variable(tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
@@ -956,9 +966,17 @@ class MlpNormHistory(Meta_Optimizer):
         op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
+    def updates_global(self):
+        global_update_ops = []
+        if self.decay_min_lr:
+            one_step = (self.decay_min_lr_max - self.decay_min_lr_min) / self.decay_min_lr_steps
+            global_update_ops.append(tf.assign_sub(self.min_lr, one_step))
+        return global_update_ops
+
     def build(self):
         self.ops_step = []
         self.ops_updates = []
+        self.ops_global_updates = []
         self.ops_loss = []
         self.ops_meta_step = []
         self.ops_final_loss = 0
@@ -999,6 +1017,7 @@ class MlpNormHistory(Meta_Optimizer):
             self.ops_meta_step.append(self.minimize(loss))
             self.ops_reset_problem.append(reset)
         self.ops_reset_optim = self.reset_optimizer()
+        self.ops_global_updates.append(self.updates_global())
         self.init_saver_handle()
 
 

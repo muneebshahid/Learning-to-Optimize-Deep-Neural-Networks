@@ -80,7 +80,7 @@ with l2l.as_default():
         total_itr = 20000
         for i in range(total_itr):
             if meta:
-                _, curr_loss, summaries = sess.run([optim_meta.ops_updates, l, all_summ])
+                _, curr_loss, summaries, gu = sess.run([optim_meta.ops_updates, l, all_summ, optim_meta.ops_global_updates])
             else:
                 _, curr_loss, summaries = sess.run([adam_min_step, l, all_summ])
             total_loss += np.array(curr_loss)
@@ -89,6 +89,7 @@ with l2l.as_default():
                 avg_loss = np.log10(total_loss / 50.0)
                 write_to_file(results_dir + 'loss', avg_loss)
                 print(avg_loss)
+                print(sess.run(optim_meta.min_lr))
                 print('PROB NORM: ', sess.run(problem_norms))
                 total_loss = 0
                 if enable_summaries and ((i + 10) % 10 == 0):
