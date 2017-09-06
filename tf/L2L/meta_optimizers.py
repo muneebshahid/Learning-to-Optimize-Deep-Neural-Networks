@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 from preprocess import Preprocess
 from timeit import default_timer as timer
+from optimizers import Adam
 
 
 
@@ -478,7 +479,7 @@ class MlpNormHistory(Meta_Optimizer):
         self.gradient_sign_only = args['grad_sign_only']
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
-        self.network_activation = tf.nn.relu
+        self.network_activation = args['network_activation']
         self.limit = args['limit']
         self.network_in_dims =  args['network_in_dims']
         self.network_out_dims = args['network_out_dims']
@@ -1020,6 +1021,99 @@ class MlpNormHistory(Meta_Optimizer):
         self.ops_global_updates.append(self.updates_global())
         self.init_saver_handle()
 
+class AUGOptims(Meta_Optimizer):
+
+    optimizers = None
+    layer_width = None
+    hidden_layers = None
+    lr = None
+    def __init__(self, problems, path, args):
+        super(AUGOptims, self).__init__(problems, path, args)
+        self.layer_width = args['layer_width']
+        self.hidden_layers = args['hidden_layers']
+        self.network_activation = args['network_activation']
+
+        self.optimizers = []
+        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+
+    def network(self, args=None):
+        with tf.name_scope('Optimizer_network'):
+            delta_lr = None
+            inputs = args['inputs']
+            activations = layer_fc(name='in', dims=[len(self.optimizers), self.layer_width], inputs=inputs,
+                                   variable_list=self.optimizer_variables, activation=self.network_activation)
+            for layer in range(self.hidden_layers):
+                activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
+                                       variable_list=self.optimizer_variables, activation=self.network_activation)
+            activations = layer_fc('out', dims=[self.layer_width, len(self.optimizers)], inputs=activations,
+                              variable_list=self.optimizer_variables)
+
+            softmax_activations = tf.nn.softmax(activations, 1)
+            step_probabilities = softmax_activations * inputs
+            step_expectation = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+
+            # rows = tf.shape(lr_grad_step_sign)[0]
+            # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
+            # flags = tf.equal(max_values, lr_grad_step_sign)
+            # max_sign = tf.where(flags, tf.ones([rows, 2]), tf.zeros([rows, 2]))
+
+            return [step_expectation, activations]
+
+    def step(self, args=None):
+        vars_next = []
+        num_optimizers = len(self.optimizers)
+        problem = args['problem']
+        stacked_steps = []
+        for step in range(len(problem.variables)):
+            stacked_steps.append(tf.concat([self.optimizers[0].ops_step['steps'][step], self.optimizers[1].ops_step['steps'][step]], axis=1))
+
+        for step in range(len(problem.variables)):
+            for optimizer in self.optimizers[2:]:
+                stacked_steps[step] = tf.concat([stacked_steps[step], optimizer.ops_step['steps'][step]], axis=1)
+
+        for var, var_flat, stacked_step in zip(problem.variables, problem.variables_flat, stacked_steps):
+            output = self.network({'inputs': stacked_step})[0]
+            output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
+            var_next = var + output
+            vars_next.append(var_next)
+        return {'vars_next': vars_next}
+
+    def updates(self, args=None):
+        vars_next  = args['vars_next']
+        problem = args['problem']
+        updates_list = [tf.assign(variable, variable_next) for variable, variable_next in zip(problem.variables, vars_next)]
+        with tf.control_dependencies(updates_list):
+            updates_list.extend([optimizer.ops_updates[1:] for optimizer in self.optimizers])
+        return updates_list
+
+    def reset(self):
+        reset_ops = [self.reset_problems()]
+        for optimizer in self.optimizers:
+            reset_ops.append(tf.variables_initializer([optimizer.t]))
+            reset_ops.append(tf.variables_initializer(optimizer.m))
+            reset_ops.append(tf.variables_initializer(optimizer.v))
+        return reset_ops
+
+    def run_reset(self, index=None, optimizer=False):
+        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+        self.session.run(reset_ops)
+
+    def build(self):
+        problem = self.problems[0]
+        for optimizer in self.optimizers:
+            optimizer.build('None')
+        args = {'problem': problem}
+        self.ops_step = self.step(args)
+        args['vars_next'] = self.ops_step['vars_next']
+        self.ops_updates = self.updates(args)
+        self.ops_loss = problem.loss(args['vars_next'])
+        self.ops_meta_step = self.minimize(self.ops_loss)
+        self.ops_reset_problem = self.reset()
+        self.ops_reset = self.ops_reset_problem
 
 class GRUNormHistory(MlpNormHistory):
     unroll_len = None

@@ -60,3 +60,17 @@ def l2l2():
     args['network_in_dims'] = args['num_time_scales'] * 2 + 1
     args['network_out_dims'] = 5
     return args
+
+def adam():
+    args = common()
+    args['beta_1'] = 0.9
+    args['beta_2'] = 0.999
+    args['lr'] = 0.01
+    args['eps'] = 1e-8
+    return args
+
+def aug_optim():
+    args = common()
+    args['lr'] = 0.001
+    return args
+
