@@ -35,7 +35,7 @@ if meta:
     optim = meta_optimizers.AUGOptims(problem_batches, path=io_path, args=config.aug_optim())
 
     optim.build()
-    updates, loss, meta_step = optim.ops_updates, [optim.ops_loss], optim.ops_meta_step
+    updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]

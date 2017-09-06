@@ -1102,18 +1102,50 @@ class AUGOptims(Meta_Optimizer):
         reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
         self.session.run(reset_ops)
 
+    def loss(self, args=None):
+        with tf.name_scope('Problem_Loss'):
+            problem = args['problem']
+            variables = args['vars_next'] if 'vars_next' in args else problem.variables
+            return problem.loss(variables)
+
     def build(self):
+        self.ops_step = []
+        self.ops_loss = []
+        self.ops_updates = []
+        self.ops_meta_step = []
+        self.ops_reset_problem = []
+        self.ops_reset = []
+        self.ops_loss_problem = []
         problem = self.problems[0]
+        gradients = self.get_preprocessed_gradients(problem=problem, variables=problem.variables)
         for optimizer in self.optimizers:
-            optimizer.build('None')
+            optimizer.build({'gradients': gradients})
+
         args = {'problem': problem}
-        self.ops_step = self.step(args)
-        args['vars_next'] = self.ops_step['vars_next']
-        self.ops_updates = self.updates(args)
-        self.ops_loss = problem.loss(args['vars_next'])
-        self.ops_meta_step = self.minimize(self.ops_loss)
-        self.ops_reset_problem = self.reset()
-        self.ops_reset = self.ops_reset_problem
+        step = self.step(args)
+        args['vars_next'] = step['vars_next']
+        updates = self.updates(args)
+        loss_prob = tf.squeeze(self.loss(args))
+        loss = tf.log(loss_prob + 1e-15)
+        meta_step = self.minimize(loss)
+        reset = self.reset()
+
+        self.ops_step.append(step)
+        self.ops_updates.append(updates)
+        self.ops_loss_problem.append(loss_prob)
+        self.ops_loss.append(loss)
+        self.ops_meta_step.append(meta_step)
+        self.ops_reset_problem.append(reset)
+        self.ops_reset.append(self.ops_reset_problem)
+
+    def run(self, args=None):
+        if args['train']:
+            ops_meta_step = self.ops_meta_step
+        else:
+            ops_meta_step = []
+        start = timer()
+        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        return timer() - start, np.array(op_loss), np.array(pr_loss)
 
 class GRUNormHistory(MlpNormHistory):
     unroll_len = None
