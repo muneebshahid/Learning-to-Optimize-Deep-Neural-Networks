@@ -722,6 +722,7 @@ class MlpNormHistory(Meta_Optimizer):
             deltas_list = []
             deltas_mv_avg_next = []
             lr_mv_avg_next = []
+            delta_lr_next = []
             for (variable, variable_flat, batch_vari_hist, batch_grad_hist,
                  batch_sq_vari_hist, batch_sq_grad_hist, batch_dist_mv_avg,
                  batch_delta_mv_avg, batch_lr_mv_avg) in zip(problem.variables, problem.variables_flat,
@@ -815,6 +816,7 @@ class MlpNormHistory(Meta_Optimizer):
                                     lr_mv_avg_next.append(batch_lr_mv_avg * 0.8 + delta_lr * 0.2)
                                     lr = tf.exp(delta_lr)
                                 else:
+                                    delta_lr_next.append(delta_lr)
                                     lr = batch_lr_mv_avg * 0.8 + delta_lr * 0.2
                                     lr_mv_avg_next.append(lr)
                             else:
@@ -830,7 +832,7 @@ class MlpNormHistory(Meta_Optimizer):
                 x_next.append(new_points)
             return {'x_next': x_next, 'deltas_list': deltas_list,
                     'delta_mv_avg_next': deltas_mv_avg_next,
-                    'lr_mv_avg_next': lr_mv_avg_next}
+                    'lr_mv_avg_next': lr_mv_avg_next, 'delta_lr': delta_lr_next}
 
     def update_history_ops(self, args):
         problem_no = args['problem_no']
@@ -921,7 +923,7 @@ class MlpNormHistory(Meta_Optimizer):
             if not init_ops:
                 if self.use_delta_mv_avg:
                     problem_delta_mv_avg_next = args['delta_mv_avg_next']
-                if self.learn_lr_delta:
+                if self.use_lr_mv_avg:
                     problem_lr_mv_avg_next = args['lr_mv_avg_next']
 
 
@@ -978,7 +980,7 @@ class MlpNormHistory(Meta_Optimizer):
             reset.append(tf.variables_initializer(problem_sq_grad_hist, name='reset_sq_grad_hist'))
         if self.use_delta_mv_avg:
             reset.append(tf.variables_initializer(problem_delta_mv_avg, name='reset_delta_mv_avg'))
-        if self.learn_lr_delta:
+        if self.use_lr_mv_avg:
             reset.append(tf.variables_initializer(problem_lr_mv_avg, name='reset_lr_mv_avg'))
         return reset
 
