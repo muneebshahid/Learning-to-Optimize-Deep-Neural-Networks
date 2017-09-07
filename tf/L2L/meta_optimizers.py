@@ -465,12 +465,17 @@ class MlpNormHistory(Meta_Optimizer):
     step_dist_max_step = None
     delta_mv_avg = None
     learn_lr = None
+    lr_mv_avg = None
+    use_lr_mv_avg = None
     learn_lr_delta = None
     lr_delta_dist = None
     decay_min_lr = None
     decay_min_lr_max = 1e-3
     decay_min_lr_min = 1e-4
     decay_min_lr_steps = 20000
+    ref_point = None
+    use_diff = None
+
 
 
     def __init__(self, problems, path, args):
@@ -501,7 +506,10 @@ class MlpNormHistory(Meta_Optimizer):
         self.use_log_noise = args['use_log_noise']
         self.step_dist_max_step = args['step_dist_max_step']
         self.learn_lr = args['learn_lr']
+        self.use_lr_mv_avg = args['use_lr_mv_avg']
         self.learn_lr_delta = args['learn_lr_delta']
+        self.ref_point = args['ref_point']
+        self.diff = args['use_diff']
 
         if self.decay_min_lr:
             self.min_lr = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
@@ -511,7 +519,7 @@ class MlpNormHistory(Meta_Optimizer):
                                          name='step_dist')
             self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
                                          name='sign_dist')
-            self.lr_dist = tf.Variable(tf.constant([1.0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 0.0], shape=[9, 1], dtype=tf.float32),
+            self.lr_dist = tf.Variable(tf.constant([1.0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 0.0], shape=[7, 1], dtype=tf.float32),
                                    name='grad_dist')
             self.lr_delta_dist = tf.Variable(tf.constant([0.5, 0.75, 1.0, 1.25, 1.5], shape=[5, 1], dtype=tf.float32), name='delta_lr_dist')
             self.guide_optimizer = tf.train.AdamOptimizer(1, name='guide_optimizer')
@@ -569,9 +577,14 @@ class MlpNormHistory(Meta_Optimizer):
                                                   for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
                         self.delta_mv_avg.append([0.0 for variable in problem.variables])
-                    if self.learn_lr_delta:
+                    if self.use_lr_mv_avg:
+                        min_val = 1e-6
+                        max_val = 1e-3
+                        if self.learn_lr_delta:
+                            min_val = tf.log(min_val)
+                            max_val = tf.log(max_val)
                         self.lr_mv_avg.append([tf.get_variable('min_step_mv_avg' + str(i),
-                                                               initializer=tf.random_uniform(shape=[shape, 1], minval=tf.log(1e-6), maxval=tf.log(1e-3)),
+                                                               initializer=tf.random_uniform(shape=[shape, 1], minval=min_val, maxval=max_val),
                                                                trainable=False) for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
                         self.lr_mv_avg.append([0.0 for variable in problem.variables])
@@ -672,7 +685,7 @@ class MlpNormHistory(Meta_Optimizer):
                 delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
 
             if self.learn_lr:
-                lr_minstep = tf.slice(activations, [0, 12], [-1, 9], 'lr_min_step')
+                lr_minstep = tf.slice(activations, [0, 12], [-1, 7], 'lr_min_step')
                 lr_minstep = tf.nn.softmax(lr_minstep, 1)
                 delta_lr = tf.matmul(lr_minstep, self.lr_dist)
 
@@ -757,17 +770,19 @@ class MlpNormHistory(Meta_Optimizer):
                     batch_variable_history_range = batch_vari_hist
                 max_values = tf.reduce_max(batch_variable_history_range, axis=1, keep_dims=True)
                 min_values = tf.reduce_min(batch_variable_history_range, axis=1, keep_dims=True)
-                if self.use_dist_mv_avg:
-                    diff = tf.reduce_mean(batch_dist_mv_avg, axis=1, keep_dims=True)
-                else:
-                    diff = max_values - min_values
+
+
 
                 if self.use_delta_mv_avg:
                     delta_mv_avg_next = batch_delta_mv_avg * self.momentum_alpha + deltas_x * (1 - self.momentum_alpha)
                     deltas_mv_avg_next.append(delta_mv_avg_next)
                     deltas_x = tf.reduce_mean(delta_mv_avg_next, axis=1, keep_dims=True)
+                ref = None
+                if self.ref_point == 0:
+                    ref = variable_flat
+                elif self.ref_point == 1:
+                    ref = (max_values + min_values) / 2.0
 
-                ref = (max_values + min_values) / 2.0
                 # deterministic
                 # ref_points = (max_values + min_values) / 2.0
                 # new_points = tf.add(variable_flat, tf.multiply(deltas, diff), 'new_points')
@@ -780,21 +795,36 @@ class MlpNormHistory(Meta_Optimizer):
 
                 # for same effect use .001 as multiplier for mean.
                 # noisey_mean = tf.random_normal([1, 1], mean, .000001 + tf.abs(mean) * .00001)
-                default_step = diff
+
+                if self.use_diff:
+                    if self.use_dist_mv_avg:
+                        diff = tf.reduce_mean(batch_dist_mv_avg, axis=1, keep_dims=True)
+                    else:
+                        diff = max_values - min_values
+                else:
+                    diff = 0
+
                 if self.min_lr is not None:
                     if self.min_step_max:
-                        default_step = tf.maximum(diff, self.min_lr)
+                        default_lr = tf.maximum(diff, self.min_lr)
                     else:
                         if self.learn_lr:
-                            lr = delta_lr
-                        elif self.learn_lr_delta:
-                            delta_lr = batch_lr_mv_avg + tf.log(delta_lr)
-                            lr_mv_avg_next.append(batch_lr_mv_avg * 0.7 + delta_lr * 0.3)
-                            lr = tf.exp(delta_lr) + 1e-8
+                            if self.use_lr_mv_avg:
+                                if self.learn_lr_delta:
+                                    delta_lr = batch_lr_mv_avg + tf.log(delta_lr)
+                                    lr_mv_avg_next.append(batch_lr_mv_avg * 0.8 + delta_lr * 0.2)
+                                    lr = tf.exp(delta_lr)
+                                else:
+                                    lr = batch_lr_mv_avg * 0.8 + delta_lr * 0.2
+                                    lr_mv_avg_next.append(lr)
+                            else:
+                                lr = delta_lr
                         else:
                             lr = self.min_lr
-                        default_step = diff + lr
-                mean = tf.multiply(deltas_x, default_step)
+                        default_lr = diff + lr
+                else:
+                    default_lr = diff
+                mean = tf.multiply(deltas_x, default_lr)
                 new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
                 x_next.append(new_points)
@@ -865,7 +895,7 @@ class MlpNormHistory(Meta_Optimizer):
                     history_ops.append(tf.assign(batch_dist_mv_avg, updated_batch_dist_moving_avg))
             if self.use_delta_mv_avg:
                 history_ops.append(tf.assign(batch_delta_mv_avg, batch_delta_mv_avg_next))
-            if self.learn_lr_delta:
+            if self.use_lr_mv_avg:
                 history_ops.append(tf.assign(batch_lr_mv_avg, batch_lr_mv_avg_next))
             # history_ops.append(tf.scatter_nd_update(batch_variables_history, indices, tf.reshape(batch_variables, [shape])))
             # history_ops.append(tf.scatter_nd_update(batch_grad_history, indices, tf.reshape(batch_gradients, [shape])))

@@ -22,11 +22,14 @@ def mlp_norm_history():
     args['momentum_base'] = 1.1
     args['history_range'] = None
     args['min_lr'] = 1e-3
-    args['decay_min_lr'] = True
+    args['ref_point'] = 0 #0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
+    args['use_diff'] = False
+    args['decay_min_lr'] = False
     args['decay_min_lr_max'] = 1e-3
     args['decay_min_lr_min'] = 1e-4
     args['decay_min_lr_steps'] = 20000
-    args['learn_lr'] = False
+    args['learn_lr'] = True
+    args['use_lr_mv_avg'] = True
     args['learn_lr_delta'] = False
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
