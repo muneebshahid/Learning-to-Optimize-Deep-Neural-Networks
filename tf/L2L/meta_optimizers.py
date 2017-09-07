@@ -1077,11 +1077,11 @@ class AUGOptims(Meta_Optimizer):
         self.use_network = args['use_network']
 
         self.optimizers = []
-        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
-        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
-        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
-        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
-        self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
 
         if not self.use_network:
             self.weights = tf.get_variable('input_weights', shape=[5, 1],
