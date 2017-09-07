@@ -1059,11 +1059,14 @@ class AUGOptims(Meta_Optimizer):
     layer_width = None
     hidden_layers = None
     lr = None
+    use_network = None
+
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
+        self.use_network = args['use_network']
 
         self.optimizers = []
         self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
@@ -1072,28 +1075,39 @@ class AUGOptims(Meta_Optimizer):
         self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
         self.optimizers.append(Adam(self.problems[0], {'lr': .01, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
 
+        if not self.use_network:
+            self.weights = tf.get_variable('input_weights', shape=[5, 1],
+                                           initializer=tf.random_normal_initializer(mean=0.0, stddev=.1, dtype=tf.float32))
+            self.optimizer_variables.append(self.weights)
+
+
     def network(self, args=None):
         with tf.name_scope('Optimizer_network'):
             delta_lr = None
             inputs = args['inputs']
-            activations = layer_fc(name='in', dims=[len(self.optimizers), self.layer_width], inputs=inputs,
-                                   variable_list=self.optimizer_variables, activation=self.network_activation)
-            for layer in range(self.hidden_layers):
-                activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
+            if self.use_network:
+                activations = layer_fc(name='in', dims=[len(self.optimizers), self.layer_width], inputs=inputs,
                                        variable_list=self.optimizer_variables, activation=self.network_activation)
-            activations = layer_fc('out', dims=[self.layer_width, len(self.optimizers)], inputs=activations,
-                              variable_list=self.optimizer_variables)
+                for layer in range(self.hidden_layers):
+                    activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
+                                           variable_list=self.optimizer_variables, activation=self.network_activation)
+                activations = layer_fc('out', dims=[self.layer_width, len(self.optimizers)], inputs=activations,
+                                  variable_list=self.optimizer_variables)
 
-            softmax_activations = tf.nn.softmax(activations, 1)
-            step_probabilities = softmax_activations * inputs
-            step_expectation = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+                softmax_activations = tf.nn.softmax(activations, 1)
+                step_probabilities = softmax_activations * inputs
+                output = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+            else:
+                activations = tf.matmul(inputs, self.weights)
+                w_sum = tf.reduce_sum(self.weights)
+                output = activations / w_sum
 
             # rows = tf.shape(lr_grad_step_sign)[0]
             # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
             # flags = tf.equal(max_values, lr_grad_step_sign)
             # max_sign = tf.where(flags, tf.ones([rows, 2]), tf.zeros([rows, 2]))
 
-            return [step_expectation, activations]
+            return [output, activations]
 
     def step(self, args=None):
         vars_next = []

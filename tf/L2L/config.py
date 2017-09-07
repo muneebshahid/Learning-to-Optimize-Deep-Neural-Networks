@@ -75,5 +75,6 @@ def adam():
 def aug_optim():
     args = common()
     args['lr'] = 0.001
+    args['use_network'] = False
     return args
 
