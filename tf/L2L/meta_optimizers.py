@@ -1075,6 +1075,7 @@ class AUGOptims(Meta_Optimizer):
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
         self.use_network = args['use_network']
+        self.lr = args['lr']
 
         self.optimizers = []
         self.optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
@@ -1132,7 +1133,7 @@ class AUGOptims(Meta_Optimizer):
         for var, var_flat, stacked_step in zip(problem.variables, problem.variables_flat, stacked_steps):
             output = self.network({'inputs': stacked_step})[0]
             output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
-            var_next = var + output
+            var_next = var + output * self.lr
             vars_next.append(var_next)
         return {'vars_next': vars_next}
 
