@@ -34,15 +34,17 @@ def mlp_norm_history():
     args['min_step_max'] = False
     args['learn_momentum_base'] = False
     args['enable_noise_est'] = False
+    args['normalize_with_sq_grad'] = False
     args['use_log_noise'] = False
     args['use_delta_mv_avg'] = False
-    args['normalize_with_sq_grad'] = False
     args['use_dist_mv_avg'] = False
+    args['use_tanh_output'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
-    args['network_out_dims'] = 19 if args['min_lr'] is None else 12
+    args['network_out_dims'] = 1 if args['use_tanh_output'] else 12
+    args['network_out_dims'] = 19 if args['min_lr'] is None else args['network_out_dims']
     args['network_out_dims'] += (1 if args['learn_momentum_base'] else 0)
-    args['network_out_dims'] += (9 if args['learn_lr'] else 0)
+    args['network_out_dims'] += (7 if args['learn_lr'] else 0)
     args['network_out_dims'] += (1 if args['learn_lr_delta'] else 0)
     return args
 
@@ -74,7 +76,7 @@ def adam():
 
 def aug_optim():
     args = common()
-    args['lr'] = 0.001
+    args['lr'] = 0.01
     args['use_network'] = False
     return args
 

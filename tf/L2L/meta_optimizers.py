@@ -475,6 +475,7 @@ class MlpNormHistory(Meta_Optimizer):
     decay_min_lr_steps = 20000
     ref_point = None
     use_diff = None
+    use_tanh_output = None
 
 
 
@@ -510,6 +511,7 @@ class MlpNormHistory(Meta_Optimizer):
         self.learn_lr_delta = args['learn_lr_delta']
         self.ref_point = args['ref_point']
         self.diff = args['use_diff']
+        self.use_tanh_output = args['use_tanh_output']
 
         if self.decay_min_lr:
             self.min_lr = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
@@ -530,7 +532,7 @@ class MlpNormHistory(Meta_Optimizer):
                 alpha = []
                 for i in np.linspace(1, 17, self.limit, dtype=np.int32):
                     alpha.append(1 / np.power(self.momentum_base, i))
-                self.momentum_alpha = tf.expand_dims(tf.linspace(0.2, 0.9, self.limit), 1)#tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
+                self.momentum_alpha = tf.expand_dims(tf.linspace(0.2, 0.9, self.limit), 0)#tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
                 self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
 
             (self.guide_step, self.vari_hist, self.grad_hist,
@@ -666,14 +668,20 @@ class MlpNormHistory(Meta_Optimizer):
             activations = layer_fc('out', dims=[self.layer_width, self.network_out_dims], inputs=activations,
                               variable_list=self.optimizer_variables)
 
-            lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
-            lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
-            lr_x_step_magnitude = tf.matmul(lr_x_step_magnitude, self.step_dist)
+            if self.use_tanh_output:
+                end_index = 1
+                step_activation = tf.slice(activations, [0, 0], [-1, end_index])
+                delta_x_step = tf.nn.tanh(step_activation)
+            else:
+                end_index = 12
+                lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
+                lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
+                lr_x_step_magnitude = tf.matmul(lr_x_step_magnitude, self.step_dist)
 
-            lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2], 'x_step_sign')
-            lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
-            lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
-            delta_x_step = lr_x_step_magnitude * lr_x_step_sign
+                lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2], 'x_step_sign')
+                lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
+                lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
+                delta_x_step = lr_x_step_magnitude * lr_x_step_sign
             if self.min_lr is None:
                 lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 9], 'grad_step_mag')
                 lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
@@ -685,7 +693,7 @@ class MlpNormHistory(Meta_Optimizer):
                 delta_lr = lr_grad_step_magnitude * lr_grad_step_sign
 
             if self.learn_lr:
-                lr_minstep = tf.slice(activations, [0, 12], [-1, 7], 'lr_min_step')
+                lr_minstep = tf.slice(activations, [0, end_index], [-1, 7], 'lr_min_step')
                 lr_minstep = tf.nn.softmax(lr_minstep, 1)
                 delta_lr = tf.matmul(lr_minstep, self.lr_dist)
 
@@ -1183,6 +1191,7 @@ class AUGOptims(Meta_Optimizer):
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem.append(reset)
         self.ops_reset.append(self.ops_reset_problem)
+        self.init_saver_handle()
 
     def run(self, args=None):
         if args['train']:
