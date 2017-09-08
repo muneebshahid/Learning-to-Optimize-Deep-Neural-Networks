@@ -1118,17 +1118,29 @@ class AUGOptims(Meta_Optimizer):
 
             return [output, activations]
 
+    def stack_inputs(self, optim_steps):
+        num_steps = len(optim_steps[0])
+        stacked_steps = []
+        for step in range(num_steps):
+            stacked_steps.append(tf.concat([optim_steps[0][step], optim_steps[1][step]], axis=1))
+
+        for step in range(num_steps):
+            for optim in optim_steps[2:]:
+                stacked_steps[step] = tf.concat([stacked_steps[step], optim[step]], axis=1)
+        return stacked_steps
+
     def step(self, args=None):
         vars_next = []
-        num_optimizers = len(self.optimizers)
         problem = args['problem']
-        stacked_steps = []
-        for step in range(len(problem.variables)):
-            stacked_steps.append(tf.concat([self.optimizers[0].ops_step['steps'][step], self.optimizers[1].ops_step['steps'][step]], axis=1))
+        steps = [optimizer.ops_step['step'] for optimizer in self.optimizers]
+        stacked_steps = self.stack_inputs(steps)
 
-        for step in range(len(problem.variables)):
-            for optimizer in self.optimizers[2:]:
-                stacked_steps[step] = tf.concat([stacked_steps[step], optimizer.ops_step['steps'][step]], axis=1)
+        # for step in range(len(problem.variables)):
+        #     stacked_steps.append(tf.concat([self.optimizers[0].ops_step['steps'][step], self.optimizers[1].ops_step['steps'][step]], axis=1))
+        #
+        # for step in range(len(problem.variables)):
+        #     for optimizer in self.optimizers[2:]:
+        #         stacked_steps[step] = tf.concat([stacked_steps[step], optimizer.ops_step['steps'][step]], axis=1)
 
         for var, var_flat, stacked_step in zip(problem.variables, problem.variables_flat, stacked_steps):
             output = self.network({'inputs': stacked_step})[0]
@@ -1202,6 +1214,46 @@ class AUGOptims(Meta_Optimizer):
         start = timer()
         op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
+
+
+class AUGOptimsRNN(AUGOptims):
+
+    rnn_steps = None
+
+    def __init__(self, problems, path, args):
+        super(AUGOptimsRNN, self).__init__(problems, path, args)
+        self.rnn_steps = args['run_steps']
+
+    def step(self, args=None):
+
+        num_optimizers = len(self.optimizers)
+        problem = args['problem']
+        steps = [optimizer.ops_step['step'] for optimizer in self.optimizers]
+        stacked_steps = self.stack_inputs(steps)
+
+        def update_rnn(problem_variables_flat, stacked_inputs):
+            vars_next = []
+            for i, (var_flat, stacked_input) in enumerate(zip(problem_variables_flat, stacked_inputs)):
+                output = self.network({'inputs': stacked_input})[0]
+                var_next = var_flat + output * self.lr
+                vars_next.append(var_next)
+
+            original_shaped_variables = [problem.set_shape(flat_variable, i=variable_no, op_name='reshape_variable')
+                                         for variable_no, flat_variable in enumerate(vars_next)]
+            gradients = self.get_preprocessed_gradients(problem, original_shaped_variables)
+            steps_next = [optimizer.step({'problem': problem, 'gradients': gradients}) for optimizer in self.optimizers]
+
+            return {'vars_next': vars_next}
+
+        problem_variables_flat_next, stacked_steps_next = tf.while_loop(
+        cond=lambda t, *_: t < 5,
+        body=update_rnn,
+        loop_vars=([0, problem.variables_flat, stacked_steps]),
+        parallel_iterations=1,
+        swap_memory=True,
+        name="unroll")
+
+
 
 class GRUNormHistory(MlpNormHistory):
     unroll_len = None

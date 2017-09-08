@@ -66,8 +66,20 @@ class Adam(Optimizer):
         steps = []
         m_next = []
         v_next = []
-        gradients = args['gradients'] if (args is not None and 'gradients' in args) else self.get_gradients(self.problem.variables)
-        for var, var_flat, gradient, var_m, var_v in zip(self.problem.variables, self.problem.variables_flat, gradients, self.m, self.v):
+        if args is not None and 'gradients' in args:
+            problem_variables = args['problem_variables']
+            problem_variables_flat = args['problem_variables_flat']
+            problem_m = args['m']
+            problem_v = args['v']
+            problem_gradients = args['gradients']
+        else:
+            problem_variables = self.problem.variables
+            problem_variables_flat = self.problem.variables_flat
+            problem_gradients = self.get_gradients(self.problem.variables)
+            problem_m = self.m
+            problem_v = self.v
+        for var, var_flat, gradient, var_m, var_v in zip(problem_variables, problem_variables_flat, problem_gradients,
+                                                         problem_m, problem_v):
             m = self.beta_1 * var_m + (1 - self.beta_1) * gradient
             v = self.beta_2 * var_v + (1 - self.beta_2) * tf.square(gradient)
             m_next.append(m)
