@@ -44,13 +44,14 @@ class Optimizer():
 
 class Adam(Optimizer):
 
-    m = None
-    v = None
+    ms = None
+    vs = None
     beta_1 = None
     beta_2 = None
     t = None
     lr = None
     eps = None
+    optim_params = None
     def __init__(self, problem, args=None):
         super(Adam, self).__init__(problem, args)
         self.beta_1 = args['beta_1']
@@ -58,49 +59,53 @@ class Adam(Optimizer):
         self.lr = args['lr']
         self.eps = args['eps']
         self.t = tf.Variable(1.0)
-        self.m = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
-        self.v = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
+        self.ms = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
+        self.vs = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
+        self.optim_params = {'ms': self.ms, 'vs': self.vs}
+
+    def set_variable(self, variable_key, args, default):
+        if args is not None and variable_key in args:
+            return args[variable_key]
+        else:
+            return default
 
     def step(self, args=None):
         vars_next = []
-        steps = []
-        m_next = []
-        v_next = []
-        if args is not None and 'gradients' in args:
-            problem_variables = args['problem_variables']
-            problem_variables_flat = args['problem_variables_flat']
-            problem_m = args['m']
-            problem_v = args['v']
-            problem_gradients = args['gradients']
-        else:
-            problem_variables = self.problem.variables
-            problem_variables_flat = self.problem.variables_flat
-            problem_gradients = self.get_gradients(self.problem.variables)
-            problem_m = self.m
-            problem_v = self.v
+        vars_steps = []
+        ms_next = []
+        vs_next = []
+        problem_variables = self.set_variable('variables', args, self.problem.variables)
+        problem_variables_flat = self.set_variable('variables_flat', args, self.problem.variables_flat)
+        problem_gradients = self.set_variable('gradients', args, self.get_gradients(self.problem.variables))
+        optim_params = self.set_variable('optim_params', args, self.optim_params)
+        problem_ms = optim_params['ms']
+        problem_vs = optim_params['vs']
+
         for var, var_flat, gradient, var_m, var_v in zip(problem_variables, problem_variables_flat, problem_gradients,
-                                                         problem_m, problem_v):
+                                                         problem_ms, problem_vs):
             m = self.beta_1 * var_m + (1 - self.beta_1) * gradient
             v = self.beta_2 * var_v + (1 - self.beta_2) * tf.square(gradient)
-            m_next.append(m)
-            v_next.append(v)
+            ms_next.append(m)
+            vs_next.append(v)
             m_hat = m / (1 - tf.pow(self.beta_1, self.t))
             v_hat = v / (1 - tf.pow(self.beta_2, self.t))
-            x_step = -self.lr * m_hat / (tf.sqrt(v_hat) + self.eps)
-            x_next = var_flat + x_step
-            x_next = self.problem.set_shape(x_next, like_variable=var, op_name='reshape_variable')
-            steps.append(x_step)
-            vars_next.append(x_next)
-        return {'vars_next': vars_next, 'steps': steps, 'ms_next': m_next, 'vs_next': v_next}
+            var_step = -self.lr * m_hat / (tf.sqrt(v_hat) + self.eps)
+            var_next = var_flat + var_step
+            var_next = self.problem.set_shape(var_next, like_variable=var, op_name='reshape_variable')
+            vars_steps.append(var_step)
+            vars_next.append(var_next)
+        return {'vars_next': vars_next, 'vars_steps': vars_steps, 'optim_params_next': {'ms_next': ms_next, 'vs_next': vs_next}}
 
     def updates(self, args=None):
-        vars_next = args['vars_next']
-        steps = args['steps']
-        ms_next = args['ms_next']
-        vs_next =  args['vs_next']
-        updates_list = [tf.assign(variable, variable_next) for variable, variable_next in zip(self.problem.variables, vars_next)]
-        updates_list.append([tf.assign(m, m_next) for m, m_next in zip(self.m, ms_next)])
-        updates_list.append([tf.assign(v, v_next) for v, v_next in zip(self.v, vs_next)])
+        vars_next = args['vars_next'] if 'vars_next' in args else None
+        ms_next = args['optim_params_next']['ms_next']
+        vs_next = args['optim_params_next']['vs_next']
+        if vars_next is None:
+            updates_list = []
+        else:
+            updates_list = [tf.assign(variable, variable_next) for variable, variable_next in zip(self.problem.variables, vars_next)]
+        updates_list.append([tf.assign(m, m_next) for m, m_next in zip(self.ms, ms_next)])
+        updates_list.append([tf.assign(v, v_next) for v, v_next in zip(self.vs, vs_next)])
         updates_list.append(tf.assign_add(self.t, 1.0))
         return updates_list
 
@@ -108,8 +113,6 @@ class Adam(Optimizer):
         self.ops_step = self.step(args)
         self.ops_loss = self.problem.loss(self.ops_step['vars_next'])
         self.ops_updates = self.updates(self.ops_step)
-
-
 
 class XHistoryGradNorm(Optimizer):
 
