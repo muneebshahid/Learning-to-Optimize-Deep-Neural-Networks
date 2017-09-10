@@ -61,7 +61,7 @@ class Adam(Optimizer):
         self.t = tf.Variable(1.0)
         self.ms = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
         self.vs = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
-        self.optim_params = {'ms': self.ms, 'vs': self.vs}
+        self.optim_params = [self.ms, self.vs]
 
     def set_variable(self, variable_key, args, default):
         if args is not None and variable_key in args:
@@ -78,8 +78,8 @@ class Adam(Optimizer):
         problem_variables_flat = self.set_variable('variables_flat', args, self.problem.variables_flat)
         problem_gradients = self.set_variable('gradients', args, self.get_gradients(self.problem.variables))
         optim_params = self.set_variable('optim_params', args, self.optim_params)
-        problem_ms = optim_params['ms']
-        problem_vs = optim_params['vs']
+        problem_ms = optim_params[0]
+        problem_vs = optim_params[1]
 
         for var, var_flat, gradient, var_m, var_v in zip(problem_variables, problem_variables_flat, problem_gradients,
                                                          problem_ms, problem_vs):
@@ -94,12 +94,12 @@ class Adam(Optimizer):
             var_next = self.problem.set_shape(var_next, like_variable=var, op_name='reshape_variable')
             vars_steps.append(var_step)
             vars_next.append(var_next)
-        return {'vars_next': vars_next, 'vars_steps': vars_steps, 'optim_params_next': {'ms_next': ms_next, 'vs_next': vs_next}}
+        return {'vars_next': vars_next, 'vars_steps': vars_steps, 'optim_params_next': [ms_next, vs_next]}
 
     def updates(self, args=None):
         vars_next = args['vars_next'] if 'vars_next' in args else None
-        ms_next = args['optim_params_next']['ms_next']
-        vs_next = args['optim_params_next']['vs_next']
+        ms_next = args['optim_params_next'][0]
+        vs_next = args['optim_params_next'][1]
         if vars_next is None:
             updates_list = []
         else:

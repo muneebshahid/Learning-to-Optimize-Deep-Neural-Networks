@@ -80,3 +80,8 @@ def aug_optim():
     args['use_network'] = False
     return args
 
+def aug_optim_rnn():
+    args = aug_optim()
+    args['rnn_steps'] = 5
+    return args
+
