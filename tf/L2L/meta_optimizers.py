@@ -1067,34 +1067,76 @@ class AUGOptims(Meta_Optimizer):
     layer_width = None
     hidden_layers = None
     lr = None
-    use_network = None
+    network_arch = None
+    rnn = None
+    hidden_states = None
+    state_size = None
+    num_input_optms = None
+    input_optim_lr = None
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
-        self.use_network = args['use_network']
+        self.network_arch = args['network_arch']
+        self.num_input_optims = args['num_input_optims']
+        self.input_optim_lr = args['input_optim_lr']
         self.lr = args['lr']
 
-        self.input_optimizers = []
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
 
-        if not self.use_network:
+        self.input_optimizers = []
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.input_optim_lr, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.input_optim_lr, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.input_optim_lr, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.input_optim_lr, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.input_optim_lr, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+
+        if not self.network_arch == 0:
             self.weights = tf.get_variable('input_weights', shape=[5, 1],
                                            initializer=tf.random_normal_initializer(mean=0.0, stddev=.1, dtype=tf.float32))
             self.optimizer_variables.append(self.weights)
+        elif self.network_arch == 2:
+            self.state_size = args['state_size']
+            self.hidden_states = []
+            with tf.variable_scope('optimizer_core'):
+                # Formulate variables for all states as it allows to use tf.assign() for states
+                def get_states(batch_size):
+                    state_variable = []
+                    for state in self.rnn.zero_state(batch_size, tf.float32):
+                        state_variable.append(tf.Variable(state, trainable=False))
+                    return tuple(state_variable)
+                # self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+                self.rnn = tf.contrib.rnn.MultiRNNCell(
+                    [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+                    # [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+                with tf.variable_scope('hidden_states'):
+                    for problem in self.problems:
+                        self.hidden_states.append([get_states(problem.get_shape(variable=variable)) for variable in
+                                              problem.variables_flat])
+
+                with tf.variable_scope('rnn_linear'):
+                    self.rnn_w = tf.get_variable('softmax_w', [self.state_size, self.num_input_optims])
+                    self.rnn_b = tf.get_variable('softmax_b', [self.num_input_optims])
+
+                network_input = tf.ones(shape=[1, self.num_input_optims], dtype=tf.float32)
+                with tf.variable_scope('network'):
+                    self.rnn(network_input, self.hidden_states[0][0])
+                rnn_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='optimizer_core/network')
+                self.optimizer_variables.extend(rnn_variables)
+                self.optimizer_variables.append(self.rnn_w)
+                self.optimizer_variables.append(self.rnn_b)
 
 
     def network(self, args=None):
-        with tf.name_scope('Optimizer_network'):
-            delta_lr = None
+        with tf.name_scope('Optimizer_Network'):
+            hidden_states_next = None
             inputs = args['inputs']
-            if self.use_network:
+            if self.network_arch == 0:
+                activations = tf.matmul(inputs, self.weights)
+                w_sum = tf.reduce_sum(self.weights)
+                output = activations / w_sum
+            elif self.network_arch == 1:
                 activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,
                                        variable_list=self.optimizer_variables, activation=self.network_activation)
                 for layer in range(self.hidden_layers):
@@ -1107,16 +1149,17 @@ class AUGOptims(Meta_Optimizer):
                 step_probabilities = softmax_activations * inputs
                 output = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
             else:
-                activations = tf.matmul(inputs, self.weights)
-                w_sum = tf.reduce_sum(self.weights)
-                output = activations / w_sum
+                hidden_states = args['hidden_states']
+                with tf.variable_scope('optimizer_core/network', reuse=True):
+                    activations, hidden_states_next = self.rnn(inputs, hidden_states)
+                output = tf.add(tf.matmul(activations, self.rnn_w), self.rnn_b)
 
             # rows = tf.shape(lr_grad_step_sign)[0]
             # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
             # flags = tf.equal(max_values, lr_grad_step_sign)
             # max_sign = tf.where(flags, tf.ones([rows, 2]), tf.zeros([rows, 2]))
 
-            return [output, activations]
+            return [output, activations, hidden_states_next]
 
     def stack_inputs(self, optim_steps):
         num_steps = len(optim_steps[0])
@@ -1196,6 +1239,9 @@ class AUGOptims(Meta_Optimizer):
 
         args = {'problem': problem, 'variables': problem_variables,
                 'variables_flat': problem_variables_flat, 'gradients': gradients}
+
+        if self.network_arch == 2:
+            args['hidden_states'] = self.hidden_states[0]
         for optimizer in self.input_optimizers:
             optimizer.build(args)
         input_optims_step_ops = [input_optimizer.step(args={'variables': problem_variables,
@@ -1208,6 +1254,8 @@ class AUGOptims(Meta_Optimizer):
 
         step = self.step(args)
         args['vars_next'] = step['vars_next']
+        if self.network_arch == 2:
+            args['hidden_states_next'] = step['hidden_states_next']
         if 'input_optims_params_next' in step:
             args['input_optims_params_next'] = step['input_optims_params_next']
         if 'loss' in step:
