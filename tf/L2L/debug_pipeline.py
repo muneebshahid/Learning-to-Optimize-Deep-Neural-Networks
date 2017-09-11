@@ -32,7 +32,7 @@ if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
 
     problem_batches, _ = problems.create_batches_all()
-    optim = meta_optimizers.AUGOptims(problem_batches, path=io_path, args=config.aug_optim())
+    optim = meta_optimizers.AUGOptimsRNN(problem_batches, path=io_path, args=config.aug_optim_rnn())
 
     optim.build()
     updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step

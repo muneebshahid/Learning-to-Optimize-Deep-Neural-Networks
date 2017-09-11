@@ -1067,6 +1067,7 @@ class AUGOptims(Meta_Optimizer):
     layer_width = None
     hidden_layers = None
     lr = None
+    lr_input_optims = None
     use_network = None
 
     def __init__(self, problems, path, args):
@@ -1076,13 +1077,14 @@ class AUGOptims(Meta_Optimizer):
         self.network_activation = args['network_activation']
         self.use_network = args['use_network']
         self.lr = args['lr']
+        self.lr_input_optims = args['lr_input_optims']
 
         self.input_optimizers = []
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': 1, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
 
         if not self.use_network:
             self.weights = tf.get_variable('input_weights', shape=[5, 1],
@@ -1111,11 +1113,6 @@ class AUGOptims(Meta_Optimizer):
                 w_sum = tf.reduce_sum(self.weights)
                 output = activations / w_sum
 
-            # rows = tf.shape(lr_grad_step_sign)[0]
-            # max_values = tf.expand_dims(tf.reduce_max(lr_grad_step_sign, 1), 1)
-            # flags = tf.equal(max_values, lr_grad_step_sign)
-            # max_sign = tf.where(flags, tf.ones([rows, 2]), tf.zeros([rows, 2]))
-
             return [output, activations]
 
     def stack_inputs(self, optim_steps):
@@ -1132,23 +1129,33 @@ class AUGOptims(Meta_Optimizer):
     def step(self, args=None):
         vars_next = []
         problem = args['problem']
-        problem_variables = args['variables']
-        problem_variable_flat = args['variables_flat']
-        stacked_steps = self.stack_inputs(args['vars_steps'])
+        problem_variables = args['variables'] if 'variables' in args else problem.variables
+        input_optims_params = args['input_optim_params'] if ('input_optim_params' in
+                                                             args) else [optimizer.optim_params for optimizer
+                                                                         in self.input_optimizers]
 
-        # for step in range(len(problem.variables)):
-        #     stacked_steps.append(tf.concat([self.optimizers[0].ops_step['steps'][step], self.optimizers[1].ops_step['steps'][step]], axis=1))
-        #
-        # for step in range(len(problem.variables)):
-        #     for optimizer in self.optimizers[2:]:
-        #         stacked_steps[step] = tf.concat([stacked_steps[step], optimizer.ops_step['steps'][step]], axis=1)
+        problem_variables_flat = [problem.flatten_input(i, variable) for i, variable
+                                 in enumerate(problem_variables)] if 'variables' in args else problem.variables_flat
+        gradients = self.get_preprocessed_gradients(problem, problem_variables)
 
-        for var, var_flat, stacked_step in zip(problem_variables, problem_variable_flat, stacked_steps):
+        input_optims_step_ops = [input_optimizer.step(args={'variables': problem_variables,
+                                                            'variables_flat': problem_variables_flat,
+                                                            'gradients': gradients,
+                                                            'optim_params': input_optim_params})
+                                 for input_optimizer, input_optim_params in
+                                 zip(self.input_optimizers, input_optims_params)]
+        input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in
+                                        input_optims_step_ops]
+        input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
+                                    input_optims_step_ops]
+
+        stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
+        for var, var_flat, stacked_step in zip(problem_variables, problem_variables_flat, stacked_steps):
             output = self.network({'inputs': stacked_step})[0]
             output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
             var_next = var + output * self.lr
             vars_next.append(var_next)
-        return {'vars_next': vars_next}
+        return {'vars_next': vars_next, 'input_optims_params_next': input_optims_params_next}
 
     def updates(self, args=None):
         problem = args['problem']
@@ -1191,31 +1198,12 @@ class AUGOptims(Meta_Optimizer):
 
         problem = self.problems[0]
         problem_variables = problem.variables
-        problem_variables_flat = problem.variables_flat
-        gradients = self.get_preprocessed_gradients(problem, problem_variables)
-
-        args = {'problem': problem, 'variables': problem_variables,
-                'variables_flat': problem_variables_flat, 'gradients': gradients}
-        for optimizer in self.input_optimizers:
-            optimizer.build(args)
-        input_optims_step_ops = [input_optimizer.step(args={'variables': problem_variables,
-                                                            'variables_flat': problem_variables_flat,
-                                                            'gradients': gradients,
-                                                            'optim_params': input_optimizer.optim_params})
-                                for input_optimizer in self.input_optimizers]
-        args['vars_steps'] = [step_op['vars_steps'] for step_op in input_optims_step_ops]
-        args['input_optims_params_next'] = [step_op['optim_params_next'] for step_op in input_optims_step_ops]
-
+        args = {'problem': problem, 'variables': problem_variables}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
-        if 'input_optims_params_next' in step:
-            args['input_optims_params_next'] = step['input_optims_params_next']
-        if 'loss' in step:
-            loss = step['loss']
-        else:
-            loss = tf.squeeze(self.loss(args))
-
+        args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
+        loss = tf.squeeze(self.loss(args))
         loss_prob = loss
         log_loss = tf.log(loss_prob + 1e-15)
         meta_step = self.minimize(log_loss)
@@ -1250,44 +1238,62 @@ class AUGOptimsRNN(AUGOptims):
     def step(self, args=None):
         problem = args['problem']
         problem_variables = args['variables']
-        problem_variables_flat = args['variables_flat']
-        input_optims_vars_steps = args['vars_steps']
-        input_optims_params = args['input_optims_params_next']
+        input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
         loss = 0.0
 
-        def update_rnn(t, loss, problem_variables, problem_variables_flat, optims_vars_steps, input_optims_params):
-            # Feed the steps from input optimizer to the meta optimizer to get the vars_next.
+        def update_rnn(t, loss, problem_variables, input_optims_params):
             step_op = super(AUGOptimsRNN, self).step({'problem': problem,
                                                       'variables': problem_variables,
-                                                      'variables_flat': problem_variables_flat,
-                                                      'vars_steps': optims_vars_steps})
+                                                      'input_optim_params': input_optims_params})
             vars_next = step_op['vars_next']
-            vars_next_flat = [problem.flatten_input(i, variable) for i, variable in enumerate(vars_next)]
-            gradients = self.get_preprocessed_gradients(problem, vars_next)
-
-            # Use the vars_next and gradients to get the steps and optim_params_next from input optimizers,
-            # by updating optim_params
-            input_optims_step_ops = [input_optimizer.step(args={'variables': vars_next,
-                                                                'variables_flat': vars_next_flat,
-                                                                'gradients': gradients,
-                                                                'optim_params': input_optim_params})
-                                     for input_optimizer, input_optim_params in zip(self.input_optimizers, input_optims_params)]
-            input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in input_optims_step_ops]
-            input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in input_optims_step_ops]
+            input_optims_params_next = step_op['input_optims_params_next']
             loss = loss + tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
-            return t + 1, loss, vars_next, vars_next_flat, input_optims_vars_steps_next, input_optims_params_next
+            return t + 1, loss, vars_next, input_optims_params_next
 
-        _, loss_final, problem_variables_next, _, _, input_optims_params_next = tf.while_loop(
+        t_final, loss_final, problem_variables_next, input_optims_params_next = tf.while_loop(
         cond=lambda t, *_: t < self.rnn_steps,
         body=update_rnn,
-        loop_vars=([0, loss, problem_variables, problem_variables_flat, input_optims_vars_steps, input_optims_params]),
+        loop_vars=([0, loss, problem_variables, input_optims_params]),
         parallel_iterations=1,
         swap_memory=True,
         name="unroll")
-        # _, loss_final, problem_variables_next, _, _, input_optims_params_next = update_rnn(0, loss, problem_variables, problem_variables_flat,
-        #                                                                                    input_optims_vars_steps, input_optims_params)
+        # _, loss_final, problem_variables_next, input_optims_params_next = update_rnn(0, loss, problem_variables, input_optims_params)
         avg_loss = loss_final / self.rnn_steps
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next, 'loss': avg_loss}
+
+
+    def build(self):
+        self.ops_step = []
+        self.ops_loss = []
+        self.ops_updates = []
+        self.ops_meta_step = []
+        self.ops_reset_problem = []
+        self.ops_reset = []
+        self.ops_loss_problem = []
+
+        problem = self.problems[0]
+        problem_variables = problem.variables
+        problem_variables_flat = problem.variables_flat
+        gradients = self.get_preprocessed_gradients(problem, problem_variables)
+
+        args = {'problem': problem, 'variables': problem_variables,
+                'variables_flat': problem_variables_flat, 'gradients': gradients}
+        step = self.step(args)
+        args['vars_next'] = step['vars_next']
+        args['input_optims_params_next'] = step['input_optims_params_next']
+        updates = self.updates(args)
+        loss_prob = step['loss']
+        log_loss = tf.log(loss_prob + 1e-15)
+        meta_step = self.minimize(log_loss)
+        reset = self.reset()
+        self.ops_step.append(step)
+        self.ops_updates.append(updates)
+        self.ops_loss_problem.append(loss_prob)
+        self.ops_loss.append(log_loss)
+        self.ops_meta_step.append(meta_step)
+        self.ops_reset_problem.append(reset)
+        self.ops_reset.append(self.ops_reset_problem)
+        self.init_saver_handle()
 
 class GRUNormHistory(MlpNormHistory):
     unroll_len = None

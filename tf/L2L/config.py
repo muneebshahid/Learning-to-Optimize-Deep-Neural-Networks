@@ -76,8 +76,9 @@ def adam():
 
 def aug_optim():
     args = common()
-    args['lr'] = 0.01
-    args['use_network'] = False
+    args['lr'] = 1.0
+    args['lr_input_optims'] = .01
+    args['use_network'] = True
     return args
 
 def aug_optim_rnn():
