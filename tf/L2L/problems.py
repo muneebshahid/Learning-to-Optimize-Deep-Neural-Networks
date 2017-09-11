@@ -37,8 +37,8 @@ def create_batches_all(train=True):
         # reset_limit.append([[50, 300], [100, 500]])
         # #
         # Rosenbrock
-        #original_mirror(Rosenbrock, '_0_', None, -10, 10)
-        #reset_limit.append([[50, 300], [500, 5000]])
+        # original_mirror(Rosenbrock, '_0_', None, -10, 10)
+        # reset_limit.append([[50, 300], [500, 5000]])
         # reset_limit.append([[50, 300], [500, 5000]])
         # #
         # batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))

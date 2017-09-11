@@ -1065,17 +1065,23 @@ class AUGOptims(Meta_Optimizer):
 
     input_optimizers = None
     layer_width = None
-    hidden_layers = None
     lr = None
     lr_input_optims = None
     use_network = None
+
+    hidden_layers = None
+    rnn = None
+    hidden_states = None
+    state_size = None
+    num_input_optms = None
+
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
-        self.use_network = args['use_network']
+        self.num_input_optims = args['num_input_optims']
         self.lr = args['lr']
         self.lr_input_optims = args['lr_input_optims']
 
@@ -1091,12 +1097,15 @@ class AUGOptims(Meta_Optimizer):
                                            initializer=tf.random_normal_initializer(mean=0.0, stddev=.1, dtype=tf.float32))
             self.optimizer_variables.append(self.weights)
 
-
     def network(self, args=None):
-        with tf.name_scope('Optimizer_network'):
-            delta_lr = None
+        with tf.name_scope('Optimizer_Network'):
+            hidden_states_next = None
             inputs = args['inputs']
             if self.use_network:
+                activations = tf.matmul(inputs, self.weights)
+                w_sum = tf.reduce_sum(self.weights)
+                output = activations / w_sum
+            else:
                 activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,
                                        variable_list=self.optimizer_variables, activation=self.network_activation)
                 for layer in range(self.hidden_layers):
@@ -1108,12 +1117,9 @@ class AUGOptims(Meta_Optimizer):
                 softmax_activations = tf.nn.softmax(activations, 1)
                 step_probabilities = softmax_activations * inputs
                 output = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
-            else:
-                activations = tf.matmul(inputs, self.weights)
-                w_sum = tf.reduce_sum(self.weights)
-                output = activations / w_sum
 
             return [output, activations]
+
 
     def stack_inputs(self, optim_steps):
         num_steps = len(optim_steps[0])
@@ -1295,6 +1301,211 @@ class AUGOptimsRNN(AUGOptims):
         self.ops_reset.append(self.ops_reset_problem)
         self.init_saver_handle()
 
+
+class AUGOptimsGRU(Meta_Optimizer):
+
+    rnn_steps = None
+
+    def __init__(self, problems, path, args):
+        super(AUGOptimsGRU, self).__init__(problems, path, args)
+        self.layer_width = args['layer_width']
+        self.hidden_layers = args['hidden_layers']
+        self.network_activation = args['network_activation']
+        self.num_input_optims = args['num_input_optims']
+        self.rnn_steps = args['rnn_steps']
+        self.lr = args['lr']
+        self.lr_input_optims = args['lr_input_optims']
+
+        self.input_optimizers = []
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+
+        self.hidden_state = []
+        self.state_size = args['state_size']
+        self.hidden_states = []
+        with tf.variable_scope('optimizer_core'):
+            # Formulate variables for all states as it allows to use tf.assign() for states
+            def get_states(batch_size):
+                state_variable = []
+                for state in self.rnn.zero_state(batch_size, tf.float32):
+                    state_variable.append(tf.Variable(state, trainable=False))
+                return tuple(state_variable)
+            # self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+            self.rnn = tf.contrib.rnn.MultiRNNCell(
+                [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+                # [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
+            with tf.variable_scope('hidden_states'):
+                for problem in self.problems:
+                    self.hidden_states.append([get_states(problem.get_shape(variable=variable)) for variable in
+                                          problem.variables_flat])
+
+            with tf.variable_scope('rnn_linear'):
+                self.rnn_w = tf.get_variable('softmax_w', [self.state_size, self.num_input_optims])
+                self.rnn_b = tf.get_variable('softmax_b', [self.num_input_optims])
+
+            network_input = tf.ones(shape=[1, self.num_input_optims], dtype=tf.float32)
+            hidden_state = self.rnn.zero_state(1, tf.float32)
+            with tf.variable_scope('network'):
+                self.rnn(network_input, hidden_state)
+            rnn_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='optimizer_core/network')
+            self.optimizer_variables.extend(rnn_variables)
+            self.optimizer_variables.append(self.rnn_w)
+            self.optimizer_variables.append(self.rnn_b)
+
+    def network(self, args=None):
+        with tf.name_scope('Optimizer_Network'):
+            inputs = args['inputs']
+            hidden_states = args['hidden_states']
+            with tf.variable_scope('optimizer_core/network', reuse=True):
+                activations, hidden_states_next = self.rnn(inputs, hidden_states)
+                activations = tf.add(tf.matmul(activations, self.rnn_w), self.rnn_b)
+            softmax_activations = tf.nn.softmax(activations, 1)
+            step_probabilities = softmax_activations * inputs
+            output = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+        return [output, hidden_states_next]
+
+    def stack_inputs(self, optim_steps):
+        num_steps = len(optim_steps[0])
+        stacked_steps = []
+        for step in range(num_steps):
+            stacked_steps.append(tf.concat([optim_steps[0][step], optim_steps[1][step]], axis=1))
+
+        for step in range(num_steps):
+            for optim in optim_steps[2:]:
+                stacked_steps[step] = tf.concat([stacked_steps[step], optim[step]], axis=1)
+        return stacked_steps
+
+    def step(self, args=None):
+        problem = args['problem']
+        problem_variables = args['variables']
+        hidden_states = args['hidden_states']
+        input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
+        loss = 0.0
+
+        def update_rnn(t, loss, problem_variables, input_optims_params, hidden_states):
+            vars_next = []
+            hidden_states_next = []
+
+            problem_variables_flat = [problem.flatten_input(i, variable) for i, variable
+                                      in
+                                      enumerate(problem_variables)] if 'variables' in args else problem.variables_flat
+            gradients = self.get_preprocessed_gradients(problem, problem_variables)
+
+            input_optims_step_ops = [input_optimizer.step(args={'variables': problem_variables,
+                                                                'variables_flat': problem_variables_flat,
+                                                                'gradients': gradients,
+                                                                'optim_params': input_optim_params})
+                                     for input_optimizer, input_optim_params in
+                                     zip(self.input_optimizers, input_optims_params)]
+            input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in
+                                            input_optims_step_ops]
+            input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
+                                        input_optims_step_ops]
+
+            stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
+            for var, var_flat, stacked_step, hidden_state in zip(problem_variables, problem_variables_flat, stacked_steps, hidden_states):
+                output, hidden_state_next = self.network({'inputs': stacked_step, 'hidden_states': hidden_state})
+                output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
+                var_next = var + output * self.lr
+                vars_next.append(var_next)
+                hidden_states_next.append(hidden_state_next)
+
+            loss = loss + tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+            return t + 1, loss, vars_next, input_optims_params_next, hidden_states_next
+
+        t_final, loss_final, problem_variables_next, input_optims_params_next, hidden_states_next = tf.while_loop(
+        cond=lambda t, *_: t < self.rnn_steps,
+        body=update_rnn,
+        loop_vars=([0, loss, problem_variables, input_optims_params, hidden_states]),
+        parallel_iterations=1,
+        swap_memory=True,
+        name="unroll")
+        # _, loss_final, problem_variables_next, input_optims_params_next, hidden_states_next = \
+        #     update_rnn(0, loss, problem_variables, input_optims_params, hidden_states)
+        avg_loss = loss_final / self.rnn_steps
+        return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
+                'loss': avg_loss, 'hidden_states_next': hidden_states_next}
+
+    def updates(self, args=None):
+        problem_variables = args['variables']
+        vars_next = args['vars_next']
+        input_optims_params_next = args['input_optims_params_next']
+        problem_hidden_states = args['hidden_states']
+        problem_hidden_states_next = args['hidden_states_next']
+
+        updates_list = [tf.assign(variable, variable_next) for variable, variable_next in
+                        zip(problem_variables, vars_next)]
+        updates_list.extend([tf.assign(hidden_state, hidden_state_next) for hidden_state, hidden_state_next in
+                               # zip(self.hidden_states[0], problem_hidden_states_next)]
+                               zip(nest.flatten(problem_hidden_states), nest.flatten(problem_hidden_states_next))])
+        with tf.control_dependencies(updates_list):
+            updates_list.extend(
+                [input_optimizer.updates({'optim_params_next': optim_params_next}) for optim_params_next,
+                                                                                       input_optimizer in
+                 zip(input_optims_params_next, self.input_optimizers)])
+        return updates_list
+
+    def reset(self):
+        reset_ops = [self.reset_problems()]
+        for optimizer in self.input_optimizers:
+            reset_ops.append(tf.variables_initializer([optimizer.t]))
+            reset_ops.append(tf.variables_initializer(optimizer.ms))
+            reset_ops.append(tf.variables_initializer(optimizer.vs))
+        return reset_ops
+
+    def run_reset(self, index=None, optimizer=False):
+        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+        self.session.run(reset_ops)
+
+    def loss(self, args=None):
+        with tf.name_scope('Problem_Loss'):
+            problem = args['problem']
+            variables = args['vars_next'] if 'vars_next' in args else problem.variables
+            return problem.loss(variables)
+
+    def build(self):
+        self.ops_step = []
+        self.ops_loss = []
+        self.ops_updates = []
+        self.ops_meta_step = []
+        self.ops_reset_problem = []
+        self.ops_reset = []
+        self.ops_loss_problem = []
+
+        problem = self.problems[0]
+        problem_variables = problem.variables
+
+        args = {'problem': problem, 'variables': problem_variables, 'hidden_states': self.hidden_states[0]}
+        step = self.step(args)
+        args['vars_next'] = step['vars_next']
+        args['input_optims_params_next'] = step['input_optims_params_next']
+        args['hidden_states_next'] = step['hidden_states_next']
+        updates = self.updates(args)
+        loss_prob = step['loss']
+        log_loss = tf.log(loss_prob + 1e-15)
+        meta_step = self.minimize(log_loss)
+        reset = self.reset()
+        self.ops_step.append(step)
+        self.ops_updates.append(updates)
+        self.ops_loss_problem.append(loss_prob)
+        self.ops_loss.append(log_loss)
+        self.ops_meta_step.append(meta_step)
+        self.ops_reset_problem.append(reset)
+        self.ops_reset.append(self.ops_reset_problem)
+        self.init_saver_handle()
+
+    def run(self, args=None):
+        if args['train']:
+            ops_meta_step = self.ops_meta_step
+        else:
+            ops_meta_step = []
+        start = timer()
+        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        return timer() - start, np.array(op_loss), np.array(pr_loss)
+
 class GRUNormHistory(MlpNormHistory):
     unroll_len = None
     state_size = None
@@ -1331,8 +1542,6 @@ class GRUNormHistory(MlpNormHistory):
             else:
                 self.rnn = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.LayerNormBasicLSTMCell(self.state_size) for _ in range(2)])
                 # [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(2)])
-
-
 
             with tf.variable_scope('hidden_states'):
                 for problem in self.problems:

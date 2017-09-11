@@ -7,7 +7,7 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 1
     args['network_activation'] = tf.nn.relu
-    args['unroll_len'] = 1
+    args['unroll_len'] = 5
     args['use_guide_step'] = False
     return args
 
@@ -78,11 +78,17 @@ def aug_optim():
     args = common()
     args['lr'] = 1.0
     args['lr_input_optims'] = .01
-    args['use_network'] = True
+    args['num_input_optims'] = 5
+    args['use_network'] = False
     return args
 
 def aug_optim_rnn():
     args = aug_optim()
     args['rnn_steps'] = 5
+    return args
+
+def aug_optim_gru():
+    args = aug_optim_rnn()
+    args['state_size'] = 5
     return args
 
