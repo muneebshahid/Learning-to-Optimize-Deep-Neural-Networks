@@ -7,7 +7,7 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 1
     args['network_activation'] = tf.nn.relu
-    args['unroll_len'] = 5
+    args['unroll_len'] = 1
     args['use_guide_step'] = False
     return args
 
