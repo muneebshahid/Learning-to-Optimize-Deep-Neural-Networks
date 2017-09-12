@@ -1101,7 +1101,7 @@ class AUGOptims(Meta_Optimizer):
         with tf.name_scope('Optimizer_Network'):
             hidden_states_next = None
             inputs = args['inputs']
-            if self.use_network:
+            if not self.use_network:
                 activations = tf.matmul(inputs, self.weights)
                 w_sum = tf.reduce_sum(self.weights)
                 output = activations / w_sum
