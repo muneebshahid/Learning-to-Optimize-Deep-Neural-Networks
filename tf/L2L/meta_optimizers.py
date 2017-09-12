@@ -830,13 +830,25 @@ class MlpNormHistory(Meta_Optimizer):
             flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
             vari_hist_next = []
             grad_hist_next = []
-            for variables, gradients, batch_vari_hist, batch_grad_hist in zip (flat_variables, flat_gradients, problem_vari_hist, problem_grad_hist):
-                vari_hist_next.append(batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha))
-                grad_hist_next.append(batch_grad_hist * self.momentum_alpha + gradients * (1 - self.momentum_alpha))
+            sq_vari_hist_next = []
+            sq_grad_hist_next = []
+            for variables, gradients, batch_vari_hist, batch_grad_hist, batch_sq_vari_hist, batch_sq_grad_hist in \
+                    zip(flat_variables, flat_gradients, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist, problem_sq_grad_hist):
+                updated_vari_hist = batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha)
+                updated_grad_hist = batch_grad_hist * self.momentum_alpha + gradients * (1 - self.momentum_alpha)
+                vari_hist_next.append(updated_vari_hist)
+                grad_hist_next.append(updated_grad_hist)
+                if self.normalize_with_sq_grad or self.use_noise_est:
+                    updated_sq_vari_hist = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_hist) * (1 - self.momentum_alpha)
+                    updated_sq_grad_hist = batch_sq_grad_hist * self.momentum_alpha + tf.square(updated_grad_hist) * (1 - self.momentum_alpha)
+                    sq_vari_hist_next.append(updated_sq_vari_hist)
+                    sq_grad_hist_next.append(updated_sq_grad_hist)
 
             return {'x_next': x_next, 'deltas_list': deltas_list,
                     'vari_hist_next': vari_hist_next,
                     'grad_hist_next': grad_hist_next,
+                    'sq_vari_hist_next': sq_vari_hist_next,
+                    'sq_grad_hist_next': sq_grad_hist_next,
                     'delta_mv_avg_next': deltas_mv_avg_next,
                     'lr_mv_avg_next': lr_mv_avg_next, 'delta_lr': delta_lr_next}
 
@@ -850,7 +862,9 @@ class MlpNormHistory(Meta_Optimizer):
         batch_grad_hist = args['batch_grad_hist_next']
         batch_grad_hist_next = args['batch_grad_hist_next']
         batch_sq_vari_hist = args['batch_sq_vari_hist']
+        batch_sq_vari_hist_next = args['batch_sq_vari_hist_next']
         batch_sq_grad_hist = args['batch_sq_grad_hist']
+        batch_sq_grad_hist_next = args['batch_sq_grad_hist_next']
         batch_dist_mv_avg = args['batch_dist_mv_avg']
         batch_delta_mv_avg = args['batch_delta_mv_avg']
         batch_delta_mv_avg_next = args['batch_delta_mv_avg_next']
@@ -894,8 +908,8 @@ class MlpNormHistory(Meta_Optimizer):
                 with tf.control_dependencies(history_ops):
                     updated_sq_vari_hist = batch_sq_vari_hist * momentum_alpha + tf.square(updated_vari_hist) * (1 - momentum_alpha)
                     updated_sq_grad_hist = batch_sq_grad_hist * momentum_alpha + tf.square(updated_grad_hist) * (1 - momentum_alpha)
-                    history_ops.append(tf.assign(batch_sq_vari_hist, updated_sq_vari_hist))
-                    history_ops.append(tf.assign(batch_sq_grad_hist, updated_sq_grad_hist))
+                    history_ops.append(tf.assign(batch_sq_vari_hist, batch_sq_vari_hist_next))
+                    history_ops.append(tf.assign(batch_sq_grad_hist, batch_sq_grad_hist_next))
             if self.use_dist_mv_avg:
                 with tf.control_dependencies(history_ops):
                     max = tf.reduce_max(updated_vari_hist, axis=1, keep_dims=True)
@@ -927,12 +941,17 @@ class MlpNormHistory(Meta_Optimizer):
             init_ops = args['init_ops']
 
             problem_vari_hist_next = [None for variable in problem.variables]
+            problem_sq_vari_hist_next = [None for variable in problem.variables]
             problem_grad_hist_next = [None for variable in problem.variables]
+            problem_sq_grad_hist_next = [None for variable in problem.variables]
             problem_delta_mv_avg_next = [None for variable in problem.variables]
             problem_lr_mv_avg_next = [None for variable in problem.variables]
             if not init_ops:
                 problem_vari_hist_next = args['vari_hist_next']
                 problem_grad_hist_next = args['grad_hist_next']
+                if self.normalize_with_sq_grad or self.use_noise_est:
+                    problem_sq_vari_hist_next = args['sq_vari_hist_next']
+                    problem_sq_grad_hist_next = args['sq_grad_hist_next']
                 if self.use_delta_mv_avg:
                     problem_delta_mv_avg_next = args['delta_mv_avg_next']
                 if self.use_lr_mv_avg:
@@ -946,13 +965,13 @@ class MlpNormHistory(Meta_Optimizer):
             flat_gradients = problem.get_gradients(x_next)
             flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
             for batch_no, (variable, grads, batch_vari_hist, batch_vari_hist_next, batch_grad_hist_next, batch_grad_hist,
-                 batch_sq_vari_hist, batch_sq_grad_hist,
+                 batch_sq_vari_hist, batch_sq_vari_hist_next, batch_sq_grad_hist,batch_sq_grad_hist_next,
                  batch_dist_mvg_avg, batch_delta_mv_avg, batch_delta_mv_avg_next, batch_lr_mv_avg, batch_lr_mv_avg_next) in enumerate(zip(flat_variables,
                                                                                                    flat_gradients,
                                                                                                    problem_vari_hist, problem_vari_hist_next,
                                                                                                    problem_grad_hist, problem_grad_hist_next,
-                                                                                                   problem_sq_vari_hist,
-                                                                                                   problem_sq_grad_hist,
+                                                                                                   problem_sq_vari_hist, problem_sq_vari_hist_next,
+                                                                                                   problem_sq_grad_hist, problem_sq_grad_hist_next,
                                                                                                    problem_dist_mvg_avg,
                                                                                                    problem_delta_mv_avg,
                                                                                                    problem_delta_mv_avg_next, problem_lr_mv_avg,
@@ -961,8 +980,8 @@ class MlpNormHistory(Meta_Optimizer):
                                                             'batch_variable': variable, 'batch_gradients': grads,
                                                             'batch_vari_hist': batch_vari_hist, 'batch_vari_hist_next': batch_vari_hist_next,
                                                             'batch_grad_hist': batch_grad_hist, 'batch_grad_hist_next': batch_grad_hist_next,
-                                                            'batch_sq_vari_hist': batch_sq_vari_hist,
-                                                            'batch_sq_grad_hist': batch_sq_grad_hist,
+                                                            'batch_sq_vari_hist': batch_sq_vari_hist, 'batch_sq_vari_hist_next': batch_sq_vari_hist_next,
+                                                            'batch_sq_grad_hist': batch_sq_grad_hist, 'batch_sq_grad_hist_next': batch_sq_grad_hist_next,
                                                             'batch_dist_mv_avg': batch_dist_mvg_avg,
                                                             'batch_delta_mv_avg': batch_delta_mv_avg,
                                                             'batch_delta_mv_avg_next': batch_delta_mv_avg_next,
@@ -1051,6 +1070,8 @@ class MlpNormHistory(Meta_Optimizer):
             args['x_next'] = step['x_next']
             args['vari_hist_next'] = step['vari_hist_next']
             args['grad_hist_next'] = step['grad_hist_next']
+            args['sq_vari_hist_next'] = step['sq_vari_hist_next']
+            args['sq_grad_hist_next'] = step['sq_grad_hist_next']
             args['update_problem_vars'] = True
             args['delta_mv_avg_next'] = step['delta_mv_avg_next']
             args['lr_mv_avg_next'] = step['lr_mv_avg_next']
