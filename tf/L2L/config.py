@@ -16,7 +16,7 @@ def mlp_norm_history():
     args = common()
     args['limit'] = 6
     args['step_dist_max_step'] = 1.0
-    args['grad_only'] = False
+    args['grad_only'] = True
     args['grad_sign_only'] = False
     args['use_momentum'] = True
     args['momentum_base'] = 1.1
