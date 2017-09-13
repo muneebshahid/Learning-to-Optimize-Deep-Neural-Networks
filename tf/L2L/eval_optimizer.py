@@ -14,7 +14,7 @@ def write_to_file(f_name, list_var):
             log_file.write(str(variable) + ' ')
         log_file.write('\n')
 results_dir = 'tf_summary/'
-model_id = '1000000_FINAL'
+model_id = '50000'
 meta = True
 
 l2l = tf.Graph()
@@ -37,9 +37,10 @@ with l2l.as_default():
     writer = None
     problem_batches, _ = problems.create_batches_all(train=True)
     enable_summaries = False
-    optim_meta = meta_optimizers.MlpNormHistory(problem_batches, path=None, args=config.mlp_norm_history())
+    optim_meta = meta_optimizers.AUGOptims(problem_batches, path=None, args=config.aug_optim())
+    #optim_meta = meta_optimizers.MlpNormHistory(problem_batches, path=None, args=config.mlp_norm_history())
     optim_meta.build()
-    optim_adam = tf.train.AdamOptimizer(.01)
+    optim_adam = tf.train.AdamOptimizer(.001)
     adam_min_step = optim_adam.minimize(optim_meta.ops_loss_problem[0], var_list=optim_meta.problems[0].variables)
     problem_norms = []
     for problem in optim_meta.problems:
@@ -52,19 +53,19 @@ with l2l.as_default():
         tf.train.start_queue_runners(sess)
         optim_meta.set_session(sess)
         optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
-        # optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
+        #optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
         optim_meta.run_init()
         l = []
-        for i, (problem, problem_variables_history) in enumerate(zip(optim_meta.problems, optim_meta.vari_hist)):
+        for i, problem in enumerate(optim_meta.problems):
             name_prefix = problem.__class__.__name__ + "_" + str(i)
             with tf.name_scope(name_prefix):
                 loss = tf.squeeze(problem.loss(problem.variables))
                 l.append(loss)
                 if enable_summaries:
                     tf.summary.scalar('loss', loss)
-                    for j, (variable, variable_history) in enumerate(zip(problem.variables, problem_variables_history)):
-                        # tf.summary.histogram('variable_' + str(j), variable)
-                        tf.summary.histogram('variable_history_scl_' + str(j), variable_history)
+                    #for j, (variable, variable_history) in enumerate(zip(problem.variables, problem_variables_history)):
+                    #    # tf.summary.histogram('variable_' + str(j), variable)
+                    #    tf.summary.histogram('variable_history_scl_' + str(j), variable_history)
         if enable_summaries:
             all_summ = tf.summary.merge_all()
             writer = tf.summary.FileWriter(results_dir)
@@ -80,7 +81,7 @@ with l2l.as_default():
         total_itr = 20000
         for i in range(total_itr):
             if meta:
-                _, curr_loss, summaries, gu = sess.run([optim_meta.ops_updates, l, all_summ, optim_meta.ops_global_updates])
+                _, curr_loss, summaries  = sess.run([optim_meta.ops_updates, l, all_summ])
             else:
                 _, curr_loss, summaries = sess.run([adam_min_step, l, all_summ])
             total_loss += np.array(curr_loss)
@@ -89,7 +90,7 @@ with l2l.as_default():
                 avg_loss = np.log10(total_loss / 50.0)
                 write_to_file(results_dir + 'loss', avg_loss)
                 print(avg_loss)
-                print(sess.run(optim_meta.min_lr))
+                #print(sess.run(optim_meta.min_lr))
                 print('PROB NORM: ', sess.run(problem_norms))
                 total_loss = 0
                 if enable_summaries and ((i + 10) % 10 == 0):
