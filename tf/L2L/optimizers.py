@@ -58,6 +58,7 @@ class Adam(Optimizer):
         self.beta_2 = args['beta_2']
         self.lr = args['lr']
         self.eps = args['eps']
+        self.eps_squared = tf.square(self.eps)
         self.t = tf.Variable(1.0)
         self.ms = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
         self.vs = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
@@ -89,7 +90,7 @@ class Adam(Optimizer):
             vs_next.append(v)
             m_hat = m / (1 - tf.pow(self.beta_1, self.t))
             v_hat = v / (1 - tf.pow(self.beta_2, self.t))
-            var_step = -self.lr * m_hat / (tf.sqrt(v_hat) + self.eps)
+            var_step = -self.lr * m_hat / (tf.sqrt(v_hat + self.eps_squared))
             var_next = var_flat + var_step
             var_next = self.problem.set_shape(var_next, like_variable=var, op_name='reshape_variable')
             vars_steps.append(var_step)
