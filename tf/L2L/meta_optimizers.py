@@ -1112,6 +1112,7 @@ class AUGOptims(Meta_Optimizer):
         self.lr = args['lr']
         self.lr_input_optims = args['lr_input_optims']
         self.use_positive_weights = args['use_positive_weights']
+        self.normalize_weights = args['normalize_weights']
 
 
         self.input_optimizers = []
@@ -1141,7 +1142,10 @@ class AUGOptims(Meta_Optimizer):
                 else:
                     weights = self.weights
                 activations = tf.matmul(inputs, weights)
-                w_sum = tf.reduce_sum(weights)
+                if self.normalize_weights:
+                    w_sum = tf.reduce_sum(weights)
+                else:
+                    w_sum = 1.0
                 output = activations / w_sum
             else:
                 activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,

@@ -81,6 +81,7 @@ def aug_optim():
     args['num_input_optims'] = 11
     args['use_network'] = False
     args['use_positive_weights'] = False
+    args['normalize_weights'] = True
     return args
 
 def aug_optim_rnn():
