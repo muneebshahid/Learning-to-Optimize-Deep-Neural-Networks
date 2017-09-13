@@ -1101,7 +1101,7 @@ class AUGOptims(Meta_Optimizer):
     hidden_states = None
     state_size = None
     num_input_optms = None
-
+    use_positive_weights = None
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
@@ -1111,26 +1111,37 @@ class AUGOptims(Meta_Optimizer):
         self.num_input_optims = args['num_input_optims']
         self.lr = args['lr']
         self.lr_input_optims = args['lr_input_optims']
+        self.use_positive_weights = args['use_positive_weights']
+
 
         self.input_optimizers = []
         self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8}))
         self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8}))
         self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8}))
         self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
+        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8}))
         self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
 
         if not self.use_network:
-            self.weights = tf.get_variable('input_weights', shape=[5, 1],
+            self.weights = tf.get_variable('input_weights', shape=[self.num_input_optims, 1],
                                            initializer=tf.random_normal_initializer(mean=0.0, stddev=.1, dtype=tf.float32))
             self.optimizer_variables.append(self.weights)
 
     def network(self, args=None):
         with tf.name_scope('Optimizer_Network'):
-            hidden_states_next = None
             inputs = args['inputs']
             if not self.use_network:
-                activations = tf.matmul(inputs, self.weights)
-                w_sum = tf.reduce_sum(self.weights)
+                if self.use_positive_weights:
+                    weights = tf.abs(self.weights)
+                else:
+                    weights = self.weights
+                activations = tf.matmul(inputs, weights)
+                w_sum = tf.reduce_sum(weights)
                 output = activations / w_sum
             else:
                 activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,
