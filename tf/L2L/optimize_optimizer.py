@@ -27,9 +27,7 @@ with l2l.as_default():
     momentum = None
 
     flag_optimizer = 'Mlp'
-
     model_id = '10'
-
 
     # problem = problems.Quadratic(args={'batch_size': batch_size, 'dims': dim, 'stddev': .01, 'dtype': tf.float32})
     # problem = problems.TwoVars(args={'dims': dim, 'dtype':tf.float32})
@@ -52,7 +50,7 @@ with l2l.as_default():
     num_unrolls_per_epoch = 1
     if restore_network:
         io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-    optim = meta_optimizers.AUGOptims(problem_batches, path=io_path, args=config.aug_optim())
+    optim = meta_optimizers.AUGOptimsGRU(problem_batches, path=io_path, args=config.aug_optim_gru())
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)

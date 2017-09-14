@@ -78,7 +78,7 @@ def aug_optim():
     args = common()
     args['lr'] = 1.0
     args['lr_input_optims'] = 0.01
-    args['num_input_optims'] = 11
+    args['num_input_optims'] = 5
     args['use_network'] = False
     args['use_positive_weights'] = False
     args['normalize_weights'] = True
@@ -87,10 +87,12 @@ def aug_optim():
 def aug_optim_rnn():
     args = aug_optim()
     args['rnn_steps'] = 5
+    args['learn_betas'] = True
     return args
 
 def aug_optim_gru():
     args = aug_optim_rnn()
     args['state_size'] = 5
+    args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     return args
 
