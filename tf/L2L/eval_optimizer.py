@@ -85,9 +85,9 @@ with l2l.as_default():
             else:
                 _, curr_loss, summaries = sess.run([adam_min_step, l, all_summ])
             total_loss += np.array(curr_loss)
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 400 == 0:
                 print(str(i + 1) + '/' + str(total_itr))
-                avg_loss = np.log10(total_loss / 50.0)
+                avg_loss = np.log10(total_loss / 400.0)
                 write_to_file(results_dir + 'loss', avg_loss)
                 print(avg_loss)
                 #print(sess.run(optim_meta.min_lr))

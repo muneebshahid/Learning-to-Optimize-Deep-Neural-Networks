@@ -21,7 +21,7 @@ def write_to_file(f_name, list_var):
             log_file.write(str(variable) + ' ')
         log_file.write('\n')
 
-problem_path = '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables'
+problem_path = '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables'
 
 
 for adam_param in adam_params:
