@@ -5,7 +5,7 @@ import os
 
 files = glob.glob('../../../results/plots/conv/*')
 files = glob.glob('../../../results/plots/mlp/*')
-x = range(400)
+x = range(50)
 
 legends = []
 for file in files:
