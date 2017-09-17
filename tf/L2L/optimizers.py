@@ -70,7 +70,9 @@ class Adam(Optimizer):
         self.t = tf.Variable(1.0)
         self.ms = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
         self.vs = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
-        self.optim_params = [self.ms, self.vs, self.beta_1, self.beta_2]
+        self.optim_params = [self.ms, self.vs]
+        if self.learn_betas:
+            self.optim_params.extend([self.beta_1, self.beta_2])
 
     def set_variable(self, variable_key, args, default):
         if args is not None and variable_key in args:
@@ -89,8 +91,12 @@ class Adam(Optimizer):
         optim_params = self.set_variable('optim_params', args, self.optim_params)
         problem_ms = optim_params[0]
         problem_vs = optim_params[1]
-        betas_1 = optim_params[2]
-        betas_2 = optim_params[3]
+        if self.learn_betas:
+            betas_1 = optim_params[2]
+            betas_2 = optim_params[3]
+        else:
+            betas_1 = self.beta_1
+            betas_2 = self.beta_2
 
         for var, var_flat, gradient, var_m, var_v, beta_1, beta_2 in zip(problem_variables, problem_variables_flat, problem_gradients,
                                                                           problem_ms, problem_vs, betas_1, betas_2):
@@ -118,7 +124,7 @@ class Adam(Optimizer):
         updates_list.append([tf.assign(m, m_next) for m, m_next in zip(self.ms, ms_next)])
         updates_list.append([tf.assign(v, v_next) for v, v_next in zip(self.vs, vs_next)])
         updates_list.append(tf.assign_add(self.t, 1.0))
-        if len(args['optim_params_next'])> 2:
+        if self.learn_betas:
             betas_1_next = args['optim_params_next'][2]
             betas_2_next = args['optim_params_next'][3]
             updates_list.append([tf.assign(beta_1, beta_1_next) for beta_1, beta_1_next in zip(self.beta_1, betas_1_next)])

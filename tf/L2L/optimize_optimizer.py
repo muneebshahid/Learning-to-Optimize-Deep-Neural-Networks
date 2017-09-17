@@ -16,8 +16,7 @@ with l2l.as_default():
     restore_network = False
     io_path = None
     save_network = True
-
-
+    
     num_optim_steps_per_epoch = None
     unroll_len = None
 
