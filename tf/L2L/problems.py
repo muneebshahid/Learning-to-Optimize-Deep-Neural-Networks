@@ -37,8 +37,8 @@ def create_batches_all(train=True):
         # reset_limit.append([[50, 300], [100, 500]])
         # #
         # Rosenbrock
-        # original_mirror(Rosenbrock, '_0_', None, -10, 10)
-        # reset_limit.append([[50, 300], [500, 5000]])
+        original_mirror(Rosenbrock, '_0_', None, -10, 10)
+        reset_limit.append([[50, 300], [500, 5000]])
         # reset_limit.append([[50, 300], [500, 5000]])
         # #
         # batches.append(RosenbrockMulti({'prefix': RosenbrockMulti.__name__ + '_0_', 'dims': 20, 'minval': -10.0, 'maxval': 10.0}))
@@ -56,8 +56,8 @@ def create_batches_all(train=True):
         # batches.append(FitX({'prefix': FitX.__name__ + '_0_', 'dims': 10, 'minval': -100.0, 'maxval': 100.0}))
         # reset_limit.append([[50, 200], [100, 500]])
 
-         batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
-         reset_limit.append([[50, 200], [200, 10000]])
+         # batches.append(Mnist({'minval': -100.0, 'maxval': 100.0}))
+         # reset_limit.append([[50, 200], [200, 10000]])
     else:
         batches.append(
             ElementwiseSquare({'prefix': ElementwiseSquare.__name__ + '_0_', 'dims': 4, 'init': tf.constant_initializer([100, 500, 600, 1000])}))

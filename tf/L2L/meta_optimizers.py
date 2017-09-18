@@ -1102,6 +1102,7 @@ class AUGOptims(Meta_Optimizer):
     state_size = None
     num_input_optms = None
     use_positive_weights = None
+    learn_betas = None
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
@@ -1113,54 +1114,104 @@ class AUGOptims(Meta_Optimizer):
         self.lr_input_optims = args['lr_input_optims']
         self.use_positive_weights = args['use_positive_weights']
         self.normalize_weights = args['normalize_weights']
+        self.network_out_dims = args['network_out_dims']
+        self.use_network = args['use_network']
 
-
+        self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
+                                   name='lr_dist')
+        self.learn_betas = args['learn_betas']
         self.input_optimizers = []
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8}))
-        self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8}))
+
+        if self.learn_betas:
+            betas_1_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
+            betas_2_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
+            for i, optimizer in enumerate(range(self.num_input_optims)):
+                beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base]
+                beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base]
+                self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims,
+                                                                     'beta_1': beta_1_base_curr,
+                                                                     'beta_2': beta_2_base_curr,
+                                                                     'eps': 1e-8,
+                                                                     'learn_betas': self.learn_betas}))
+        else:
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
 
         if not self.use_network:
-            self.weights = tf.get_variable('input_weights', shape=[self.num_input_optims, 1],
-                                           initializer=tf.random_normal_initializer(mean=0.0, stddev=.1, dtype=tf.float32))
-            self.optimizer_variables.append(self.weights)
+            self.weights_step = tf.get_variable('input_weights', shape=[self.num_input_optims, 1],
+                                                initializer=tf.random_normal_initializer(mean=0.0, stddev=.01, dtype=tf.float32))
+            self.optimizer_variables.append(self.weights_step)
+            if self.learn_betas:
+                self.weights_beta_1 = tf.get_variable('beta_1_weights', shape=[self.num_input_optims, 1],
+                                                initializer=tf.random_normal_initializer(mean=0.0, stddev=.01, dtype=tf.float32))
+                self.biases_beta_1 = tf.get_variable('beta_1_biases', shape=[1, 1], initializer=tf.zeros_initializer)
+                self.weights_beta_2 = tf.get_variable('beta_2_weights', shape=[self.num_input_optims, 1],
+                                                initializer=tf.random_normal_initializer(mean=0.0, stddev=.01, dtype=tf.float32))
+                self.biases_beta_2 = tf.get_variable('beta_2_biases', shape=[1, 1], initializer=tf.zeros_initializer)
+                self.optimizer_variables.extend([self.weights_beta_1,
+                                                 self.biases_beta_1,
+                                                 self.weights_beta_2,
+                                                 self.biases_beta_2])
 
     def network(self, args=None):
         with tf.name_scope('Optimizer_Network'):
             inputs = args['inputs']
+            beta_1_output = None
+            beta_2_output = None
             if not self.use_network:
                 if self.use_positive_weights:
-                    weights = tf.abs(self.weights)
+                    weights_step = tf.abs(self.weights_step)
                 else:
-                    weights = self.weights
-                activations = tf.matmul(inputs, weights)
+                    weights_step = self.weights_step
+                activations = tf.matmul(inputs, weights_step)
                 if self.normalize_weights:
-                    w_sum = tf.reduce_sum(weights)
+                    w_sum_steps = tf.reduce_sum(weights_step)
                 else:
-                    w_sum = 1.0
-                output = activations / w_sum
+                    w_sum_steps = 1.0
+                output_step = activations / w_sum_steps
+                if self.learn_betas:
+                    beta_1_output = tf.sigmoid(tf.add(tf.matmul(inputs, self.weights_beta_1), self.biases_beta_1))
+                    beta_2_output = tf.sigmoid(tf.add(tf.matmul(inputs, self.weights_beta_2), self.biases_beta_2))
             else:
                 activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,
                                        variable_list=self.optimizer_variables, activation=self.network_activation)
                 for layer in range(self.hidden_layers):
                     activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
                                            variable_list=self.optimizer_variables, activation=self.network_activation)
-                activations = layer_fc('out', dims=[self.layer_width, len(self.input_optimizers)], inputs=activations,
+                activations = layer_fc('out', dims=[self.layer_width, self.network_out_dims], inputs=activations,
                                        variable_list=self.optimizer_variables)
 
-                softmax_activations = tf.nn.softmax(activations, 1)
+                last_index = 0
+                step_activations = tf.slice(activations, [0, last_index], [-1, self.num_input_optims])
+                softmax_activations = tf.nn.softmax(step_activations, 1)
                 step_probabilities = softmax_activations * inputs
-                output = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+                output_step = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+                last_index = self.num_input_optims
 
-            return [output, activations]
+                if self.learn_betas:
+                    beta_1_output = tf.nn.sigmoid(tf.slice(activations, [0, last_index], [-1, 1]))
+                    last_index += 1
+                    beta_2_output = tf.nn.sigmoid(tf.slice(activations, [0, last_index], [-1, 1]))
+                    last_index += 1
+
+                # if self.learn_lr:
+                #     lr_acitvations = tf.slice(activations, [0, last_index], [-1, -1])
+                #     lr_acitvations = tf.nn.softmax(lr_acitvations, 1)
+                #     lr_output = tf.matmul(lr_acitvations, self.lr_dist)
+
+                # softmax_activations = tf.nn.softmax(activations_steps, 1)
+                # step_probabilities = softmax_activations * inputs
+                # output_step = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
+            return output_step, beta_1_output, beta_2_output
 
 
     def stack_inputs(self, optim_steps):
@@ -1176,6 +1227,8 @@ class AUGOptims(Meta_Optimizer):
 
     def step(self, args=None):
         vars_next = []
+        betas_1_base_next = []
+        betas_2_base_next = []
         problem = args['problem']
         problem_variables = args['variables'] if 'variables' in args else problem.variables
         input_optims_params = args['input_optim_params'] if ('input_optim_params' in
@@ -1199,10 +1252,20 @@ class AUGOptims(Meta_Optimizer):
 
         stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
         for var, var_flat, stacked_step in zip(problem_variables, problem_variables_flat, stacked_steps):
-            output = self.network({'inputs': stacked_step})[0]
+            output, beta_1_output, beta_2_output = self.network({'inputs': stacked_step})
             output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
             var_next = var + output * self.lr
             vars_next.append(var_next)
+            betas_1_base_next.append(beta_1_output)
+            betas_2_base_next.append(beta_2_output)
+
+        if self.learn_betas:
+            for i in range(self.num_input_optims):
+                beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base_next]
+                beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base_next]
+                input_optims_params_next[i].append(beta_1_curr)
+                input_optims_params_next[i].append(beta_2_curr)
+
         return {'vars_next': vars_next, 'input_optims_params_next': input_optims_params_next}
 
     def updates(self, args=None):
@@ -1223,6 +1286,9 @@ class AUGOptims(Meta_Optimizer):
             reset_ops.append(tf.variables_initializer([optimizer.t]))
             reset_ops.append(tf.variables_initializer(optimizer.ms))
             reset_ops.append(tf.variables_initializer(optimizer.vs))
+            if self.learn_betas:
+                reset_ops.append(tf.variables_initializer(optimizer.beta_1))
+                reset_ops.append(tf.variables_initializer(optimizer.beta_2))
         return reset_ops
 
     def run_reset(self, index=None, optimizer=False):
@@ -1495,14 +1561,16 @@ class AUGOptimsGRU(Meta_Optimizer):
             stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
             for var, var_flat, stacked_step, hidden_state, var_lr in zip(problem_variables, problem_variables_flat, stacked_steps, hidden_states, lr):
                 output, hidden_state_next, beta_1_output, beta_2_output, lr_output = self.network({'inputs': stacked_step, 'hidden_states': hidden_state})
-                output = problem.set_shape(output, like_variable=var, op_name='reshape_output')
+
                 if self.learn_lr:
                     applied_lr = lr_output
                     lr_next.append(applied_lr)
                 else:
                     applied_lr = self.lr
                     lr_next = lr
-                var_next = var + output * applied_lr
+                step = output * applied_lr
+                step = problem.set_shape(step, like_variable=var, op_name='reshape_output')
+                var_next = var + step
                 vars_next.append(var_next)
                 hidden_states_next.append(hidden_state_next)
                 betas_1_base_next.append(beta_1_output)

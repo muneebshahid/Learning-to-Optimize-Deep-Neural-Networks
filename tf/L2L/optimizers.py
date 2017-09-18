@@ -102,11 +102,13 @@ class Adam(Optimizer):
                                                                           problem_ms, problem_vs, betas_1, betas_2):
             m = beta_1 * var_m + (1.0 - beta_1) * gradient
             v = beta_2 * var_v + (1.0 - beta_2) * tf.square(gradient)
+            # v = tf.maximum(beta_2 * var_v, tf.abs(gradient))
             ms_next.append(m)
             vs_next.append(v)
             m_hat = m / (1 - tf.pow(beta_1, self.t))
             v_hat = v / (1 - tf.pow(beta_2, self.t))
             var_step = -self.lr * m_hat / (tf.sqrt(v_hat + self.eps_squared))
+            # var_step = -self.lr * m_hat / v
             var_next = var_flat + var_step
             var_next = self.problem.set_shape(var_next, like_variable=var, op_name='reshape_variable')
             vars_steps.append(var_step)
