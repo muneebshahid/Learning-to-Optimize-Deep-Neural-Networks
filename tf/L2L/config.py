@@ -79,11 +79,12 @@ def aug_optim():
     args['lr'] = .01
     args['lr_input_optims'] = 1.0
     args['num_input_optims'] = 5
-    args['use_network'] = False
+    args['use_network'] = True
     args['use_positive_weights'] = False
     args['normalize_weights'] = True
-    args['lr_dist'] = [1.0, 1e-1, 1e-2, 1e-3, 1e-4, 0.0]
+    args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
     args['network_out_dims'] = 1
+    args['beta_max'] = 0.9999
     return args
 
 def aug_optim_rnn():
@@ -91,6 +92,8 @@ def aug_optim_rnn():
     args['rnn_steps'] = 5
     args['learn_betas'] = True
     args['learn_lr'] = True
+
+
     args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     args['network_out_dims'] += (len(args['lr_dist']) if args['learn_lr'] else 0)
     return args

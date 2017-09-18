@@ -1103,6 +1103,7 @@ class AUGOptims(Meta_Optimizer):
     num_input_optms = None
     use_positive_weights = None
     learn_betas = None
+    beta_max = None
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
@@ -1116,6 +1117,7 @@ class AUGOptims(Meta_Optimizer):
         self.normalize_weights = args['normalize_weights']
         self.network_out_dims = args['network_out_dims']
         self.use_network = args['use_network']
+        self.beta_max = args['beta_max']
 
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
@@ -1126,8 +1128,8 @@ class AUGOptims(Meta_Optimizer):
             betas_1_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
             betas_2_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
             for i, optimizer in enumerate(range(self.num_input_optims)):
-                beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base]
-                beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base]
+                beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base]
+                beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base]
                 self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims,
                                                                      'beta_1': beta_1_base_curr,
                                                                      'beta_2': beta_2_base_curr,
@@ -1189,7 +1191,6 @@ class AUGOptims(Meta_Optimizer):
                                            variable_list=self.optimizer_variables, activation=self.network_activation)
                 activations = layer_fc('out', dims=[self.layer_width, self.network_out_dims], inputs=activations,
                                        variable_list=self.optimizer_variables)
-
                 last_index = 0
                 step_activations = tf.slice(activations, [0, last_index], [-1, self.num_input_optims])
                 softmax_activations = tf.nn.softmax(step_activations, 1)
@@ -1261,8 +1262,8 @@ class AUGOptims(Meta_Optimizer):
 
         if self.learn_betas:
             for i in range(self.num_input_optims):
-                beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base_next]
-                beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base_next]
+                beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base_next]
+                beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base_next]
                 input_optims_params_next[i].append(beta_1_curr)
                 input_optims_params_next[i].append(beta_2_curr)
 
@@ -1416,6 +1417,7 @@ class AUGOptimsGRU(Meta_Optimizer):
     learn_betas = None
     learn_lr = None
     lr_dist = None
+    beta_max = None
 
     def __init__(self, problems, path, args):
         super(AUGOptimsGRU, self).__init__(problems, path, args)
@@ -1426,6 +1428,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         self.rnn_steps = args['rnn_steps']
         self.learn_betas = args['learn_betas']
         self.learn_lr = args['learn_lr']
+        self.beta_max = args['beta_max']
         self.lr = args['lr']
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
@@ -1437,8 +1440,8 @@ class AUGOptimsGRU(Meta_Optimizer):
             betas_1_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
             betas_2_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
             for i, optimizer in enumerate(range(self.num_input_optims)):
-                beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base]
-                beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base]
+                beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base]
+                beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base]
                 self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims,
                                                                      'beta_1': beta_1_base_curr,
                                                                      'beta_2': beta_2_base_curr,
@@ -1578,8 +1581,8 @@ class AUGOptimsGRU(Meta_Optimizer):
 
             if self.learn_betas:
                 for i in range(self.num_input_optims):
-                    beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) for beta_1_base in betas_1_base_next]
-                    beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) for beta_2_base in betas_2_base_next]
+                    beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base_next]
+                    beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base_next]
                     input_optims_params_next[i].append(beta_1_curr)
                     input_optims_params_next[i].append(beta_2_curr)
 

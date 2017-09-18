@@ -49,7 +49,7 @@ with l2l.as_default():
     num_unrolls_per_epoch = 1
     if restore_network:
         io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-    optim = meta_optimizers.AUGOptimsRNN(problem_batches, path=io_path, args=config.aug_optim_rnn())
+    optim = meta_optimizers.AUGOptimsGRU(problem_batches, path=io_path, args=config.aug_optim_gru())
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
