@@ -7,7 +7,7 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 1
     args['network_activation'] = tf.nn.relu
-    args['unroll_len'] = 1
+    args['unroll_len'] = 20
     args['use_guide_step'] = False
     return args
 
@@ -76,7 +76,7 @@ def adam():
 
 def aug_optim():
     args = common()
-    args['lr'] = .01
+    args['lr'] = 1.0
     args['lr_input_optims'] = 1.0
     args['num_input_optims'] = 5
     args['use_network'] = True
@@ -89,11 +89,9 @@ def aug_optim():
 
 def aug_optim_rnn():
     args = aug_optim()
-    args['rnn_steps'] = 5
+    args['rnn_steps'] = args['unroll_len']
     args['learn_betas'] = True
     args['learn_lr'] = True
-
-
     args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     args['network_out_dims'] += (len(args['lr_dist']) if args['learn_lr'] else 0)
     return args
