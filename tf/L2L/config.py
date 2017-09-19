@@ -5,7 +5,7 @@ def common():
     args = {}
     args['meta_learning_rate'] = .0001
     args['layer_width'] = 50
-    args['hidden_layers'] = 1
+    args['hidden_layers'] = 0
     args['network_activation'] = tf.nn.relu
     args['unroll_len'] = 20
     args['use_guide_step'] = False
