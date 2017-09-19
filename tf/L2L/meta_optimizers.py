@@ -1104,6 +1104,7 @@ class AUGOptims(Meta_Optimizer):
     use_positive_weights = None
     learn_betas = None
     beta_max = None
+    use_rel_loss = None
 
     def __init__(self, problems, path, args):
         super(AUGOptims, self).__init__(problems, path, args)
@@ -1119,6 +1120,7 @@ class AUGOptims(Meta_Optimizer):
         self.use_network = args['use_network']
         self.beta_max = args['beta_max']
         self.learn_lr = args['learn_lr']
+        self.use_rel_loss = args['use_rel_loss']
 
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
@@ -1387,6 +1389,7 @@ class AUGOptimsRNN(AUGOptims):
     def step(self, args=None):
         problem = args['problem']
         problem_variables = args['variables']
+        log_loss_0 = tf.squeeze(tf.log(self.loss({'problem': problem}) + 1e-15))
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
         loss = 0.0
@@ -1399,8 +1402,12 @@ class AUGOptimsRNN(AUGOptims):
             vars_next = step_op['vars_next']
             lr_next = step_op['lr_next']
             input_optims_params_next = step_op['input_optims_params_next']
-            loss = loss + tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
-            return t + 1, loss, vars_next, input_optims_params_next, lr_next
+            loss_curr = tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+            if self.use_rel_loss:
+                loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
+            else:
+                loss_next = loss + loss_curr
+            return t + 1, loss_next, vars_next, input_optims_params_next, lr_next
 
         t_final, loss_final, problem_variables_next, input_optims_params_next, lr_next = tf.while_loop(
         cond=lambda t, *_: t < self.rnn_steps,
@@ -1411,6 +1418,8 @@ class AUGOptimsRNN(AUGOptims):
         name="unroll")
         # _, loss_final, problem_variables_next, input_optims_params_next, lr_next = update_rnn(0, loss, problem_variables, input_optims_params, lr)
         avg_loss = loss_final / self.rnn_steps
+        if not self.use_rel_loss:
+            avg_loss = tf.log(avg_loss + 1e-15)
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
                 'loss': avg_loss, 'lr_next': lr_next}
 
@@ -1436,14 +1445,14 @@ class AUGOptimsRNN(AUGOptims):
         args['lr_next'] = step['lr_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
-        loss_prob = step['loss']
-        log_loss = tf.log(loss_prob + 1e-15)
-        meta_step = self.minimize(log_loss)
+        loss_prob = self.loss({'problem': problem})
+        step_loss = step['loss']
+        meta_step = self.minimize(step_loss)
         reset = self.reset()
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(log_loss)
+        self.ops_loss.append(step_loss)
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem.append(reset)
         self.ops_reset.append(self.ops_reset_problem)
@@ -1469,6 +1478,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         self.learn_lr = args['learn_lr']
         self.beta_max = args['beta_max']
         self.lr = args['lr']
+        self.use_rel_loss = args['use_rel_loss']
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
         self.lr_input_optims = args['lr_input_optims']
@@ -1574,8 +1584,8 @@ class AUGOptimsGRU(Meta_Optimizer):
         problem_variables = args['variables']
         hidden_states = args['hidden_states']
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
-
         input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
+        log_loss_0 = tf.log(self.loss(problem) + 1e-15)
         loss = 0.0
 
         def update_rnn(t, loss_curr, problem_variables, input_optims_params, hidden_states, lr):
@@ -1624,8 +1634,11 @@ class AUGOptimsGRU(Meta_Optimizer):
                     beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base_next]
                     input_optims_params_next[i].append(beta_1_curr)
                     input_optims_params_next[i].append(beta_2_curr)
-
-            loss_next = loss_curr + tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+            loss_curr = tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+            if self.use_rel_loss:
+                loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
+            else:
+                loss_next = loss + loss_curr
             return t + 1, loss_next, vars_next, input_optims_params_next, hidden_states_next, lr_next
 
         t_final, loss_final, problem_variables_next, input_optims_params_next, hidden_states_next, lr_next = tf.while_loop(
