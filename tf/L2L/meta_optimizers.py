@@ -1349,15 +1349,13 @@ class AUGOptims(Meta_Optimizer):
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
-        loss, acc = self.loss(args)
-        loss = tf.squeeze(loss)
+        loss = tf.squeeze(self.loss(args))
         loss_prob = loss
         log_loss = tf.log(loss_prob + 1e-15)
         meta_step = self.minimize(log_loss)
         reset = self.reset()
         self.ops_step.append(step)
         self.ops_updates.append(updates)
-        self.ops_prob_acc.append(acc)
         self.ops_loss_problem.append(loss_prob)
         self.ops_loss.append(log_loss)
         self.ops_meta_step.append(meta_step)

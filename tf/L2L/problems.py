@@ -153,7 +153,7 @@ class Problem():
 
     def get_gradients_raw(self, variables=None):
         variables = self.variables if variables is None else variables
-        gradients = tf.gradients(self.loss(variables)[0], variables)
+        gradients = tf.gradients(self.loss(variables), variables)
         # if not self.allow_gradients_of_gradients:
         #     gradients = [tf.stop_gradient(gradient) for gradient in gradients]
         return gradients
@@ -171,7 +171,7 @@ class Problem():
         if self.io_handle is not None:
             self.io_handle.restore(sess, path)
 
-    def accuracy(self, output=None, labels=None):
+    def accuracy(self, mode='train'):
         return
 
 
@@ -383,8 +383,10 @@ class Mnist(Problem):
         self.end_init()
 
 
-    def accuracy(self, output=None, labels=None):
-        correct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(labels, 1))
+    def accuracy(self, mode='train'):
+        batch_images, batch_labels = self.get_batch(mode)
+        output = self.network(batch_images, self.variables)
+        correct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(batch_labels, 1))
         correct_prediction = tf.cast(correct_prediction, tf.float32)
         return tf.reduce_mean(correct_prediction)
 
@@ -428,7 +430,7 @@ class Mnist(Problem):
     def loss(self, variables, mode='train'):
         batch_images, batch_labels = self.get_batch(mode)
         output = self.network(batch_images, variables)
-        return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0), self.accuracy(output, batch_labels)
+        return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0)
 
 
 class cifar10(Problem):
