@@ -1194,7 +1194,7 @@ class AUGOptims(Meta_Optimizer):
                     beta_1_output = tf.sigmoid(tf.add(tf.matmul(inputs, self.weights_beta_1), self.biases_beta_1))
                     beta_2_output = tf.sigmoid(tf.add(tf.matmul(inputs, self.weights_beta_2), self.biases_beta_2))
                 if self.learn_lr:
-                    lr_output = tf.sigmoid(tf.add(tf.matmul(inputs, self.weights_lr), self.biases_lr))
+                    lr_output = tf.add(tf.matmul(inputs, self.weights_lr), self.biases_lr)
                     lr_output = tf.nn.softmax(lr_output, 1)
                     lr_output = tf.matmul(lr_output, self.lr_dist)
             else:
