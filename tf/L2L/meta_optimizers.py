@@ -1222,14 +1222,7 @@ class AUGOptims(Meta_Optimizer):
                     lr_acitvations = tf.slice(activations, [0, last_index], [-1, -1])
                     lr_acitvations = tf.nn.softmax(lr_acitvations, 1)
                     lr_output = tf.matmul(lr_acitvations, self.lr_dist)
-                # if self.learn_lr:
-                #     lr_acitvations = tf.slice(activations, [0, last_index], [-1, -1])
-                #     lr_acitvations = tf.nn.softmax(lr_acitvations, 1)
-                #     lr_output = tf.matmul(lr_acitvations, self.lr_dist)
 
-                # softmax_activations = tf.nn.softmax(activations_steps, 1)
-                # step_probabilities = softmax_activations * inputs
-                # output_step = tf.reduce_sum(step_probabilities, axis=1, keep_dims=True)
             return output_step, beta_1_output, beta_2_output, lr_output
 
 
@@ -1389,7 +1382,7 @@ class AUGOptimsRNN(AUGOptims):
     def step(self, args=None):
         problem = args['problem']
         problem_variables = args['variables']
-        log_loss_0 = tf.squeeze(tf.log(self.loss({'problem': problem}) + 1e-15))
+        log_loss_0 = tf.squeeze(tf.log(args['loss_prob'] + 1e-15))
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
         loss = 0.0
@@ -1437,15 +1430,16 @@ class AUGOptimsRNN(AUGOptims):
         problem_variables = problem.variables
         problem_variables_flat = problem.variables_flat
         gradients = self.get_preprocessed_gradients(problem, problem_variables)
+        loss_prob = self.loss({'problem': problem})
 
         args = {'problem': problem, 'variables': problem_variables,
-                'variables_flat': problem_variables_flat, 'gradients': gradients, 'lr': self.lr}
+                'variables_flat': problem_variables_flat, 'gradients': gradients,
+                'lr': self.lr, 'loss_prob': loss_prob}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['lr_next'] = step['lr_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
-        loss_prob = self.loss({'problem': problem})
         step_loss = step['loss']
         meta_step = self.minimize(step_loss)
         reset = self.reset()
@@ -1585,7 +1579,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         hidden_states = args['hidden_states']
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
-        log_loss_0 = tf.log(self.loss(problem) + 1e-15)
+        log_loss_0 = tf.squeeze(tf.log(args['loss_prob'] + 1e-15))
         loss = 0.0
 
         def update_rnn(t, loss_curr, problem_variables, input_optims_params, hidden_states, lr):
@@ -1712,23 +1706,24 @@ class AUGOptimsGRU(Meta_Optimizer):
 
         problem = self.problems[0]
         problem_variables = problem.variables
+        loss_prob = self.loss({'problem': problem})
 
         args = {'problem': problem, 'variables': problem_variables,
-                'hidden_states': self.hidden_states[0], 'lr': self.lr}
+                'hidden_states': self.hidden_states[0],
+                'lr': self.lr, 'loss_prob': loss_prob}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         args['hidden_states_next'] = step['hidden_states_next']
         args['lr_next'] = step['lr_next']
         updates = self.updates(args)
-        loss_prob = step['loss']
-        log_loss = tf.log(loss_prob + 1e-15)
-        meta_step = self.minimize(log_loss)
+        loss_step = step['loss']
+        meta_step = self.minimize(loss_step)
         reset = self.reset()
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(log_loss)
+        self.ops_loss.append(loss_step)
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem.append(reset)
         self.ops_reset.append(self.ops_reset_problem)

@@ -94,7 +94,7 @@ def aug_optim_rnn():
     args['learn_lr'] = True
     args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     args['network_out_dims'] += (len(args['lr_dist']) if args['learn_lr'] else 0)
-    args['use_rel_loss'] = True
+    args['use_rel_loss'] = False
     return args
 
 def aug_optim_gru():

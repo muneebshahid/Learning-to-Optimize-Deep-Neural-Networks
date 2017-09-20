@@ -30,12 +30,10 @@ flag_optim = 'mlp'
 problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
-
     problem_batches, _ = problems.create_batches_all()
-    optim = meta_optimizers.AUGOptimsRNN(problem_batches, path=io_path, args=config.aug_optim_rnn())
-
+    optim = meta_optimizers.AUGOptimsGRU(problem_batches, path=io_path, args=config.aug_optim_gru())
     optim.build()
-    updates, loss, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_meta_step
+    updates, loss_optim, loss_problem, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
@@ -44,8 +42,8 @@ else:
         optim = tf.train.AdamOptimizer(meta_learning_rate)
     else:
         optim = tf.train.GradientDescentOptimizer(meta_learning_rate)
-    loss = problem.loss(problem.variables)
-    meta_step = optim.minimize(loss)
+    loss_optim = problem.loss(problem.variables)
+    meta_step = optim.minimize(loss_optim)
     updates = []
 # check_op = tf.add_check_numerics_ops()
 norm_problem_variables = [tf.norm(variable) for problem in optim.problems for variable in problem.variables]
@@ -91,8 +89,10 @@ check_nan_optim = tf.is_nan(norm_optim_variables)
 
 def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
-    loss_final = np.zeros(len(loss))
-    print('current loss: ', iis.run(loss))
+    loss_final_optim = np.zeros(len(loss_optim))
+    loss_final_prob = np.zeros(len(loss_problem))
+    print('current loss optim: ', iis.run(loss_optim))
+    print('current loss prob: ', np.log10(iis.run(loss_problem)))
     total_time = 0
     for i in range(itr):
         problem_index = i % len(optim.problems)
@@ -101,9 +101,11 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, l, run_step, grad_norm = iis.run([meta_step, updates, loss,
-                                                               optim.ops_step,
-                                                               optim_grad_norm])
+        _, _, loss_optim_run, loss_prob_run, run_step, grad_norm = iis.run([meta_step, updates,
+                                                loss_optim,
+                                                loss_problem,
+                                                optim.ops_step,
+                                                optim_grad_norm])
         if True in iis.run(check_nan_prob):
             print('NAN found prob after, exit')
             break
@@ -113,7 +115,8 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
 
         end = timer()
         total_time += (end - start)
-        loss_final += np.array(l)
+        loss_final_optim += np.array(loss_optim_run)
+        loss_final_prob += np.array(loss_prob_run)
         if write_interval is not None and (i + 1) % write_interval == 0:
             variables = iis.run(tf.squeeze(optim.problems.variables_flat))
             write_to_file('variables_updates.txt', variables)
@@ -135,9 +138,11 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
                 # print('norm_delta: ', iis.run(norm_deltas))
                 # print('lrate: ', iis.run(optim.learning_rate))
             # print('norm_input_grads: ', iis.run(input_grads_norm))
-            print('loss: ', loss_final / print_interval)
+            print('loss optim: ', loss_final_optim / print_interval)
+            print('loss prob: ', np.log10(loss_final_prob / print_interval))
             print('time:' , total_time / print_interval)
-            loss_final = 0
+            loss_final_optim = 0
+            loss_final_prob = 0
             total_time = 0
     # if write_interval is not None:
     #     f_data = np.load('variables_updates')
