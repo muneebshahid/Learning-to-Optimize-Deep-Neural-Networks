@@ -38,7 +38,7 @@ with l2l.as_default():
     test_loss = problem.loss(problem.variables, 'test')
     problem_batches, reset_limits = problems.create_batches_all()
     config_args = config.mlp_norm_history()
-    reset_epoch_ext = 20000
+    reset_epoch_ext = 20000 / config_args['unroll_len']
     #########################
     epochs = int(1000000 / config_args['unroll_len'])
     epoch_interval = int(500 / config_args['unroll_len'])
