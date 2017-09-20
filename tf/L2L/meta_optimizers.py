@@ -1583,7 +1583,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         log_loss_0 = tf.squeeze(tf.log(args['loss_prob_0'] + 1e-15))
         loss = 0.0
 
-        def update_rnn(t, loss_curr, problem_variables, input_optims_params, hidden_states, lr):
+        def update_rnn(t, loss, problem_variables, input_optims_params, hidden_states, lr):
             vars_next = []
             hidden_states_next = []
             betas_1_base_next = []
