@@ -77,24 +77,25 @@ def adam():
 def aug_optim():
     args = common()
     args['lr'] = 1.0
-    args['lr_input_optims'] = 1.0
+    args['lr_input_optims'] = .01
     args['num_input_optims'] = 5
-    args['use_network'] = True
+    args['use_network'] = False
     args['use_positive_weights'] = True
     args['normalize_weights'] = True
     args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
     args['network_out_dims'] = 1
     args['beta_max'] = 0.9999
+    args['learn_betas'] = False
+    args['learn_lr'] = False
+    args['use_rel_loss'] = False
     return args
 
 def aug_optim_rnn():
     args = aug_optim()
     args['rnn_steps'] = args['unroll_len']
-    args['learn_betas'] = True
-    args['learn_lr'] = True
     args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     args['network_out_dims'] += (len(args['lr_dist']) if args['learn_lr'] else 0)
-    args['use_rel_loss'] = False
+
     return args
 
 def aug_optim_gru():

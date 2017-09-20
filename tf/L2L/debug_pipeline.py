@@ -31,9 +31,9 @@ problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'max
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     problem_batches, _ = problems.create_batches_all()
-    optim = meta_optimizers.AUGOptimsGRU(problem_batches, path=io_path, args=config.aug_optim_gru())
+    optim = meta_optimizers.AUGOptims(problem_batches, path=io_path, args=config.aug_optim())
     optim.build()
-    updates, loss_optim, loss_problem, meta_step = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step
+    updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
@@ -51,7 +51,6 @@ norm_problem_variables = [tf.norm(variable) for problem in optim.problems for va
 # input_grads_norm = [tf.norm(grad) for grad in input_grads]
 optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
 optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
-
 # for i, grad in enumerate(grad_optim):
 #     name = 'w' if (i % 2) == 0 else 'b'
 #     name += ('_' + str(i))
@@ -140,6 +139,7 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             # print('norm_input_grads: ', iis.run(input_grads_norm))
             print('loss optim: ', loss_final_optim / print_interval)
             print('loss prob: ', np.log10(loss_final_prob / print_interval))
+            print('acc prob: ', iis.run(prob_acc))
             print('time:' , total_time / print_interval)
             loss_final_optim = 0
             loss_final_prob = 0

@@ -153,7 +153,7 @@ class Problem():
 
     def get_gradients_raw(self, variables=None):
         variables = self.variables if variables is None else variables
-        gradients = tf.gradients(self.loss(variables), variables)
+        gradients = tf.gradients(self.loss(variables)[0], variables)
         # if not self.allow_gradients_of_gradients:
         #     gradients = [tf.stop_gradient(gradient) for gradient in gradients]
         return gradients
@@ -170,6 +170,9 @@ class Problem():
     def restore(self, sess, path):
         if self.io_handle is not None:
             self.io_handle.restore(sess, path)
+
+    def accuracy(self, output=None, labels=None):
+        return
 
 
 class ElementwiseSquare(Problem):
@@ -380,6 +383,10 @@ class Mnist(Problem):
         self.end_init()
 
 
+    def accuracy(self, output=None, labels=None):
+        correct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(labels, 1))
+        correct_prediction = tf.cast(correct_prediction, tf.float32)
+        return tf.reduce_mean(correct_prediction)
 
     def __xent_loss(self, output, labels):
         if self.allow_gradients_of_gradients:
@@ -421,7 +428,7 @@ class Mnist(Problem):
     def loss(self, variables, mode='train'):
         batch_images, batch_labels = self.get_batch(mode)
         output = self.network(batch_images, variables)
-        return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0)
+        return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0), self.accuracy(output, batch_labels)
 
 
 class cifar10(Problem):
