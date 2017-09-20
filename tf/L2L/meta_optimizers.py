@@ -1141,15 +1141,15 @@ class AUGOptims(Meta_Optimizer):
                                                                      'learn_betas': self.learn_betas}))
         else:
             self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
             self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
             self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
             self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            # self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
             self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
 
         if not self.use_network:

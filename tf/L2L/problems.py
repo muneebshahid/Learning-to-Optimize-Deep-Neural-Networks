@@ -453,6 +453,7 @@ class cifar10(Problem):
                 tarfile.open(filepath, "r:gz").extractall(path)
         path = args['path']
         maybe_download_cifar10(path)
+        args['var_count'] = 1
         super(cifar10, self).__init__(args)
 
         self.w1 = self.create_variable('w1', dims=[5, 5, 3, 16])
