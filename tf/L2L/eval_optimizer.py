@@ -22,7 +22,6 @@ optimize = False
 
 l2l = tf.Graph()
 with l2l.as_default():
-    preprocess = [Preprocess.log_sign, {'k': 10}]
     epochs = 50
     total_data_points = 55000
     batch_size = 128
@@ -33,10 +32,10 @@ with l2l.as_default():
     # problem_batches, _ = problems.create_batches_all(train=True)
     problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0})
     enable_summaries = False
+
     optim_meta = meta_optimizers.AUGOptims([problem], path=None, args=config.aug_optim())
     loss = problem.loss(problem.variables)
-
-    # optim_meta = meta_optimizers.MlpNormHistory(problem_batches, path=None, args=config.mlp_norm_history())
+    acc = problem.accuracy(mode='train')
     optim_meta.build()
     if optimize:
         meta_step = optim_meta.ops_meta_step
@@ -44,6 +43,7 @@ with l2l.as_default():
         meta_step = []
     optim_adam = tf.train.AdamOptimizer(.01)
     adam_min_step = optim_adam.minimize(loss, var_list=problem.variables)
+
     problem_norms = []
     for problem in optim_meta.problems:
         norm = 0
@@ -57,6 +57,7 @@ with l2l.as_default():
         optim_meta.restore_problem(0, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
         #optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
         optim_meta.run_init()
+
         l = [loss]
         # for i, problem in enumerate(optim_meta.problems):
         #     name_prefix = problem.__class__.__name__ + "_" + str(i)
@@ -73,7 +74,6 @@ with l2l.as_default():
         #     writer = tf.summary.FileWriter(results_dir)
         #     writer.add_graph(sess.graph)
 
-
         l2l.finalize()
         print('---- Starting Evaluation ----')
         if meta and load_model:
@@ -81,19 +81,23 @@ with l2l.as_default():
             print('Optimizer loaded.')
         for i in range(epochs):
             total_loss = 0
+            total_acc = 0
             start = time.time()
             for j in range(itr_per_epoch):
                 if meta:
-                    _, _, curr_loss, summaries  = sess.run([optim_meta.ops_updates, meta_step, l, all_summ])
+                    _, _, curr_loss, curr_acc, summaries  = sess.run([optim_meta.ops_updates, meta_step, l, acc, all_summ])
                 else:
-                    _, curr_loss, summaries = sess.run([adam_min_step, l, all_summ])
+                    _, curr_loss, curr_acc, summaries = sess.run([adam_min_step, l, acc, all_summ])
                 total_loss += np.array(curr_loss)
+                total_acc += np.array(curr_acc)
             total_time = time.time() - start
             print(str(i + 0) + '/' + str(epochs))
             print("time: {0:.2f}s".format(total_time))
             avg_loss = np.log10(total_loss / itr_per_epoch)
+            avg_acc = total_acc / itr_per_epoch
             write_to_file(results_dir + 'loss', avg_loss)
-            print(avg_loss)
+            print('loss: ', avg_loss)
+            print('acc: ', avg_acc)
             #print(sess.run(optim_meta.min_lr))
             print('PROB NORM: ', sess.run(problem_norms))
             if enable_summaries and ((i + 10) % 10 == 0):
