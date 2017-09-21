@@ -17,48 +17,52 @@ results_dir = 'tf_summary/'
 model_id = '50000'
 
 load_model = True
-meta = True
+meta = False
 optimize = False
 
 l2l = tf.Graph()
 with l2l.as_default():
-    epochs = 50
-    total_data_points = 55000
+    epochs = 100
+    total_data_points = 50000
     batch_size = 128
     itr_per_epoch = int(total_data_points / batch_size)
-    io_path = '../../../thesis_code_conv_w_.001_p_11_20k/tf/L2L/trained/Mlp_model_450000'#util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
+    io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
     all_summ = []
     writer = None
-    # problem_batches, _ = problems.create_batches_all(train=True)
-    problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': True})
-    # problem = problems.cifar10({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/'})
-    enable_summaries = False
-
-    optim_meta = meta_optimizers.AUGOptims([problem], path=None, args=config.aug_optim())
+    #problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': True})
+    problem = problems.cifar10_full({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
     loss = problem.loss(problem.variables)
     acc_train = problem.accuracy(mode='train')
-    acc_test = problem.accuracy(mode='test')
-    optim_meta.build()
-    if optimize:
+    acc_test = []  # problem.accuracy(mode='test')
+    enable_summaries = False
+    if meta:
+        optim_meta = meta_optimizers.AUGOptims([problem], path=None, args=config.aug_optim())
+
+        optim_meta.build()
+    else:
+        optim_meta = None
+    if optimize and meta:
         meta_step = optim_meta.ops_meta_step
     else:
         meta_step = []
-    optim_adam = tf.train.AdamOptimizer(.001)
+    optim_adam = tf.train.AdamOptimizer(.1)
     adam_min_step = optim_adam.minimize(loss, var_list=problem.variables)
 
     problem_norms = []
-    for problem in optim_meta.problems:
-        norm = 0
-        for variable in problem.variables:
-            norm += tf.norm(variable)
-        problem_norms.append(norm)
+    if meta:
+        for problem in optim_meta.problems:
+            norm = 0
+            for variable in problem.variables:
+                norm += tf.norm(variable)
+            problem_norms.append(norm)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
-        optim_meta.set_session(sess)
-        # optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
-        optim_meta.restore_problem(0, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
-        optim_meta.run_init()
+        if meta:
+            optim_meta.set_session(sess)
+            problem.restore(sess,'/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
+            # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
+            optim_meta.run_init()
 
         l = [loss]
         # for i, problem in enumerate(optim_meta.problems):
