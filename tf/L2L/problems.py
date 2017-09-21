@@ -172,7 +172,7 @@ class Problem():
             self.io_handle.restore(sess, path)
 
     def accuracy(self, mode='train'):
-        return
+        return []
 
 
 class ElementwiseSquare(Problem):
@@ -526,9 +526,412 @@ class cifar10(Problem):
         return xent_loss(output, label_batch)
 
 
+    def accuracy(self, mode='train'):
+        image_batch, label_batch = self.queue.dequeue_many(128)
+        label_batch = tf.cast(tf.reshape(label_batch, [128, 1]), tf.int64)
+        print(label_batch)
+        output = self.network(image_batch, self.variables)
+        print(output)
+        #correct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(label_batch, 1))
+
+        correct_prediction = tf.equal(tf.argmax(output, 1), label_batch)
+        correct_prediction = tf.cast(correct_prediction, tf.float32)
+        return tf.reduce_mean(correct_prediction)
 
 
+class cifar10_full(Problem):
+
+    # Process images of this size. Note that this differs from the original CIFAR
+    # image size of 32 x 32. If one alters this number, then the entire model
+    # architecture will change and any model would need to be retrained.
+    IMAGE_SIZE = 24
+
+    # Global constants describing the CIFAR-10 data set.
+    NUM_CLASSES = 10
+    NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
+    NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
+
+    def read_cifar10(self, filename_queue):
+        """Reads and parses examples from CIFAR10 data files.
+        Recommendation: if you want N-way read parallelism, call this function
+        N times.  This will give you N independent Readers reading different
+        files & positions within those files, which will give better mixing of
+        examples.
+        Args:
+          filename_queue: A queue of strings with the filenames to read from.
+        Returns:
+          An object representing a single example, with the following fields:
+            height: number of rows in the result (32)
+            width: number of columns in the result (32)
+            depth: number of color channels in the result (3)
+            key: a scalar string Tensor describing the filename & record number
+              for this example.
+            label: an int32 Tensor with the label in the range 0..9.
+            uint8image: a [height, width, depth] uint8 Tensor with the image data
+        """
+
+        class CIFAR10Record(object):
+            pass
+
+        result = CIFAR10Record()
+
+        # Dimensions of the images in the CIFAR-10 dataset.
+        # See http://www.cs.toronto.edu/~kriz/cifar.html for a description of the
+        # input format.
+        label_bytes = 1  # 2 for CIFAR-100
+        result.height = 32
+        result.width = 32
+        result.depth = 3
+        image_bytes = result.height * result.width * result.depth
+        # Every record consists of a label followed by the image, with a
+        # fixed number of bytes for each.
+        record_bytes = label_bytes + image_bytes
+
+        # Read a record, getting filenames from the filename_queue.  No
+        # header or footer in the CIFAR-10 format, so we leave header_bytes
+        # and footer_bytes at their default of 0.
+        reader = tf.FixedLengthRecordReader(record_bytes=record_bytes)
+        result.key, value = reader.read(filename_queue)
+
+        # Convert from a string to a vector of uint8 that is record_bytes long.
+        record_bytes = tf.decode_raw(value, tf.uint8)
+
+        # The first bytes represent the label, which we convert from uint8->int32.
+        result.label = tf.cast(
+            tf.strided_slice(record_bytes, [0], [label_bytes]), tf.int32)
+
+        # The remaining bytes after the label represent the image, which we reshape
+        # from [depth * height * width] to [depth, height, width].
+        depth_major = tf.reshape(
+            tf.strided_slice(record_bytes, [label_bytes],
+                             [label_bytes + image_bytes]),
+            [result.depth, result.height, result.width])
+        # Convert from [depth, height, width] to [height, width, depth].
+        result.uint8image = tf.transpose(depth_major, [1, 2, 0])
+
+        return result
+
+    def _generate_image_and_label_batch(self, image, label, min_queue_examples,
+                                        batch_size, shuffle):
+        """Construct a queued batch of images and labels.
+        Args:
+          image: 3-D Tensor of [height, width, 3] of type.float32.
+          label: 1-D Tensor of type.int32
+          min_queue_examples: int32, minimum number of samples to retain
+            in the queue that provides of batches of examples.
+          batch_size: Number of images per batch.
+          shuffle: boolean indicating whether to use a shuffling queue.
+        Returns:
+          images: Images. 4D tensor of [batch_size, height, width, 3] size.
+          labels: Labels. 1D tensor of [batch_size] size.
+        """
+        # Create a queue that shuffles the examples, and then
+        # read 'batch_size' images + labels from the example queue.
+        num_preprocess_threads = 16
+        if shuffle:
+            images, label_batch = tf.train.shuffle_batch(
+                [image, label],
+                batch_size=batch_size,
+                num_threads=num_preprocess_threads,
+                capacity=min_queue_examples + 3 * batch_size,
+                min_after_dequeue=min_queue_examples)
+        else:
+            images, label_batch = tf.train.batch(
+                [image, label],
+                batch_size=batch_size,
+                num_threads=num_preprocess_threads,
+                capacity=min_queue_examples + 3 * batch_size)
+
+        # Display the training images in the visualizer.
+        tf.summary.image('images', images)
+        return images, tf.reshape(label_batch, [batch_size])
+
+    def distorted_inputs(self, data_dir, batch_size):
+        """Construct distorted input for CIFAR training using the Reader ops.
+        Args:
+          data_dir: Path to the CIFAR-10 data directory.
+          batch_size: Number of images per batch.
+        Returns:
+          images: Images. 4D tensor of [batch_size, IMAGE_SIZE, IMAGE_SIZE, 3] size.
+          labels: Labels. 1D tensor of [batch_size] size.
+        """
+        filenames = [os.path.join(data_dir, 'data_batch_%d.bin' % i)
+                     for i in xrange(1, 6)]
+        for f in filenames:
+            if not tf.gfile.Exists(f):
+                raise ValueError('Failed to find file: ' + f)
+
+        # Create a queue that produces the filenames to read.
+        filename_queue = tf.train.string_input_producer(filenames)
+
+        # Read examples from files in the filename queue.
+        read_input = self.read_cifar10(filename_queue)
+        reshaped_image = tf.cast(read_input.uint8image, tf.float32)
+
+        height = self.IMAGE_SIZE
+        width = self.IMAGE_SIZE
+
+        # Image processing for training the network. Note the many random
+        # distortions applied to the image.
+
+        # Randomly crop a [height, width] section of the image.
+        distorted_image = tf.random_crop(reshaped_image, [height, width, 3])
+
+        # Randomly flip the image horizontally.
+        distorted_image = tf.image.random_flip_left_right(distorted_image)
+
+        # Because these operations are not commutative, consider randomizing
+        # the order their operation.
+        # NOTE: since per_image_standardization zeros the mean and makes
+        # the stddev unit, this likely has no effect see tensorflow#1458.
+        distorted_image = tf.image.random_brightness(distorted_image,
+                                                     max_delta=63)
+        distorted_image = tf.image.random_contrast(distorted_image,
+                                                   lower=0.2, upper=1.8)
+
+        # Subtract off the mean and divide by the variance of the pixels.
+        float_image = tf.image.per_image_standardization(distorted_image)
+
+        # Set the shapes of tensors.
+        float_image.set_shape([height, width, 3])
+        read_input.label.set_shape([1])
+
+        # Ensure that the random shuffling has good mixing properties.
+        min_fraction_of_examples_in_queue = 0.4
+        min_queue_examples = int(self.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN *
+                                 min_fraction_of_examples_in_queue)
+        print('Filling queue with %d CIFAR images before starting to train. '
+              'This will take a few minutes.' % min_queue_examples)
+
+        # Generate a batch of images and labels by building up a queue of examples.
+        return self._generate_image_and_label_batch(float_image, read_input.label,
+                                               min_queue_examples, batch_size,
+                                               shuffle=True)
+
+    def _variable_on_cpu(self, name, shape, initializer):
+        """Helper to create a Variable stored on CPU memory.
+        Args:
+          name: name of the variable
+          shape: list of ints
+          initializer: initializer for Variable
+        Returns:
+          Variable Tensor
+        """
+        with tf.device('/cpu:0'):
+            dtype = tf.float32#tf.float16 if FLAGS.use_fp16 else tf.float32
+            var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+        return var
+
+    def _variable_with_weight_decay(self, name, shape, stddev, wd):
+        """Helper to create an initialized Variable with weight decay.
+        Note that the Variable is initialized with a truncated normal distribution.
+        A weight decay is added only if one is specified.
+        Args:
+          name: name of the variable
+          shape: list of ints
+          stddev: standard deviation of a truncated Gaussian
+          wd: add L2Loss weight decay multiplied by this float. If None, weight
+              decay is not added for this Variable.
+        Returns:
+          Variable Tensor
+        """
+        dtype = tf.float32#tf.float16 if FLAGS.use_fp16 else
+        var = self._variable_on_cpu(
+            name,
+            shape,
+            tf.truncated_normal_initializer(stddev=stddev, dtype=dtype))
+        if wd is not None:
+            weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
+            tf.add_to_collection('losses', weight_decay)
+
+        return var
+
+    def inputs(self, eval_data, data_dir, batch_size):
+        """Construct input for CIFAR evaluation using the Reader ops.
+        Args:
+          eval_data: bool, indicating if one should use the train or eval data set.
+          data_dir: Path to the CIFAR-10 data directory.
+          batch_size: Number of images per batch.
+        Returns:
+          images: Images. 4D tensor of [batch_size, IMAGE_SIZE, IMAGE_SIZE, 3] size.
+          labels: Labels. 1D tensor of [batch_size] size.
+        """
+        if not eval_data:
+            filenames = [os.path.join(data_dir, 'data_batch_%d.bin' % i)
+                         for i in xrange(1, 6)]
+            num_examples_per_epoch = self.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
+        else:
+            filenames = [os.path.join(data_dir, 'test_batch.bin')]
+            num_examples_per_epoch = self.NUM_EXAMPLES_PER_EPOCH_FOR_EVAL
+
+        for f in filenames:
+            if not tf.gfile.Exists(f):
+                raise ValueError('Failed to find file: ' + f)
+
+        # Create a queue that produces the filenames to read.
+        filename_queue = tf.train.string_input_producer(filenames)
+
+        # Read examples from files in the filename queue.
+        read_input = self.read_cifar10(filename_queue)
+        reshaped_image = tf.cast(read_input.uint8image, tf.float32)
+
+        height = self.IMAGE_SIZE
+        width = self.IMAGE_SIZE
+
+        # Image processing for evaluation.
+        # Crop the central [height, width] of the image.
+        resized_image = tf.image.resize_image_with_crop_or_pad(reshaped_image,
+                                                               height, width)
+
+        # Subtract off the mean and divide by the variance of the pixels.
+        float_image = tf.image.per_image_standardization(resized_image)
+
+        # Set the shapes of tensors.
+        float_image.set_shape([height, width, 3])
+        read_input.label.set_shape([1])
+
+        # Ensure that the random shuffling has good mixing properties.
+        min_fraction_of_examples_in_queue = 0.4
+        min_queue_examples = int(num_examples_per_epoch *
+                                 min_fraction_of_examples_in_queue)
+
+        # Generate a batch of images and labels by building up a queue of examples.
+        return self._generate_image_and_label_batch(float_image, read_input.label,
+                                               min_queue_examples, batch_size,
+                                               shuffle=False)
+
+    def _add_to_list(self, variable, shape):
+        flat_shape = np.multiply.reduce(shape)
+        # tf.summary.histogram(name, variable)
+        self.variables.append(variable)
+        self.variables_flattened_shape.append(flat_shape)
+        self.variables_flat.append(tf.reshape(variable, [flat_shape, 1]))
+
+    def __init__(self, args):
+        CIFAR10_URL = "http://www.cs.toronto.edu/~kriz"
+        CIFAR10_FILE = "cifar-10-binary.tar.gz"
+        CIFAR10_FOLDER = "cifar-10-batches-bin"
+        self.full = args['full']
+
+        def maybe_download_cifar10(path):
+            """Download and extract the tarball from Alex's website."""
+            if not os.path.exists(path):
+                os.makedirs(path)
+            filepath = os.path.join(path, CIFAR10_FILE)
+            if not os.path.exists(filepath):
+                print("Downloading CIFAR10 dataset to {}".format(filepath))
+                url = os.path.join(CIFAR10_URL, CIFAR10_FILE)
+                filepath, _ = urllib.request.urlretrieve(url, filepath)
+                statinfo = os.stat(filepath)
+                print("Successfully downloaded {} bytes".format(statinfo.st_size))
+                tarfile.open(filepath, "r:gz").extractall(path)
+
+        path = args['path']
+        maybe_download_cifar10(path)
+        path = os.path.join(path, CIFAR10_FOLDER)
+        args['var_count'] = 1
+        super(cifar10_full, self).__init__(args)
+        if self.full:
+            k_channels = 64
+            f1_in = 6 * 6 * 64
+            f1_out = 384
+            f2_out = 192
+        else:
+            k_channels = 16
+            f1_in = 6 * 6 * 16
+            f1_out = 96
+            f2_out = 46
 
 
+        kernel_1 = self._variable_with_weight_decay('conv1_weights', shape=[5, 5, 3, k_channels], stddev=5e-2, wd=0.0)
+        biases_1 = self._variable_on_cpu('conv1_biases', [k_channels], tf.constant_initializer(0.0))
+        self._add_to_list(kernel_1, [5, 5, 3, k_channels])
+        self._add_to_list(biases_1, [k_channels])
 
+        kernel_2 = self._variable_with_weight_decay('conv2_weights', shape=[5, 5, k_channels, k_channels], stddev=5e-2, wd=0.0)
+        biases_2 = self._variable_on_cpu('conv2_biases', [k_channels], tf.constant_initializer(0.1))
+        self._add_to_list(kernel_2, [5, 5, k_channels, k_channels])
+        self._add_to_list(biases_2, [k_channels])
+
+        f1_weights = self._variable_with_weight_decay('f1_weights', shape=[f1_in, f1_out],
+                                              stddev=0.04, wd=0.004)
+        f1_biases = self._variable_on_cpu('f1_biases', [f1_out], tf.constant_initializer(0.1))
+        self._add_to_list(f1_weights, [f1_in, f1_out])
+        self._add_to_list(f1_biases, [f1_out])
+
+        f2_weights = self._variable_with_weight_decay('f2_weights', shape=[f1_out, f2_out],
+                                              stddev=0.04, wd=0.004)
+        f2_biases = self._variable_on_cpu('f2_biases', [f2_out], tf.constant_initializer(0.1))
+        self._add_to_list(f2_weights, [f1_out, f2_out])
+        self._add_to_list(f2_biases, [f2_out])
+
+        f3_weights = self._variable_with_weight_decay('f3_weights', shape=[f2_out, self.NUM_CLASSES],
+                                                      stddev=1/f2_out, wd=0.0)
+        f3_biases = self._variable_on_cpu('f3_biases', [self.NUM_CLASSES], tf.constant_initializer(0.0))
+        self._add_to_list(f3_weights, [f2_out, self.NUM_CLASSES])
+        self._add_to_list(f3_biases, [self.NUM_CLASSES])
+        # else:
+        #     self.w1 = self.create_variable('w1', dims=[5, 5, 3, 16])
+        #     self.b1 = self.create_variable('b1', dims=[16])
+        #     self.w2 = self.create_variable('w2', dims=[5, 5, 16, 16])
+        #     self.b2 = self.create_variable('b2', dims=[16])
+        #     self.w3 = self.create_variable('w3', dims=[5, 5, 16, 16])
+        #     self.b3 = self.create_variable('b3', dims=[16])
+        #     self.w4 = self.create_variable('w4', dims=[144, 32])
+        #     self.b4 = self.create_variable('b4', dims=[32])
+        #     self.w5 = self.create_variable('w5', dims=[32, 10])
+        #     self.b5 = self.create_variable('b5', dims=[10])
+
+        with tf.device('/cpu:0'):
+            self.train_images_batch, self.train_labels_batch = self.distorted_inputs(path, batch_size=128)
+            self.eval_images_batch, self.eval_labels_batch = self.inputs(False, path, batch_size=128)
+
+    def network(self, batch, variables):
+        conv1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(batch, variables[0], [1, 1, 1, 1], padding='SAME'), variables[1]))
+        pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool1')
+        norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
+                       name='norm1')
+
+        conv2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(norm1, variables[2], [1, 1, 1, 1], padding='SAME'), variables[3]))
+        norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
+                       name='norm2')
+        pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
+                            strides=[1, 2, 2, 1], padding='SAME', name='pool2')
+
+        reshape = tf.reshape(pool2, [128, -1])
+        dim = reshape.get_shape()[1].value
+        local3 = tf.nn.relu(tf.matmul(reshape, variables[4]) + variables[5])
+        local4 = tf.nn.relu(tf.matmul(local3, variables[6]) + variables[7])
+        softmax_linear = tf.add(tf.matmul(local4, variables[8]), variables[9])
+        return softmax_linear
+
+    def loss(self, variables, mode='train'):
+        """Add L2Loss to all the trainable variables.
+        Add summary for "Loss" and "Loss/avg".
+        Args:
+          logits: Logits from inference().
+          labels: Labels from distorted_inputs or inputs(). 1-D tensor
+                  of shape [batch_size]
+        Returns:
+          Loss tensor of type float.
+        """
+        # Calculate the average cross entropy loss across the batch.
+        if mode == 'train':
+            images = self.train_images_batch
+            labels = self.train_labels_batch
+        else:
+            images = self.eval_images_batch
+            labels = self.eval_labels_batch
+
+        logits = self.network(images, variables)
+        labels = tf.cast(labels, tf.int64)
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=labels, logits=logits, name='cross_entropy_per_example')
+        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+        tf.add_to_collection('losses', cross_entropy_mean)
+
+        # The total loss is defined as the cross entropy loss plus all of the weight
+        # decay terms (L2 loss).
+
+        return tf.add_n(tf.get_collection('losses'), name='total_loss')
 
