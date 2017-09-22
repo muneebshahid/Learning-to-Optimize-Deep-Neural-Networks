@@ -1274,12 +1274,11 @@ class AUGOptims(Meta_Optimizer):
         lr_next = []
         problem = args['problem']
         problem_variables = args['variables'] if 'variables' in args else problem.variables
-        input_optimizers = args['input_optimizers']
 
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = args['input_optim_params'] if ('input_optim_params' in
                                                              args) else [optimizer.optim_params for optimizer
-                                                                         in input_optimizers]
+                                                                         in args['input_optimizers']]
 
         problem_variables_flat = [problem.flatten_input(i, variable) for i, variable
                                  in enumerate(problem_variables)] if 'variables' in args else problem.variables_flat
@@ -1436,18 +1435,21 @@ class AUGOptims(Meta_Optimizer):
 
 class AUGOptimsRNN(AUGOptims):
 
-    rnn_steps = None
-
+    unroll_len = None
+    unroll_len_val = None
     def __init__(self, problems, problems_eval, path, args):
         super(AUGOptimsRNN, self).__init__(problems, problems_eval, path, args)
-        self.rnn_steps = args['rnn_steps']
+        self.unroll_len = args['unroll_len']
+        self.unroll_len_val = args['unroll_len_val']
 
     def step(self, args=None):
         problem = args['problem']
         problem_variables = args['variables']
         log_loss_0 = tf.squeeze(tf.log(args['loss_prob_0'] + 1e-15))
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
-        input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers_train]
+        unroll_len = args['unroll_len']
+        input_optimizers = args['input_optimizers']
+        input_optims_params = [optimizer.optim_params for optimizer in input_optimizers]
         loss = 0.0
 
         def update_rnn(t, loss, problem_variables, input_optims_params, lr):
@@ -1466,14 +1468,14 @@ class AUGOptimsRNN(AUGOptims):
             return t + 1, loss_next, vars_next, input_optims_params_next, lr_next
 
         t_final, loss_final, problem_variables_next, input_optims_params_next, lr_next = tf.while_loop(
-        cond=lambda t, *_: t < self.rnn_steps,
+        cond=lambda t, *_: t < unroll_len,
         body=update_rnn,
         loop_vars=([0, loss, problem_variables, input_optims_params, lr]),
         parallel_iterations=1,
         swap_memory=True,
         name="unroll")
         # _, loss_final, problem_variables_next, input_optims_params_next, lr_next = update_rnn(0, loss, problem_variables, input_optims_params, lr)
-        avg_loss = loss_final / self.rnn_steps
+        avg_loss = loss_final / unroll_len
         if not self.use_rel_loss:
             avg_loss = tf.log(avg_loss + 1e-15)
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
@@ -1488,6 +1490,25 @@ class AUGOptimsRNN(AUGOptims):
         self.ops_reset_problem = []
         self.ops_reset = []
         self.ops_loss_problem = []
+        self.ops_loss_problem_val = []
+        self.ops_updates_val = []
+        self.ops_reset_problem_val = []
+
+        # validation
+        for problem_eval, input_optimizers_eval in zip(self.problems_eval, self.input_optimizers_eval):
+            problem_eval_variables = problem_eval.variables
+            loss_prob_0_eval = self.loss({'problem': problem_eval})
+            val_args = {'problem': problem_eval, 'variables': problem_eval_variables,
+                        'input_optimizers': input_optimizers_eval, 'unroll_len': self.unroll_len_val,
+                        'loss_prob_0': loss_prob_0_eval}
+            val_step = self.step(val_args)
+            val_args['vars_next'] = val_step['vars_next']
+            val_args['input_optims_params_next'] = val_step['input_optims_params_next']
+            updates_val = self.updates(val_args)
+            loss_prob_val = self.loss(val_args)
+            self.ops_loss_problem_val.append(loss_prob_val)
+            self.ops_updates_val.append(updates_val)
+            self.ops_reset_problem_val.append(self.reset([problem_eval], input_optimizers_eval))
 
         problem = self.problems[0]
         problem_variables = problem.variables
@@ -1496,8 +1517,8 @@ class AUGOptimsRNN(AUGOptims):
         loss_prob_0 = self.loss({'problem': problem})
 
         args = {'problem': problem, 'variables': problem_variables,
-                'variables_flat': problem_variables_flat, 'gradients': gradients,
-                'lr': self.lr, 'loss_prob_0': loss_prob_0}
+                'variables_flat': problem_variables_flat, 'gradients': gradients, 'unroll_len': self.unroll_len,
+                'lr': self.lr, 'loss_prob_0': loss_prob_0, 'input_optimizers': self.input_optimizers_train}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['lr_next'] = step['lr_next']
@@ -1506,7 +1527,7 @@ class AUGOptimsRNN(AUGOptims):
         updates = self.updates(args)
         step_loss = step['loss']
         meta_step = self.minimize(step_loss)
-        reset = self.reset()
+        reset = self.reset([problem], self.input_optimizers_train)
         self.ops_step.append(step)
         self.ops_prob_acc = problem.accuracy()
         self.ops_updates.append(updates)
