@@ -15,6 +15,7 @@ class Meta_Optimizer():
 
     io_handle = None
     problems = None
+    problems_eval = None
     meta_optimizer_optimizer = None
     preprocessor = None
     preprocessor_args = None
@@ -28,12 +29,17 @@ class Meta_Optimizer():
     ops_reset_problem = None
     ops_prob_acc = None
 
-    def __init__(self, problems, path, args):
+    ops_updates_val = None
+    ops_loss_problem_val = None
+    ops_reset_problem_val = None
+
+    def __init__(self, problems, problems_eval, path, args):
         if path is not None:
             print('Loading optimizer args, ignoring provided args...')
             args = self.load_args(path)
             print('Args Loaded, call load_optimizer with session to restore the optimizer graph.')
         self.problems = problems
+        self.problems_eval = problems_eval
         if self.is_availble('preprocess', args):
             self.preprocessor = args['preprocess'][0]
             self.preprocessor_args = args['preprocess'][1]
@@ -98,9 +104,10 @@ class Meta_Optimizer():
     def reset_problem(self, problem):
         return [tf.variables_initializer(problem.variables + problem.constants, name='reset_' + problem.__class__.__name__)]
 
-    def reset_problems(self):
+    def reset_problems(self, problems=None):
         reset_problem_ops = []
-        for problem in self.problems:
+        problems = problems if problems is not None else self.problems
+        for problem in problems:
             reset_problem_ops.extend(self.reset_problem(problem))
         return reset_problem_ops
 
@@ -1091,7 +1098,7 @@ class MlpNormHistory(Meta_Optimizer):
 
 class AUGOptims(Meta_Optimizer):
 
-    input_optimizers = None
+    input_optimizers_train = None
     layer_width = None
     lr = None
     lr_input_optims = None
@@ -1107,8 +1114,34 @@ class AUGOptims(Meta_Optimizer):
     beta_max = None
     use_rel_loss = None
 
-    def __init__(self, problems, path, args):
-        super(AUGOptims, self).__init__(problems, path, args)
+    def __init__(self, problems, problems_eval, path, args):
+        super(AUGOptims, self).__init__(problems, problems_eval, path, args)
+        def get_optimizers(problem):
+            input_optimizers = []
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666,
+                                                     'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            return input_optimizers
+
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
@@ -1126,7 +1159,8 @@ class AUGOptims(Meta_Optimizer):
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
         self.learn_betas = args['learn_betas']
-        self.input_optimizers = []
+        self.input_optimizers_train = []
+        self.input_optimizers_eval = []
 
         if self.learn_betas:
             betas_1_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
@@ -1134,23 +1168,18 @@ class AUGOptims(Meta_Optimizer):
             for i, optimizer in enumerate(range(self.num_input_optims)):
                 beta_1_base_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base]
                 beta_2_base_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base]
-                self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims,
+                self.input_optimizers_train.append(Adam(self.problems[0], {'lr': self.lr_input_optims,
                                                                      'beta_1': beta_1_base_curr,
                                                                      'beta_2': beta_2_base_curr,
                                                                      'eps': 1e-8,
                                                                      'learn_betas': self.learn_betas}))
         else:
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.96, 'beta_2': 0.9996, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.93, 'beta_2': 0.9993, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.86, 'beta_2': 0.8886, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.83, 'beta_2': 0.8883, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
-            self.input_optimizers.append(Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666, 'eps': 1e-8, 'learn_betas': self.learn_betas}))
+            self.input_optimizers_train = get_optimizers(self.problems[0])
+            if len(self.problems_eval) == 0:
+                self.input_optimizers_eval = [self.input_optimizers_train]
+            else:
+                for problem_eval in problems_eval:
+                    self.input_optimizers_eval.append(get_optimizers(problem_eval))
 
         if not self.use_network:
             self.weights_step = tf.get_variable('input_weights', shape=[self.num_input_optims, 1],
@@ -1199,7 +1228,7 @@ class AUGOptims(Meta_Optimizer):
                     lr_output = tf.nn.softmax(lr_output, 1)
                     lr_output = tf.matmul(lr_output, self.lr_dist)
             else:
-                activations = layer_fc(name='in', dims=[len(self.input_optimizers), self.layer_width], inputs=inputs,
+                activations = layer_fc(name='in', dims=[len(self.input_optimizers_train), self.layer_width], inputs=inputs,
                                        variable_list=self.optimizer_variables, activation=self.network_activation)
                 for layer in range(self.hidden_layers):
                     activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
@@ -1245,10 +1274,12 @@ class AUGOptims(Meta_Optimizer):
         lr_next = []
         problem = args['problem']
         problem_variables = args['variables'] if 'variables' in args else problem.variables
+        input_optimizers = args['input_optimizers']
+
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = args['input_optim_params'] if ('input_optim_params' in
                                                              args) else [optimizer.optim_params for optimizer
-                                                                         in self.input_optimizers]
+                                                                         in input_optimizers]
 
         problem_variables_flat = [problem.flatten_input(i, variable) for i, variable
                                  in enumerate(problem_variables)] if 'variables' in args else problem.variables_flat
@@ -1259,7 +1290,7 @@ class AUGOptims(Meta_Optimizer):
                                                             'gradients': gradients,
                                                             'optim_params': input_optim_params})
                                  for input_optimizer, input_optim_params in
-                                 zip(self.input_optimizers, input_optims_params)]
+                                 zip(self.input_optimizers_train, input_optims_params)]
         input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in
                                         input_optims_step_ops]
         input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
@@ -1295,6 +1326,7 @@ class AUGOptims(Meta_Optimizer):
         problem_variables = args['variables']
         vars_next = args['vars_next']
         input_optims_params_next = args['input_optims_params_next']
+        input_optimizers = args['input_optimizers']
         updates_list = [tf.assign(variable, variable_next) for variable, variable_next in zip(problem_variables, vars_next)]
 
         if self.learn_lr:
@@ -1306,14 +1338,14 @@ class AUGOptims(Meta_Optimizer):
         with tf.control_dependencies(updates_list):
             updates_list.extend([input_optimizer.updates({'optim_params_next': optim_params_next}) for optim_params_next,
                                                                                                        input_optimizer in
-                                 zip(input_optims_params_next, self.input_optimizers)])
+                                 zip(input_optims_params_next, input_optimizers)])
         return updates_list
 
-    def reset(self):
-        reset_ops = [self.reset_problems()]
+    def reset(self, problems, input_optimizers):
+        reset_ops = [self.reset_problems(problems)]
         if self.learn_lr:
             reset_ops.append(tf.variables_initializer(self.lr))
-        for optimizer in self.input_optimizers:
+        for optimizer in input_optimizers:
             reset_ops.append(tf.variables_initializer([optimizer.t]))
             reset_ops.append(tf.variables_initializer(optimizer.ms))
             reset_ops.append(tf.variables_initializer(optimizer.vs))
@@ -1322,8 +1354,12 @@ class AUGOptims(Meta_Optimizer):
                 reset_ops.append(tf.variables_initializer(optimizer.beta_2))
         return reset_ops
 
-    def run_reset(self, index=None, optimizer=False):
-        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+    def run_reset(self, val=False, index=None, optimizer=False):
+        if val:
+            ops_reset = self.ops_reset_problem_val
+        else:
+            ops_reset = self.ops_reset_problem
+        reset_ops = ops_reset[index] if index is not None else ops_reset
         self.session.run(reset_ops)
 
     def loss(self, args=None):
@@ -1342,18 +1378,36 @@ class AUGOptims(Meta_Optimizer):
         self.ops_loss_problem = []
         self.ops_prob_acc = []
 
+        self.ops_updates_val = []
+        self.ops_loss_problem_val = []
+        self.ops_reset_problem_val = []
+
+        # validation
+        for problem_eval, input_optimizers_eval in zip(self.problems_eval, self.input_optimizers_eval):
+            problem_eval_variables = problem_eval.variables
+            val_args = {'problem': problem_eval, 'variables': problem_eval_variables,
+                        'input_optimizers': input_optimizers_eval}
+            val_step = self.step(val_args)
+            val_args['vars_next'] = val_step['vars_next']
+            val_args['input_optims_params_next'] = val_step['input_optims_params_next']
+            updates_val = self.updates(val_args)
+            loss_prob_val = self.loss(val_args)
+            self.ops_loss_problem_val.append(loss_prob_val)
+            self.ops_updates_val.append(updates_val)
+            self.ops_reset_problem_val.append(self.reset([problem_eval], input_optimizers_eval))
+
+        # train
         problem = self.problems[0]
         problem_variables = problem.variables
-        args = {'problem': problem, 'variables': problem_variables}
+        args = {'problem': problem, 'variables': problem_variables, 'input_optimizers': self.input_optimizers_train}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
-        loss = tf.squeeze(self.loss(args))
-        loss_prob = loss
+        loss_prob = tf.squeeze(self.loss(args))
         log_loss = tf.log(loss_prob + 1e-15)
         meta_step = self.minimize(log_loss)
-        reset = self.reset()
+        reset = self.reset([problem], self.input_optimizers_train)
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
@@ -1366,10 +1420,17 @@ class AUGOptims(Meta_Optimizer):
     def run(self, args=None):
         if args['train']:
             ops_meta_step = self.ops_meta_step
+            ops_loss = self.ops_loss
+            ops_loss_problem = self.ops_loss_problem
+            ops_updates = self.ops_updates
         else:
             ops_meta_step = []
+            ops_loss = []
+            ops_loss_problem = self.ops_loss_problem_val
+            ops_updates = self.ops_updates_val
+
         start = timer()
-        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
 
@@ -1377,8 +1438,8 @@ class AUGOptimsRNN(AUGOptims):
 
     rnn_steps = None
 
-    def __init__(self, problems, path, args):
-        super(AUGOptimsRNN, self).__init__(problems, path, args)
+    def __init__(self, problems, problems_eval, path, args):
+        super(AUGOptimsRNN, self).__init__(problems, problems_eval, path, args)
         self.rnn_steps = args['rnn_steps']
 
     def step(self, args=None):
@@ -1386,7 +1447,7 @@ class AUGOptimsRNN(AUGOptims):
         problem_variables = args['variables']
         log_loss_0 = tf.squeeze(tf.log(args['loss_prob_0'] + 1e-15))
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
-        input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers]
+        input_optims_params = [optimizer.optim_params for optimizer in self.input_optimizers_train]
         loss = 0.0
 
         def update_rnn(t, loss, problem_variables, input_optims_params, lr):

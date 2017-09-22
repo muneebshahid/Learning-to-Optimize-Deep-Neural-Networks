@@ -7,7 +7,7 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 0
     args['network_activation'] = tf.nn.tanh#()relu
-    args['unroll_len'] = 20
+    args['unroll_len'] = 1
     args['use_guide_step'] = False
     return args
 
@@ -77,7 +77,7 @@ def adam():
 def aug_optim():
     args = common()
     args['lr'] = 1.0
-    args['lr_input_optims'] = .001
+    args['lr_input_optims'] = .01
     args['num_input_optims'] = 11
     args['use_network'] = False
     args['use_positive_weights'] = True

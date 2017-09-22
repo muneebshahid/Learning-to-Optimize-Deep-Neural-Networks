@@ -49,7 +49,7 @@ with l2l.as_default():
     num_unrolls_per_epoch = 1
     if restore_network:
         io_path = util.get_model_path(flag_optimizer=flag_optimizer, model_id=model_id) if restore_network else None
-    optim = meta_optimizers.AUGOptimsRNN(problem_batches, path=io_path, args=config.aug_optim_rnn())
+    optim = meta_optimizers.AUGOptims(problem_batches, [], path=io_path, args=config.aug_optim())
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
@@ -114,7 +114,7 @@ with l2l.as_default():
                 optim_loss_record[indices] = total_loss_optim[indices] / epoch_interval
                 prob_loss_record[indices] = total_loss_prob[indices] / epoch_interval
                 # print 'Optim Vars: ', sess.run(mean_optim_variables)
-                util.print_update(epoch, epochs, optim_loss_record, np.log10(prob_loss_record), epoch_interval, total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                util.print_update(epoch, epochs, optim_loss_record, np.log10(prob_loss_record), total_time, sess.run(optim_norm), sess.run(optim_grad_norm))
                 print('PROBLEM NORM: ', problem_norms_run)
                 total_loss_optim = 0
                 total_loss_prob = 0
