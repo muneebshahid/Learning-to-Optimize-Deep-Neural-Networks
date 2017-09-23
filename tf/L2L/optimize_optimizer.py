@@ -21,8 +21,8 @@ with l2l.as_default():
     #########################
     epochs = int(1000000 / config_args['unroll_len'])
     epoch_interval = int(500 / config_args['unroll_len'])
-    eval_interval = int(500 / config_args['unroll_len'])
-    validation_epochs = int(100)
+    eval_interval = int(50000 / config_args['unroll_len'])
+    validation_epochs = int(10000)
     #########################
     cifar_path = '../../../cifar/'
     # problem = problems.cifar10(
