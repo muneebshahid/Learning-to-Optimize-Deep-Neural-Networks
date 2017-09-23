@@ -730,7 +730,7 @@ class cifar10(Problem):
         """
         with tf.device('/cpu:0'):
             dtype = tf.float32#tf.float16 if FLAGS.use_fp16 else tf.float32
-            var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+            var = tf.get_variable(self.problem_prefix + name, shape, initializer=initializer, dtype=dtype)
         return var
 
     def _variable_with_weight_decay(self, name, shape, stddev, wd):

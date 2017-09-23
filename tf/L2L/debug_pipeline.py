@@ -30,8 +30,9 @@ flag_optim = 'mlp'
 problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
-    problem = problems.cifar10({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
-    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
+    cifar_path = '../../../cifar/'
+    problem = problems.cifar10({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
+    problem_eval_1 = problems.cifar10({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], path=io_path, args=config.aug_optim())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
