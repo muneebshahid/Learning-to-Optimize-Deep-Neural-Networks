@@ -7,7 +7,7 @@ def common():
     args['layer_width'] = 50
     args['hidden_layers'] = 0
     args['network_activation'] = tf.nn.tanh#()relu
-    args['unroll_len'] = 5
+    args['unroll_len'] = 1
     args['unroll_len_val'] = 1
     args['use_guide_step'] = False
     return args
@@ -80,11 +80,11 @@ def aug_optim():
     args['lr'] = 1.0
     args['lr_input_optims'] = .01
     args['num_input_optims'] = 11
-    args['use_network'] = False
+    args['use_network'] = True
     args['use_positive_weights'] = True
     args['normalize_weights'] = True
     args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
-    args['network_out_dims'] = 1
+    args['network_out_dims'] = args['num_input_optims'] if args['use_network'] else 1
     args['beta_max'] = 0.9999
     args['learn_betas'] = False
     args['learn_lr'] = False
@@ -93,6 +93,7 @@ def aug_optim():
 
 def aug_optim_rnn():
     args = aug_optim()
+    args['unroll_len'] = 5
     args['network_out_dims'] = args['num_input_optims'] + (2 if args['learn_betas'] else 0)
     args['network_out_dims'] += (len(args['lr_dist']) if args['learn_lr'] else 0)
 

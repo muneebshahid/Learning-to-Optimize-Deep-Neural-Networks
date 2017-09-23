@@ -25,13 +25,13 @@ with l2l.as_default():
     validation_epochs = int(100)
     #########################
     cifar_path = '../../../cifar/'
-    problem = problems.cifar10(
-        {'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
-    problem_eval_1 = problems.cifar10(
-        {'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
+    # problem = problems.cifar10(
+    #     {'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
+    # problem_eval_1 = problems.cifar10(
+    #     {'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
 
-    # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
-    # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
+    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
+    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
     # problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100})
     problems_eval = [problem_eval_1]#, problem_eval_2]
     if restore_network:

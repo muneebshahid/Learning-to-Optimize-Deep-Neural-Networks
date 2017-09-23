@@ -1292,7 +1292,7 @@ class AUGOptims(Meta_Optimizer):
                                                             'gradients': gradients,
                                                             'optim_params': input_optim_params})
                                  for input_optimizer, input_optim_params in
-                                 zip(self.input_optimizers_train, input_optims_params)]
+                                 zip(args['input_optimizers'], input_optims_params)]
         input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in
                                         input_optims_step_ops]
         input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
@@ -1461,6 +1461,7 @@ class AUGOptimsRNN(AUGOptims):
         def update_rnn(t, loss, problem_variables, input_optims_params, lr):
             step_op = super(AUGOptimsRNN, self).step({'problem': problem,
                                                       'variables': problem_variables,
+                                                      'input_optimizers': input_optimizers,
                                                       'input_optim_params': input_optims_params,
                                                       'lr': lr})
             vars_next = step_op['vars_next']
@@ -1520,6 +1521,7 @@ class AUGOptimsRNN(AUGOptims):
         problem = self.problems[0]
         problem_variables = problem.variables
         problem_variables_flat = problem.variables_flat
+        loss_prob = self.loss({'problem': problem})
         gradients = self.get_preprocessed_gradients(problem, problem_variables)
         loss_prob_0 = self.loss({'problem': problem})
 
@@ -1530,7 +1532,7 @@ class AUGOptimsRNN(AUGOptims):
         args['vars_next'] = step['vars_next']
         args['lr_next'] = step['lr_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
-        loss_prob = self.loss(args)
+
         updates = self.updates(args)
         step_loss = step['loss']
         meta_step = self.minimize(step_loss)
@@ -1882,9 +1884,9 @@ class AUGOptimsGRU(Meta_Optimizer):
         loss_prob = self.loss(args)
         loss_step = step['loss']
         meta_step = self.minimize(loss_step)
-        reset = self.reset(self.reset({'problems': [problem],
+        reset = self.reset({'problems': [problem],
                                        'input_optimizers': self.input_optimizers_train,
-                                       'hidden_states': self.hidden_states[0]}))
+                                       'hidden_states': self.hidden_states[0]})
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)

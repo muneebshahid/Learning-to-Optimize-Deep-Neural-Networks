@@ -901,11 +901,11 @@ class cifar10(Problem):
         conv1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(batch, variables[0], [1, 1, 1, 1], padding='SAME'), variables[1]))
         pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool1')
         norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                       name='norm1')
+                      name='norm1')
 
         conv2 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(norm1, variables[2], [1, 1, 1, 1], padding='SAME'), variables[3]))
         norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                       name='norm2')
+                      name='norm2')
         pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                             strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
@@ -935,7 +935,13 @@ class cifar10(Problem):
             labels = self.eval_labels_batch
 
         logits = self.network(images, variables)
+
+        # if self.allow_gradients_of_gradients:
+        #     labels = tf.one_hot(labels, 10, name="Cifar_Labels_" + mode)
+        # else:
         labels = tf.cast(labels, tf.int64)
+        # cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+        #     labels=labels, logits=logits, name='cross_entropy_per_example')
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=labels, logits=logits, name='cross_entropy_per_example')
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
@@ -945,4 +951,3 @@ class cifar10(Problem):
         # decay terms (L2 loss).
 
         return tf.add_n(tf.get_collection('losses'), name='total_loss')
-
