@@ -6,7 +6,7 @@ def common():
     args['meta_learning_rate'] = .0001
     args['layer_width'] = 50
     args['hidden_layers'] = 0
-    args['network_activation'] = tf.nn.tanh#()relu
+    args['network_activation'] = tf.nn.relu
     args['unroll_len'] = 1
     args['unroll_len_val'] = 1
     args['use_guide_step'] = False
