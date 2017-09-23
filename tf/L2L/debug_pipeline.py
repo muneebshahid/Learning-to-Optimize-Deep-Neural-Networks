@@ -30,9 +30,9 @@ flag_optim = 'mlp'
 problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'maxval':10, 'dims':1, 'gog': False, 'path': 'cifar', 'conv': False})
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
-    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100})
-    problem_eval = problems.Mnist({'prefix': 'eval', 'minval': 0, 'maxval': 100})
-    optim = meta_optimizers.AUGOptims([problem], [problem_eval], path=io_path, args=config.aug_optim())
+    problem = problems.cifar10({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
+    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
+    optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], path=io_path, args=config.aug_optim())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]

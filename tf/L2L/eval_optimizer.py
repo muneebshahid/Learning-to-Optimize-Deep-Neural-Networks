@@ -30,14 +30,13 @@ with l2l.as_default():
     all_summ = []
     writer = None
     #problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': True})
-    problem = problems.cifar10_full({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
+    problem = problems.cifar10({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
     loss = problem.loss(problem.variables)
     acc_train = problem.accuracy(mode='train')
     acc_test = []  # problem.accuracy(mode='test')
     enable_summaries = False
     if meta:
         optim_meta = meta_optimizers.AUGOptims([problem], path=None, args=config.aug_optim())
-
         optim_meta.build()
     else:
         optim_meta = None

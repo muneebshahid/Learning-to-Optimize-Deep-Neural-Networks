@@ -332,6 +332,7 @@ class Mnist(Problem):
 
     def __init__(self, args):
         args['var_count'] = 4
+        self.full = args['full']
         super(Mnist, self).__init__(args=args)
         self.conv = False if 'conv' not in args else args['conv']
 
@@ -354,20 +355,30 @@ class Mnist(Problem):
         with tf.variable_scope(self.variable_scope):
             with tf.variable_scope('network_variables'):
                 if self.conv:
-                    self.create_variable('w_1', dims=[5, 5, 1, 32])
-                    self.create_variable('b_1', dims=[32])
+                    if self.full:
+                        filters = 32
+                        f1 = 1024
+                    else:
+                        filters = 16
+                        f1 = 512
+                    self.create_variable('w_1', dims=[5, 5, 1, filters])
+                    self.create_variable('b_1', dims=[filters])
 
-                    self.create_variable('w_2', dims=[5, 5, 32, 64])
-                    self.create_variable('b_2', dims=[64])
+                    self.create_variable('w_2', dims=[5, 5, filters, filters * 2])
+                    self.create_variable('b_2', dims=[filters * 2])
 
-                    self.create_variable('w_3', dims=[7 * 7 * 64, 1024])
-                    self.create_variable('b_3', dims=[1024])
+                    self.create_variable('w_3', dims=[7 * 7 * filters * 2, f1])
+                    self.create_variable('b_3', dims=[f1])
 
-                    self.create_variable('w_out', dims=[1024, 10])
+                    self.create_variable('w_out', dims=[f1, 10])
                     self.create_variable('b_out', dims=[10])
                 else:
-                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, 20])
-                    self.create_variable('b_1', dims=[1, 20])
+                    if self.full:
+                        f1 = 40
+                    else:
+                        f1 = 20
+                    self.create_variable('w_1', dims=[self.training_data['images'].get_shape()[1].value, f1])
+                    self.create_variable('b_1', dims=[1, f1])
 
                     # self.create_variable('w_2', dims=[20, 20])
                     # self.create_variable('b_2', dims=[20])
@@ -375,7 +386,7 @@ class Mnist(Problem):
                     # self.create_variable('w_3', dims=[20, 20])
                     # self.create_variable('b_3', dims=[20])
 
-                    self.create_variable('w_out', dims=[20, 10])
+                    self.create_variable('w_out', dims=[f1, 10])
                     self.create_variable('b_out', dims=[1, 10])
                 self.weight_norm_loss = 0
                 for variable in self.variables:
@@ -403,7 +414,7 @@ class Mnist(Problem):
             h_pool1 = Mnist.max_pool_2x2(h_conv1)
             h_conv2 = tf.nn.relu(Mnist.conv2d(h_pool1, variables[2]) + variables[3])
             h_pool2 = Mnist.max_pool_2x2(h_conv2)
-            h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+            h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * (64 if self.full else 32)])
             h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, variables[4]) + variables[5])
             y_conv = tf.matmul(h_fc1, variables[6]) + variables[7]
             return y_conv
@@ -433,7 +444,7 @@ class Mnist(Problem):
         return self.__xent_loss(output, batch_labels) + (.01 * self.weight_norm_loss if self.enable_l2_norm else 0.0)
 
 
-class cifar10(Problem):
+class cifar10_old(Problem):
 
     def __init__(self, args):
         CIFAR10_URL = "http://www.cs.toronto.edu/~kriz"
@@ -454,7 +465,7 @@ class cifar10(Problem):
         path = args['path']
         maybe_download_cifar10(path)
         args['var_count'] = 1
-        super(cifar10, self).__init__(args)
+        super(cifar10_old, self).__init__(args)
 
         self.w1 = self.create_variable('w1', dims=[5, 5, 3, 16])
         self.b1 = self.create_variable('b1', dims=[16])
@@ -539,7 +550,7 @@ class cifar10(Problem):
         return tf.reduce_mean(correct_prediction)
 
 
-class cifar10_full(Problem):
+class cifar10(Problem):
 
     # Process images of this size. Note that this differs from the original CIFAR
     # image size of 32 x 32. If one alters this number, then the entire model
@@ -830,7 +841,7 @@ class cifar10_full(Problem):
         maybe_download_cifar10(path)
         path = os.path.join(path, CIFAR10_FOLDER)
         args['var_count'] = 1
-        super(cifar10_full, self).__init__(args)
+        super(cifar10, self).__init__(args)
         if self.full:
             k_channels = 64
             f1_in = 6 * 6 * 64

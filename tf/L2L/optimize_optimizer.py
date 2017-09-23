@@ -22,15 +22,15 @@ with l2l.as_default():
     epochs = int(1000000 / config_args['unroll_len'])
     epoch_interval = int(500 / config_args['unroll_len'])
     eval_interval = int(500 / config_args['unroll_len'])
-    validation_epochs = int(10000)
+    validation_epochs = int(100)
     #########################
-    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100})
-    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100})
-    problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100})
-    problems_eval = [problem_eval_1, problem_eval_2]
+    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
+    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
+    # problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100})
+    problems_eval = [problem_eval_1]#, problem_eval_2]
     if restore_network:
         io_path = util.get_model_path(flag_optimizer='Mlp', model_id='xx') if restore_network else None
-    optim = meta_optimizers.AUGOptimsGRU([problem], problems_eval, path=io_path, args=config.aug_optim_gru())
+    optim = meta_optimizers.AUGOptims([problem], problems_eval, path=io_path, args=config.aug_optim())
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
