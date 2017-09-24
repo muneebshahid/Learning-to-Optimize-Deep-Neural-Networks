@@ -854,44 +854,37 @@ class cifar10(Problem):
             f2_out = 46
 
 
-        kernel_1 = self._variable_with_weight_decay('conv1_weights', shape=[5, 5, 3, k_channels], stddev=5e-2, wd=0.0)
+        # kernel_1 = self._variable_with_weight_decay('conv1_weights', shape=[5, 5, 3, k_channels], stddev=5e-2, wd=0.0)
+        kernel_1 = self._variable_on_cpu('conv1_weights', [5, 5, 3, k_channels],
+                                         tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32))
         biases_1 = self._variable_on_cpu('conv1_biases', [k_channels], tf.constant_initializer(0.0))
         self._add_to_list(kernel_1, [5, 5, 3, k_channels])
         self._add_to_list(biases_1, [k_channels])
 
-        kernel_2 = self._variable_with_weight_decay('conv2_weights', shape=[5, 5, k_channels, k_channels], stddev=5e-2, wd=0.0)
+        # kernel_2 = self._variable_with_weight_decay('conv2_weights', shape=[5, 5, k_channels, k_channels], stddev=5e-2, wd=0.0)
+        kernel_2 = self._variable_on_cpu('conv2_weights', [5, 5, k_channels, k_channels],
+                                                    tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32))
         biases_2 = self._variable_on_cpu('conv2_biases', [k_channels], tf.constant_initializer(0.1))
         self._add_to_list(kernel_2, [5, 5, k_channels, k_channels])
         self._add_to_list(biases_2, [k_channels])
 
-        f1_weights = self._variable_with_weight_decay('f1_weights', shape=[f1_in, f1_out],
-                                              stddev=0.04, wd=0.004)
+        f1_weights = self._variable_on_cpu('f1_weights', [f1_in, f1_out], tf.truncated_normal_initializer(stddev=0.04, dtype=tf.float32))
+                                              # stddev=0.04, wd=0.004)
         f1_biases = self._variable_on_cpu('f1_biases', [f1_out], tf.constant_initializer(0.1))
         self._add_to_list(f1_weights, [f1_in, f1_out])
         self._add_to_list(f1_biases, [f1_out])
 
-        f2_weights = self._variable_with_weight_decay('f2_weights', shape=[f1_out, f2_out],
-                                              stddev=0.04, wd=0.004)
+        f2_weights = self._variable_on_cpu('f2_weights', [f1_out, f2_out], tf.truncated_normal_initializer(stddev=0.04, dtype=tf.float32))
+                                              # stddev=0.04, wd=0.004)
         f2_biases = self._variable_on_cpu('f2_biases', [f2_out], tf.constant_initializer(0.1))
         self._add_to_list(f2_weights, [f1_out, f2_out])
         self._add_to_list(f2_biases, [f2_out])
 
-        f3_weights = self._variable_with_weight_decay('f3_weights', shape=[f2_out, self.NUM_CLASSES],
-                                                      stddev=1/f2_out, wd=0.0)
+        f3_weights = self._variable_on_cpu('f3_weights', [f2_out, self.NUM_CLASSES], tf.truncated_normal_initializer(stddev=1/f2_out, dtype=tf.float32))
+                                                      # stddev=1/f2_out, wd=0.0)
         f3_biases = self._variable_on_cpu('f3_biases', [self.NUM_CLASSES], tf.constant_initializer(0.0))
         self._add_to_list(f3_weights, [f2_out, self.NUM_CLASSES])
         self._add_to_list(f3_biases, [self.NUM_CLASSES])
-        # else:
-        #     self.w1 = self.create_variable('w1', dims=[5, 5, 3, 16])
-        #     self.b1 = self.create_variable('b1', dims=[16])
-        #     self.w2 = self.create_variable('w2', dims=[5, 5, 16, 16])
-        #     self.b2 = self.create_variable('b2', dims=[16])
-        #     self.w3 = self.create_variable('w3', dims=[5, 5, 16, 16])
-        #     self.b3 = self.create_variable('b3', dims=[16])
-        #     self.w4 = self.create_variable('w4', dims=[144, 32])
-        #     self.b4 = self.create_variable('b4', dims=[32])
-        #     self.w5 = self.create_variable('w5', dims=[32, 10])
-        #     self.b5 = self.create_variable('b5', dims=[10])
 
         with tf.device('/cpu:0'):
             self.train_images_batch, self.train_labels_batch = self.distorted_inputs(path, batch_size=128)
@@ -945,9 +938,16 @@ class cifar10(Problem):
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=labels, logits=logits, name='cross_entropy_per_example')
         cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
-        tf.add_to_collection('losses', cross_entropy_mean)
+        loss = cross_entropy_mean
+        loss += tf.multiply(tf.nn.l2_loss(variables[0]), 0.0, name='weight_loss_kernel_1')
+        loss += tf.multiply(tf.nn.l2_loss(variables[2]), 0.0, name='weight_loss_kernel_2')
+        loss += tf.multiply(tf.nn.l2_loss(variables[4]), 0.004, name='weight_loss_f1')
+        loss += tf.multiply(tf.nn.l2_loss(variables[6]), 0.004, name='weight_loss_f2')
+        loss += tf.multiply(tf.nn.l2_loss(variables[8]), 0.004, name='weight_loss_f3')
+
+        #tf.add_to_collection('losses', cross_entropy_mean)
 
         # The total loss is defined as the cross entropy loss plus all of the weight
         # decay terms (L2 loss).
 
-        return tf.add_n(tf.get_collection('losses'), name='total_loss')
+        return loss#tf.add_n(tf.get_collection('losses'), name='total_loss')
