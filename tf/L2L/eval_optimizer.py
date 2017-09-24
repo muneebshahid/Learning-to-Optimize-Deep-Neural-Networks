@@ -104,11 +104,11 @@ with l2l.as_default():
             avg_acc_train = total_acc_train / itr_per_epoch
             avg_acc_test = total_acc_test / itr_per_epoch
             write_to_file(results_dir + 'loss', avg_loss)
-            write_to_file(results_dir + 'acc_train', [avg_acc_train])
-            write_to_file(results_dir + 'acc_test', [avg_acc_test])
+            # write_to_file(results_dir + 'acc_train', [avg_acc_train])
+            # write_to_file(results_dir + 'acc_test', [avg_acc_test])
             print('loss: ', avg_loss)
-            print('acc train: ', avg_acc_train)
-            print('acc test: ', avg_acc_test)
+            # print('acc train: ', avg_acc_train)
+            # print('acc test: ', avg_acc_test)
             #print(sess.run(optim_meta.min_lr))
             print('PROB NORM: ', sess.run(problem_norms))
             if enable_summaries and ((i + 10) % 10 == 0):

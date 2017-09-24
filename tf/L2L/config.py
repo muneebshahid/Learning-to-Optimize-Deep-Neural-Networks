@@ -83,9 +83,9 @@ def aug_optim():
     args['use_network'] = True
     args['use_positive_weights'] = True
     args['normalize_weights'] = True
-    args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
     args['network_out_dims'] = args['num_input_optims'] if args['use_network'] else 1
 
+    args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
     args['beta_max'] = 0.9999
     args['learn_betas'] = False
     args['learn_lr'] = False

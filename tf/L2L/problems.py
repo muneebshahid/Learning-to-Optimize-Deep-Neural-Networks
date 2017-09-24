@@ -211,7 +211,7 @@ class Rosenbrock(Problem):
             self.y = self.create_variable('y', initializer=self.init[1], dims=[1, 1])
 
     def loss(self, variables, mode='train'):
-        return tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0]))
+        return tf.squeeze(tf.square(1.0 - variables[0]) + 100 * tf.square(variables[1] - tf.square(variables[0])))
 
 
 class RosenbrockMulti(Problem):
