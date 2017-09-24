@@ -164,7 +164,7 @@ class Meta_Optimizer():
 
 
 def layer_fc(name, dims, inputs, variable_list, initializers=None, activation=None):
-    initializers = [tf.random_normal_initializer(mean=0.0, stddev=.1), tf.zeros_initializer] \
+    initializers = [tf.random_normal_initializer(mean=0.0, stddev=.01), tf.zeros_initializer] \
         if initializers is None else initializers
     # initializers = [tf.contrib.layers.variance_scaling_initializer()]
     reuse = False
