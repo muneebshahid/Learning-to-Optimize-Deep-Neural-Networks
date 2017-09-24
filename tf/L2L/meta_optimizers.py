@@ -1405,13 +1405,15 @@ class AUGOptims(Meta_Optimizer):
         # train
         problem = self.problems[0]
         problem_variables = problem.variables
-        args = {'problem': problem, 'variables': problem_variables, 'input_optimizers': self.input_optimizers_train}
+        args = {'problem': problem, 'variables': problem_variables,
+                'input_optimizers': self.input_optimizers_train}
+        loss_prob = self.loss({'problem': problem})
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         updates = self.updates(args)
-        loss_prob = tf.squeeze(self.loss(args))
-        log_loss = tf.log(loss_prob + 1e-15)
+        loss_next = self.loss(args)
+        log_loss = tf.log(loss_next + 1e-15)
         meta_step = self.minimize(log_loss)
         reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train})
         self.ops_step.append(step)
@@ -1522,13 +1524,12 @@ class AUGOptimsRNN(AUGOptims):
         problem = self.problems[0]
         problem_variables = problem.variables
         problem_variables_flat = problem.variables_flat
-        loss_prob = self.loss({'problem': problem})
         gradients = self.get_preprocessed_gradients(problem, problem_variables)
-        loss_prob_0 = self.loss({'problem': problem})
+        loss_prob = self.loss({'problem': problem})
 
         args = {'problem': problem, 'variables': problem_variables,
                 'variables_flat': problem_variables_flat, 'gradients': gradients, 'unroll_len': self.unroll_len,
-                'lr': self.lr, 'loss_prob_0': loss_prob_0, 'input_optimizers': self.input_optimizers_train}
+                'lr': self.lr, 'loss_prob_0': loss_prob, 'input_optimizers': self.input_optimizers_train}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['lr_next'] = step['lr_next']
@@ -1537,7 +1538,7 @@ class AUGOptimsRNN(AUGOptims):
         updates = self.updates(args)
         step_loss = step['loss']
         meta_step = self.minimize(step_loss)
-        reset = reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train})
+        reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train})
         self.ops_step.append(step)
         self.ops_prob_acc = problem.accuracy()
         self.ops_updates.append(updates)
@@ -1717,7 +1718,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         input_optimizers = args['input_optimizers']
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = [optimizer.optim_params for optimizer in input_optimizers]
-        log_loss_0 = tf.squeeze(tf.log(args['loss_prob_0'] + 1e-15))
+        log_loss_0 = tf.log(args['loss_prob_0'] + 1e-15)
         loss = 0.0
 
         def update_rnn(t, loss, problem_variables, input_optims_params, hidden_states, lr):
@@ -1766,7 +1767,7 @@ class AUGOptimsGRU(Meta_Optimizer):
                     beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base_next]
                     input_optims_params_next[i].append(beta_1_curr)
                     input_optims_params_next[i].append(beta_2_curr)
-            loss_curr = tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+            loss_curr = self.loss({'problem': problem, 'vars_next': vars_next})
             if self.use_rel_loss:
                 loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
             else:
@@ -1835,7 +1836,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         with tf.name_scope('Problem_Loss'):
             problem = args['problem']
             variables = args['vars_next'] if 'vars_next' in args else problem.variables
-            return problem.loss(variables)
+            return tf.squeeze(problem.loss(variables))
 
     def build(self):
         self.ops_step = []
@@ -1872,18 +1873,17 @@ class AUGOptimsGRU(Meta_Optimizer):
 
         problem = self.problems[0]
         problem_variables = problem.variables
-        loss_prob_0 = self.loss({'problem': problem})
+        loss_prob = self.loss({'problem': problem})
 
         args = {'problem': problem, 'variables': problem_variables, 'input_optimizers': self.input_optimizers_train,
                 'hidden_states': self.hidden_states[0], 'unroll_len': self.unroll_len,
-                'lr': self.lr, 'loss_prob_0': loss_prob_0}
+                'lr': self.lr, 'loss_prob_0': loss_prob}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         args['hidden_states_next'] = step['hidden_states_next']
         args['lr_next'] = step['lr_next']
         updates = self.updates(args)
-        loss_prob = self.loss(args)
         loss_step = step['loss']
         meta_step = self.minimize(loss_step)
         reset = self.reset({'problems': [problem],
