@@ -1159,6 +1159,9 @@ class AUGOptims(Meta_Optimizer):
         self.beta_max = args['beta_max']
         self.learn_lr = args['learn_lr']
         self.use_rel_loss = args['use_rel_loss']
+        self.use_adam_loss = args['use_adam_loss']
+        self.std_adam = Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9,
+                                                'beta_2': 0.999, 'eps': 1e-8}) if self.use_adam_loss else None
 
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
@@ -1276,6 +1279,8 @@ class AUGOptims(Meta_Optimizer):
         betas_1_base_next = []
         betas_2_base_next = []
         lr_next = []
+        std_adam = None
+        std_adam_step = None
         problem = args['problem']
         problem_variables = args['variables'] if 'variables' in args else problem.variables
 
@@ -1298,6 +1303,11 @@ class AUGOptims(Meta_Optimizer):
                                         input_optims_step_ops]
         input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
                                     input_optims_step_ops]
+        if self.use_adam_loss and 'std_adam' in args:
+            std_adam = args['std_adam']
+            std_adam_params = args['std_adam_params'] if 'std_adam_params' in args else None
+            std_adam_step = std_adam.step(args={'variables': problem_variables,'variables_flat': problem_variables_flat,
+                                           'gradients': gradients, 'optim_params': std_adam_params})
 
         stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
         for var, var_flat, stacked_step, var_lr in zip(problem_variables, problem_variables_flat, stacked_steps, lr):
@@ -1322,7 +1332,8 @@ class AUGOptims(Meta_Optimizer):
                 input_optims_params_next[i].append(beta_1_curr)
                 input_optims_params_next[i].append(beta_2_curr)
 
-        return {'vars_next': vars_next, 'input_optims_params_next': input_optims_params_next, 'lr_next': lr_next}
+        return {'vars_next': vars_next, 'input_optims_params_next': input_optims_params_next,
+                'lr_next': lr_next, 'std_adam_step': std_adam_step}
 
     def updates(self, args=None):
         problem = args['problem']
@@ -1342,6 +1353,10 @@ class AUGOptims(Meta_Optimizer):
             updates_list.extend([input_optimizer.updates({'optim_params_next': optim_params_next}) for optim_params_next,
                                                                                                        input_optimizer in
                                  zip(input_optims_params_next, input_optimizers)])
+            if self.use_adam_loss and 'std_adam' in args:
+                std_adam = args['std_adam']
+                std_adam_step = args['std_adam_step']
+                updates_list.extend(std_adam.updates({'optim_params_next': std_adam_step['optim_params_next']}))
         return updates_list
 
     def reset(self, args=None):
@@ -1350,6 +1365,11 @@ class AUGOptims(Meta_Optimizer):
         reset_ops = [self.reset_problems(problems)]
         if self.learn_lr:
             reset_ops.append(tf.variables_initializer(self.lr))
+        if self.use_adam_loss and 'std_adam' in args:
+            std_adam = args['std_adam']
+            reset_ops.append(tf.variables_initializer([std_adam.t]))
+            reset_ops.append(tf.variables_initializer(std_adam.ms))
+            reset_ops.append(tf.variables_initializer(std_adam.vs))
         for optimizer in input_optimizers:
             reset_ops.append(tf.variables_initializer([optimizer.t]))
             reset_ops.append(tf.variables_initializer(optimizer.ms))
@@ -1382,6 +1402,7 @@ class AUGOptims(Meta_Optimizer):
         self.ops_reset = []
         self.ops_loss_problem = []
         self.ops_prob_acc = []
+        self.ops_loss_std_adam = None
 
         self.ops_updates_val = []
         self.ops_loss_problem_val = []
@@ -1405,21 +1426,30 @@ class AUGOptims(Meta_Optimizer):
         # train
         problem = self.problems[0]
         problem_variables = problem.variables
-        args = {'problem': problem, 'variables': problem_variables,
-                'input_optimizers': self.input_optimizers_train}
         loss_prob = self.loss({'problem': problem})
+        args = {'problem': problem, 'variables': problem_variables,
+                'input_optimizers': self.input_optimizers_train, 'std_adam': self.std_adam}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
-        updates = self.updates(args)
         loss_next = self.loss(args)
-        log_loss = tf.log(loss_next + 1e-15)
-        meta_step = self.minimize(log_loss)
-        reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train})
+        optim_log_loss = tf.log(loss_next + 1e-15)
+        if self.use_adam_loss:
+            args['std_adam_step'] = step['std_adam_step']
+            std_adam_loss = self.loss({'problem': problem, 'vars_next': args['std_adam_step']['vars_next']})
+            log_std_adam_loss = tf.log(std_adam_loss + 1e-15)
+            self.ops_loss_std_adam = log_std_adam_loss
+            # optim_log_loss = tf.cond(tf.greater(optim_log_loss, log_std_adam_loss),
+            #                          lambda: 2 * optim_log_loss - log_std_adam_loss,
+            #                          lambda: optim_log_loss)
+            optim_log_loss = 2 * optim_log_loss - log_std_adam_loss
+        updates = self.updates(args)
+        meta_step = self.minimize(optim_log_loss)
+        reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train, 'std_adam': self.std_adam})
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(log_loss)
+        self.ops_loss.append(optim_log_loss)
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem.append(reset)
         self.ops_reset.append(self.ops_reset_problem)

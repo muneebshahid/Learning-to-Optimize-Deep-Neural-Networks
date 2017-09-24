@@ -55,7 +55,7 @@ class Adam(Optimizer):
     learn_betas = None
     def __init__(self, problem, args=None):
         super(Adam, self).__init__(problem, args)
-        self.learn_betas = args['learn_betas']
+        self.learn_betas = args['learn_betas'] if 'learn_betas' in args else False
         if self.learn_betas:
             self.beta_1 = [tf.Variable(beta_1) for beta_1 in args['beta_1']]
             self.beta_2 = [tf.Variable(beta_2) for beta_2 in args['beta_2']]
@@ -75,7 +75,7 @@ class Adam(Optimizer):
             self.optim_params.extend([self.beta_1, self.beta_2])
 
     def set_variable(self, variable_key, args, default):
-        if args is not None and variable_key in args:
+        if args is not None and variable_key in args and args[variable_key] is not None:
             return args[variable_key]
         else:
             return default
