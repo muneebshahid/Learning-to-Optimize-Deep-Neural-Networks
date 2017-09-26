@@ -1617,7 +1617,7 @@ class AUGOptimsGRU(Meta_Optimizer):
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas}))
             return input_optimizers
 
-        super(AUGOptimsGRU, self).__init__(problems, problems_eval, path, args)
+        super(AUGOptimsGRU, self).__init__(problems, problems_eval, args)
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
         self.network_activation = args['network_activation']
