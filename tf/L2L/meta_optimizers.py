@@ -34,8 +34,8 @@ class Meta_Optimizer():
     ops_reset_problem_val = None
 
     def __init__(self, problems, problems_eval, args):
-        if path is not None:
-            print('Args Loaded, call load_optimizer with session to restore the optimizer graph.')
+        # if path is not None:
+        #     print('Args Loaded, call load_optimizer with session to restore the optimizer graph.')
         self.problems = problems
         self.problems_eval = problems_eval
         if self.is_availble('preprocess', args):
