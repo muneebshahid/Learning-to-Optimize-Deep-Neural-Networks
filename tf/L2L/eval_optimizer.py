@@ -36,7 +36,7 @@ with l2l.as_default():
     acc_test = []  # problem.accuracy(mode='test')
     enable_summaries = False
     if meta:
-        optim_meta = meta_optimizers.AUGOptims([problem], path=None, args=config.aug_optim())
+        optim_meta = meta_optimizers.AUGOptims([problem], args=config.aug_optim())
         optim_meta.build()
     else:
         optim_meta = None

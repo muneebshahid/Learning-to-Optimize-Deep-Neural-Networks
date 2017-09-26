@@ -33,10 +33,8 @@ class Meta_Optimizer():
     ops_loss_problem_val = None
     ops_reset_problem_val = None
 
-    def __init__(self, problems, problems_eval, path, args):
+    def __init__(self, problems, problems_eval, args):
         if path is not None:
-            print('Loading optimizer args, ignoring provided args...')
-            args = self.load_args(path)
             print('Args Loaded, call load_optimizer with session to restore the optimizer graph.')
         self.problems = problems
         self.problems_eval = problems_eval
@@ -1117,8 +1115,8 @@ class AUGOptims(Meta_Optimizer):
     beta_max = None
     use_rel_loss = None
 
-    def __init__(self, problems, problems_eval, path, args):
-        super(AUGOptims, self).__init__(problems, problems_eval, path, args)
+    def __init__(self, problems, problems_eval, args):
+        super(AUGOptims, self).__init__(problems, problems_eval, args)
         def get_optimizers(problem):
             input_optimizers = []
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
@@ -1476,8 +1474,8 @@ class AUGOptimsRNN(AUGOptims):
 
     unroll_len = None
     unroll_len_val = None
-    def __init__(self, problems, problems_eval, path, args):
-        super(AUGOptimsRNN, self).__init__(problems, problems_eval, path, args)
+    def __init__(self, problems, problems_eval, args):
+        super(AUGOptimsRNN, self).__init__(problems, problems_eval, args)
         self.unroll_len = args['unroll_len']
         self.unroll_len_val = args['unroll_len_val']
 
@@ -1591,7 +1589,7 @@ class AUGOptimsGRU(Meta_Optimizer):
     input_optimizers_eval = None
     hidden_states_eval = None
 
-    def __init__(self, problems, problems_eval, path, args):
+    def __init__(self, problems, problems_eval, args):
         def get_optimizers(problem):
             input_optimizers = []
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,

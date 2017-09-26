@@ -37,7 +37,7 @@ if meta:
     #     {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
     # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
-    optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], path=io_path, args=config.aug_optim())
+    optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], args=config.aug_optim())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
