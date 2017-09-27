@@ -1588,6 +1588,8 @@ class AUGOptimsGRU(Meta_Optimizer):
     input_optimizers_train = None
     input_optimizers_eval = None
     hidden_states_eval = None
+    use_adam_loss = None
+    std_adam = None
 
     def __init__(self, problems, problems_eval, args):
         def get_optimizers(problem):
@@ -1636,6 +1638,9 @@ class AUGOptimsGRU(Meta_Optimizer):
         self.input_optimizers_train = []
         self.input_optimizers_eval = []
         self.input_optimizers = []
+        self.use_adam_loss = args['use_adam_loss']
+        self.std_adam = Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9,
+                                                'beta_2': 0.999, 'eps': 1e-8}) if self.use_adam_loss else None
 
         if self.learn_betas:
             betas_1_base = [tf.random_uniform([shape, 1], 0.0, 1.0) for shape in self.problems[0].variables_flattened_shape]
@@ -1744,17 +1749,23 @@ class AUGOptimsGRU(Meta_Optimizer):
         hidden_states = args['hidden_states']
         unroll_len = args['unroll_len']
         input_optimizers = args['input_optimizers']
+        if self.use_adam_loss and 'std_adam' in args:
+            std_adam = args['std_adam']
+            std_adam_params = std_adam.optim_params
+        else:
+            std_adam_params = 0
         lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = [optimizer.optim_params for optimizer in input_optimizers]
         log_loss_0 = tf.log(args['loss_prob_0'] + 1e-15)
         loss = 0.0
 
-        def update_rnn(t, loss, problem_variables, input_optims_params, hidden_states, lr):
+        def update_rnn(t, loss, problem_variables, input_optims_params, hidden_states, lr, std_adam_params):
             vars_next = []
             hidden_states_next = []
             betas_1_base_next = []
             betas_2_base_next = []
             lr_next = []
+            std_adam_params_next = 0
 
             problem_variables_flat = [problem.flatten_input(i, variable) for i, variable
                                       in
@@ -1770,6 +1781,8 @@ class AUGOptimsGRU(Meta_Optimizer):
                                             input_optims_step_ops]
             input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
                                         input_optims_step_ops]
+
+
 
             stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
             for var, var_flat, stacked_step, hidden_state, var_lr in zip(problem_variables, problem_variables_flat, stacked_steps, hidden_states, lr):
@@ -1799,13 +1812,22 @@ class AUGOptimsGRU(Meta_Optimizer):
             if self.use_rel_loss:
                 loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
             else:
-                loss_next = loss + loss_curr
-            return t + 1, loss_next, vars_next, input_optims_params_next, hidden_states_next, lr_next
+                if self.use_adam_loss and 'std_adam' in args:
+                    std_adam_step = std_adam.step(
+                        args={'variables': problem_variables, 'variables_flat': problem_variables_flat,
+                              'gradients': gradients, 'optim_params': std_adam_params})
+                    std_adam_params_next = std_adam_step['optim_params_next']
+                    std_adam_loss = self.loss({'problem': problem, 'vars_next': std_adam_step['vars_next']})
+                    log_std_adam_loss = tf.log(std_adam_loss + 1e-15)
+                    loss_next = 2 * loss - log_std_adam_loss
+                else:
+                    loss_next = loss + loss_curr
+            return t + 1, loss_next, vars_next, input_optims_params_next, hidden_states_next, lr_next, std_adam_params_next
 
-        t_final, loss_final, problem_variables_next, input_optims_params_next, hidden_states_next, lr_next = tf.while_loop(
+        t_final, loss_final, problem_variables_next, input_optims_params_next, hidden_states_next, lr_next, std_adam_params_next = tf.while_loop(
         cond=lambda t, *_: t < unroll_len,
         body=update_rnn,
-        loop_vars=([0, loss, problem_variables, input_optims_params, hidden_states, lr]),
+        loop_vars=([0, loss, problem_variables, input_optims_params, hidden_states, lr, std_adam_params]),
         parallel_iterations=1,
         swap_memory=True,
         name="unroll")
@@ -1813,7 +1835,7 @@ class AUGOptimsGRU(Meta_Optimizer):
         #     update_rnn(0, loss, problem_variables, input_optims_params, hidden_states, lr)
         avg_loss = loss_final / unroll_len
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
-                'loss': avg_loss, 'hidden_states_next': hidden_states_next, 'lr_next': lr_next}
+                'loss': avg_loss, 'hidden_states_next': hidden_states_next, 'lr_next': lr_next, 'std_adam_params_next': std_adam_params_next}
 
     def updates(self, args=None):
         problem_variables = args['variables']
@@ -1838,6 +1860,9 @@ class AUGOptimsGRU(Meta_Optimizer):
                 [input_optimizer.updates({'optim_params_next': optim_params_next}) for optim_params_next,
                                                                                        input_optimizer in
                  zip(input_optims_params_next, self.input_optimizers)])
+            if self.use_adam_loss and 'std_adam' in args:
+                std_adam = args['std_adam']
+                updates_list.extend(std_adam.updates({'optim_params_next': args['std_adam_params_next']}))
         return updates_list
 
     def reset(self, args=None):
@@ -1846,6 +1871,11 @@ class AUGOptimsGRU(Meta_Optimizer):
         reset_ops = [self.reset_problems(problems)]
         hidden_states = args['hidden_states']
         reset_ops.append(tf.variables_initializer(nest.flatten(hidden_states), name='reset_states'))
+        if self.use_adam_loss and 'std_adam' in args:
+            std_adam = args['std_adam']
+            reset_ops.append(tf.variables_initializer([std_adam.t]))
+            reset_ops.append(tf.variables_initializer(std_adam.ms))
+            reset_ops.append(tf.variables_initializer(std_adam.vs))
         if self.learn_lr:
             reset_ops.append(tf.variables_initializer(self.lr))
         for optimizer in input_optimizers:
@@ -1856,8 +1886,12 @@ class AUGOptimsGRU(Meta_Optimizer):
             reset_ops.append(tf.variables_initializer(optimizer.beta_2))
         return reset_ops
 
-    def run_reset(self, index=None, optimizer=False):
-        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+    def run_reset(self, val=False, index=None, optimizer=False):
+        if val:
+            ops_reset = self.ops_reset_problem_val
+        else:
+            ops_reset = self.ops_reset_problem
+        reset_ops = ops_reset[index] if index is not None else ops_reset
         self.session.run(reset_ops)
 
     def loss(self, args=None):
@@ -1905,22 +1939,24 @@ class AUGOptimsGRU(Meta_Optimizer):
 
         args = {'problem': problem, 'variables': problem_variables, 'input_optimizers': self.input_optimizers_train,
                 'hidden_states': self.hidden_states[0], 'unroll_len': self.unroll_len,
-                'lr': self.lr, 'loss_prob_0': loss_prob}
+                'lr': self.lr, 'loss_prob_0': loss_prob, 'std_adam': self.std_adam}
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
         args['hidden_states_next'] = step['hidden_states_next']
         args['lr_next'] = step['lr_next']
+        if self.use_adam_loss:
+            args['std_adam_params_next'] = step['std_adam_params_next']
         updates = self.updates(args)
-        loss_step = step['loss']
-        meta_step = self.minimize(loss_step)
+        loss_next = step['loss']
+        meta_step = self.minimize(loss_next)
         reset = self.reset({'problems': [problem],
                                        'input_optimizers': self.input_optimizers_train,
                                        'hidden_states': self.hidden_states[0]})
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(loss_step)
+        self.ops_loss.append(loss_next)
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem.append(reset)
         self.ops_reset.append(self.ops_reset_problem)
