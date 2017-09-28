@@ -17,7 +17,7 @@ results_dir = 'tf_summary/'
 model_id = '50000'
 
 load_model = True
-meta = False
+meta = True
 optimize = False
 
 l2l = tf.Graph()
@@ -29,14 +29,14 @@ with l2l.as_default():
     io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
     all_summ = []
     writer = None
-    #problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': True})
-    problem = problems.cifar10({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
+    problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': False})
+    # problem = problems.cifar10({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
     loss = problem.loss(problem.variables)
     acc_train = problem.accuracy(mode='train')
     acc_test = []  # problem.accuracy(mode='test')
     enable_summaries = False
     if meta:
-        optim_meta = meta_optimizers.AUGOptims([problem], args=config.aug_optim())
+        optim_meta = meta_optimizers.AUGOptims([problem], [], args=config.aug_optim())
         optim_meta.build()
     else:
         optim_meta = None
@@ -57,12 +57,12 @@ with l2l.as_default():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
+        # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
+        problem.restore(sess, '/home/shahidm/thesis/results/cifar_variables/cifar_variables')
+        # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
         if meta:
             optim_meta.set_session(sess)
-            problem.restore(sess,'/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
-            # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
             optim_meta.run_init()
-
         l = [loss]
         # for i, problem in enumerate(optim_meta.problems):
         #     name_prefix = problem.__class__.__name__ + "_" + str(i)

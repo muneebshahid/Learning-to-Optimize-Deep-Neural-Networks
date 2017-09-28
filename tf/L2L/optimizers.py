@@ -53,9 +53,16 @@ class Adam(Optimizer):
     eps = None
     optim_params = None
     learn_betas = None
+    decay_learning_rate = None
     def __init__(self, problem, args=None):
         super(Adam, self).__init__(problem, args)
         self.learn_betas = args['learn_betas'] if 'learn_betas' in args else False
+        self.decay_learning_rate = args['decay_learning_rate']
+        if self.decay_learning_rate:
+            self.min_lr = args['min_lr']
+            self.max_lr = args['max_lr']
+            self.t_curr = tf.Variable(0)
+            self.t_max = args['t_max']
         if self.learn_betas:
             self.beta_1 = [tf.Variable(beta_1) for beta_1 in args['beta_1']]
             self.beta_2 = [tf.Variable(beta_2) for beta_2 in args['beta_2']]
@@ -64,7 +71,7 @@ class Adam(Optimizer):
             beta_2_var = tf.Variable(args['beta_2'])
             self.beta_1 = [beta_1_var for variable in problem.variables]
             self.beta_2 = [beta_2_var for variable in problem.variables]
-        self.lr = args['lr']
+        self.lr = tf.Variable(args['lr'], dtype=tf.float32)
         self.eps = args['eps']
         self.eps_squared = tf.square(self.eps)
         self.t = tf.Variable(1.0)
@@ -129,6 +136,19 @@ class Adam(Optimizer):
         updates_list.append([tf.assign(m, m_next) for m, m_next in zip(self.ms, ms_next)])
         updates_list.append([tf.assign(v, v_next) for v, v_next in zip(self.vs, vs_next)])
         updates_list.append(tf.assign_add(self.t, 1.0))
+        if self.decay_learning_rate:
+            t_curr = args['t_curr'] if 't_curr' in args else self.t_curr
+            lr_next = self.min_lr + 0.5 * (self.max_lr - self.min_lr) * (1 + tf.cos(tf.divide(self.t_curr, self.t_max) * np.pi))
+            lr_next = tf.cast(lr_next, tf.float32)
+            update_lr = tf.assign(self.lr, lr_next)
+            with tf.control_dependencies([update_lr]):
+                if 't_curr' in args:
+                    update_t_curr = tf.assign(self.t_curr, t_curr)
+                else:
+                    update_t_curr = tf.assign_add(self.t_curr, 1)
+            updates_list.append(update_lr)
+            updates_list.append(update_t_curr)
+
         if self.learn_betas:
             betas_1_next = args['optim_params_next'][2]
             betas_2_next = args['optim_params_next'][3]
