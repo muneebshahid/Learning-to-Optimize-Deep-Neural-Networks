@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import problems
 import meta_optimizers
+import optimizers
 import util
 from preprocess import Preprocess
 import config
@@ -17,26 +18,27 @@ results_dir = 'tf_summary/'
 model_id = '50000'
 
 load_model = True
-meta = True
+meta = False
 optimize = False
 
 l2l = tf.Graph()
 with l2l.as_default():
-    epochs = 100
-    total_data_points = 50000
+    args = config.aug_optim()
+    epochs = 50
+    total_data_points = 55000
     batch_size = 128
     itr_per_epoch = int(total_data_points / batch_size)
     io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id)
     all_summ = []
     writer = None
-    problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': False})
+    problem = problems.Mnist({'minval': -100.0, 'maxval': 100.0, 'conv': False, 'full': False})
     # problem = problems.cifar10({'minval': -100.0, 'maxval': 100.0, 'conv': True, 'path': '../../../cifar/', 'full': False})
     loss = problem.loss(problem.variables)
     acc_train = problem.accuracy(mode='train')
     acc_test = []  # problem.accuracy(mode='test')
     enable_summaries = False
     if meta:
-        optim_meta = meta_optimizers.AUGOptims([problem], [], args=config.aug_optim())
+        optim_meta = meta_optimizers.AUGOptims([problem], [], args=args)
         optim_meta.build()
     else:
         optim_meta = None
@@ -44,8 +46,16 @@ with l2l.as_default():
         meta_step = optim_meta.ops_meta_step
     else:
         meta_step = []
-    optim_adam = tf.train.AdamOptimizer(.1)
-    adam_min_step = optim_adam.minimize(loss, var_list=problem.variables)
+
+    optim_adam = optimizers.Adam(problem, {'lr': args['lr_input_optims'],
+                                           'beta_1': 0.5, 'beta_2': 0.555,
+                                           'eps': 1e-8, 'learn_betas': False,
+                                           'decay_learning_rate': args['decay_learning_rate'],
+                                           'min_lr': args['min_lr'],
+                                           'max_lr': args['max_lr'],
+                                           't_max': args['t_max']})
+    step_args = optim_adam.step()
+    adam_min_step = optim_adam.updates(step_args)
 
     problem_norms = []
     if meta:
@@ -58,8 +68,8 @@ with l2l.as_default():
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
         # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
-        problem.restore(sess, '/home/shahidm/thesis/results/cifar_variables/cifar_variables')
-        # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
+        # problem.restore(sess, '/home/shahidm/thesis/results/cifar_variables/cifar_variables')
+        problem.restore(sess, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
         if meta:
             optim_meta.set_session(sess)
             optim_meta.run_init()
