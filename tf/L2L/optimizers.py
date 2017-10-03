@@ -78,6 +78,8 @@ class Adam(Optimizer):
         self.ms = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
         self.vs = [tf.Variable(tf.zeros([shape, 1])) for shape in self.problem.variables_flattened_shape]
         self.optim_params = [self.ms, self.vs]
+        if self.decay_learning_rate:
+            self.optim_params.append(self.lr)
         if self.learn_betas:
             self.optim_params.extend([self.beta_1, self.beta_2])
 
@@ -94,6 +96,7 @@ class Adam(Optimizer):
         vs_next = []
         problem_variables = self.set_variable('variables', args, self.problem.variables)
         problem_variables_flat = self.set_variable('variables_flat', args, self.problem.variables_flat)
+        lr = self.set_variable('lr', args, self.lr)
         if args is not None and 'gradients' in args:
             problem_gradients = args['gradients']
         else:
@@ -107,6 +110,10 @@ class Adam(Optimizer):
         else:
             betas_1 = self.beta_1
             betas_2 = self.beta_2
+        if self.decay_learning_rate:
+            lr = optim_params[2]
+        else:
+            lr = self.lr
 
         for var, var_flat, gradient, var_m, var_v, beta_1, beta_2 in zip(problem_variables, problem_variables_flat, problem_gradients,
                                                                           problem_ms, problem_vs, betas_1, betas_2):
@@ -117,7 +124,7 @@ class Adam(Optimizer):
             vs_next.append(v)
             m_hat = m / (1 - tf.pow(beta_1, self.t))
             v_hat = v / (1 - tf.pow(beta_2, self.t))
-            var_step = -self.lr * m_hat / (tf.sqrt(v_hat + self.eps_squared))
+            var_step = -lr * m_hat / (tf.sqrt(v_hat + self.eps_squared))
             # var_step = -self.lr * m_hat / v
             var_next = var_flat + var_step
             var_next = self.problem.set_shape(var_next, like_variable=var, op_name='reshape_variable')
@@ -137,7 +144,7 @@ class Adam(Optimizer):
         updates_list.append([tf.assign(v, v_next) for v, v_next in zip(self.vs, vs_next)])
         updates_list.append(tf.assign_add(self.t, 1.0))
         if self.decay_learning_rate:
-            t_curr = args['t_curr'] if 't_curr' in args else self.t_curr
+            t_curr = args['optim_params_next'][2] if len(args['optim_params_next']) > 2 in args else self.t_curr
             lr_next = self.min_lr + 0.5 * (self.max_lr - self.min_lr) * (1 + tf.cos(tf.divide(self.t_curr, self.t_max) * np.pi))
             lr_next = tf.cast(lr_next, tf.float32)
             update_lr = tf.assign(self.lr, lr_next)
