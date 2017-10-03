@@ -67,9 +67,9 @@ with l2l.as_default():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners(sess)
-        # problem.restore(sess, '/home/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_conv/mnist_variables')
-        # problem.restore(sess, '/home/shahidm/thesis/results/cifar_variables/cifar_variables')
-        problem.restore(sess, '/mhome/shahidm/thesis/thesis_code/tf/L2L/mnist_save_vars_mlp/mnist_variables')
+        # problem.restore(sess, '/home/shahidm/thesis/mnist_save_vars_conv/mnist_variables')
+        # problem.restore(sess, '/home/shahidm/thesis/cifar_variables/cifar_variables')
+        problem.restore(sess, '/home/shahidm/thesis/mnist_save_vars_mlp/mnist_variables')
         if meta:
             optim_meta.set_session(sess)
             optim_meta.run_init()
