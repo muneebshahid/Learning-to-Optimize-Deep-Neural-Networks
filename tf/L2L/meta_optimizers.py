@@ -1646,6 +1646,8 @@ class AUGOptimsGRU(Meta_Optimizer):
     hidden_states_eval = None
     use_adam_loss = None
     std_adam = None
+    use_input_optim_loss = None
+    use_input_optim_loss_rel = None
 
     def __init__(self, problems, problems_eval, args):
         def get_optimizers(problem):
@@ -1897,9 +1899,9 @@ class AUGOptimsGRU(Meta_Optimizer):
                     beta_2_curr = [tf.pow(beta_2_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_2_base in betas_2_base_next]
                     input_optims_params_next[i].append(beta_1_curr)
                     input_optims_params_next[i].append(beta_2_curr)
-            loss_curr = self.loss({'problem': problem, 'vars_next': vars_next})
+            loss_curr = tf.log(self.loss({'problem': problem, 'vars_next': vars_next}) + 1e-15)
             if self.use_rel_loss:
-                loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
+                loss_next = loss + loss_curr - log_loss_0
             else:
                 if self.use_adam_loss and 'std_adam' in args:
                     std_adam_step = std_adam.step(
@@ -1910,6 +1912,16 @@ class AUGOptimsGRU(Meta_Optimizer):
                     log_std_adam_loss = tf.log(std_adam_loss + 1e-15)
                     loss_next = 2 * loss - log_std_adam_loss
                 else:
+                    if self.use_input_optim_loss:
+                        for vars_next in input_optims_step_ops['vars_next']:
+                            input_optims_loss = self.loss({'problem': problem, 'vars_next': vars_next})
+                            input_optims_log_loss = tf.log(input_optims_loss + 1e-15)
+                            if self.use_input_optim_loss_rel:
+                                loss_curr += (loss_curr - input_optims_log_loss)
+                            else:
+                                loss_curr += tf.cond(tf.greater(loss_curr, input_optims_log_loss),
+                                                          lambda: loss_curr - input_optims_log_loss,
+                                                          lambda: 0.0)
                     loss_next = loss + loss_curr
             return t + 1, loss_next, vars_next, input_optims_params_next, hidden_states_next, lr_next, std_adam_params_next
 
