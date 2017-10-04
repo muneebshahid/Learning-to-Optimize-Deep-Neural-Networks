@@ -1624,65 +1624,62 @@ class AUGOptimsGRU(Meta_Optimizer):
     def __init__(self, problems, problems_eval, args):
         def get_optimizers(problem):
             input_optimizers = []
-
-            def get_optimizers(problem):
-                input_optimizers = []
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.5, 'beta_2': 0.555,
+                                                   'eps': 1e-8, 'learn_betas': self.learn_betas,
+                                                   'decay_learning_rate': args['decay_learning_rate'],
+                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
+                                                   't_max': args['t_max']}))
+            if self.num_input_optims == 11:
+                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.95, 'beta_2': 0.9995,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                        'decay_learning_rate': args['decay_learning_rate'],
                                                        'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
                                                        't_max': args['t_max']}))
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999,
+                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.85, 'beta_2': 0.8885,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                        'decay_learning_rate': args['decay_learning_rate'],
                                                        'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
                                                        't_max': args['t_max']}))
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888,
+                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                        'decay_learning_rate': args['decay_learning_rate'],
                                                        'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
                                                        't_max': args['t_max']}))
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777,
+                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                        'decay_learning_rate': args['decay_learning_rate'],
                                                        'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
                                                        't_max': args['t_max']}))
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666,
+                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.55, 'beta_2': 0.5555,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                        'decay_learning_rate': args['decay_learning_rate'],
                                                        'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
                                                        't_max': args['t_max']}))
-                input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.5, 'beta_2': 0.555,
-                                                       'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                       'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
-                if self.num_input_optims == 11:
-                    input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.95, 'beta_2': 0.9995,
-                                                           'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                           'decay_learning_rate': args['decay_learning_rate'],
-                                                           'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                           't_max': args['t_max']}))
-                    input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.85, 'beta_2': 0.8885,
-                                                           'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                           'decay_learning_rate': args['decay_learning_rate'],
-                                                           'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                           't_max': args['t_max']}))
-                    input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775,
-                                                           'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                           'decay_learning_rate': args['decay_learning_rate'],
-                                                           'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                           't_max': args['t_max']}))
-                    input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665,
-                                                           'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                           'decay_learning_rate': args['decay_learning_rate'],
-                                                           'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                           't_max': args['t_max']}))
-                    input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.55, 'beta_2': 0.5555,
-                                                           'eps': 1e-8, 'learn_betas': self.learn_betas,
-                                                           'decay_learning_rate': args['decay_learning_rate'],
-                                                           'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                           't_max': args['t_max']}))
             return input_optimizers
 
         super(AUGOptimsGRU, self).__init__(problems, problems_eval, args)
@@ -2031,10 +2028,16 @@ class AUGOptimsGRU(Meta_Optimizer):
     def run(self, args=None):
         if args['train']:
             ops_meta_step = self.ops_meta_step
+            ops_loss = self.ops_loss
+            ops_loss_problem = self.ops_loss_problem
+            ops_updates = self.ops_updates
         else:
             ops_meta_step = []
+            ops_loss = []
+            ops_loss_problem = self.ops_loss_problem_val
+            ops_updates = self.ops_updates_val
         start = timer()
-        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
 class GRUNormHistory(MlpNormHistory):
