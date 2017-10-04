@@ -1113,6 +1113,7 @@ class AUGOptims(Meta_Optimizer):
     use_positive_weights = None
     learn_betas = None
     beta_max = None
+    use_input_optim_loss = None
     use_rel_loss = None
 
     def __init__(self, problems, problems_eval, args):
@@ -1186,6 +1187,8 @@ class AUGOptims(Meta_Optimizer):
         self.decay_learning_rate = args['decay_learning_rate']
         self.use_rel_loss = args['use_rel_loss']
         self.use_adam_loss = args['use_adam_loss']
+        self.use_input_optim_loss = args['use_input_optim_loss']
+        self.use_input_optim_loss_rel = args['use_input_optim_loss_rel']
         self.std_adam = Adam(self.problems[0], {'lr': self.lr_input_optims, 'beta_1': 0.9,
                                                 'beta_2': 0.999, 'eps': 1e-8}) if self.use_adam_loss else None
 
@@ -1325,6 +1328,8 @@ class AUGOptims(Meta_Optimizer):
                                                             'optim_params': input_optim_params})
                                  for input_optimizer, input_optim_params in
                                  zip(args['input_optimizers'], input_optims_params)]
+        input_optims_vars_next = [input_optims_step_op['vars_next'] for input_optims_step_op in
+                                        input_optims_step_ops]
         input_optims_vars_steps_next = [input_optims_step_op['vars_steps'] for input_optims_step_op in
                                         input_optims_step_ops]
         input_optims_params_next = [input_optims_step_op['optim_params_next'] for input_optims_step_op in
@@ -1359,6 +1364,7 @@ class AUGOptims(Meta_Optimizer):
                 input_optims_params_next[i].append(beta_2_curr)
 
         return {'vars_next': vars_next, 'input_optims_params_next': input_optims_params_next,
+                'input_optims_vars_next': input_optims_vars_next,
                 'lr_next': lr_next, 'std_adam_step': std_adam_step}
 
     def updates(self, args=None):
@@ -1462,6 +1468,17 @@ class AUGOptims(Meta_Optimizer):
         args['input_optims_params_next'] = step['input_optims_params_next']
         loss_next = self.loss(args)
         optim_log_loss = tf.log(loss_next + 1e-15)
+        if self.use_input_optim_loss:
+            for vars_next in step['input_optims_vars_next']:
+                input_optims_loss = self.loss({'problem': problem, 'vars_next': vars_next})
+                input_optims_log_loss = tf.log(input_optims_loss + 1e-15)
+                if self.use_input_optim_loss_rel:
+                    optim_log_loss += (optim_log_loss - input_optims_log_loss)
+                else:
+                    optim_log_loss += tf.cond(tf.greater(optim_log_loss, input_optims_log_loss),
+                                              lambda: optim_log_loss - input_optims_log_loss,
+                                              lambda: 0.0)
+
         if self.use_adam_loss:
             args['std_adam_step'] = step['std_adam_step']
             std_adam_loss = self.loss({'problem': problem, 'vars_next': args['std_adam_step']['vars_next']})
