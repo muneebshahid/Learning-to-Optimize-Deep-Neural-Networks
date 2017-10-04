@@ -96,7 +96,6 @@ class Adam(Optimizer):
         vs_next = []
         problem_variables = self.set_variable('variables', args, self.problem.variables)
         problem_variables_flat = self.set_variable('variables_flat', args, self.problem.variables_flat)
-        lr = self.set_variable('lr', args, self.lr)
         if args is not None and 'gradients' in args:
             problem_gradients = args['gradients']
         else:
