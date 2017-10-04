@@ -84,6 +84,8 @@ def aug_optim():
     args['use_positive_weights'] = True
     args['normalize_weights'] = True
     args['network_out_dims'] = args['num_input_optims'] if args['use_network'] else 1
+    args['use_input_optim_loss'] = False
+    args['use_input_optim_loss_rel'] = False
     args['use_adam_loss'] = False
 
     args['decay_learning_rate'] = False
