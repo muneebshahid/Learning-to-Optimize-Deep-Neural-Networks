@@ -1545,10 +1545,21 @@ class AUGOptimsRNN(AUGOptims):
             vars_next = step_op['vars_next']
             lr_next = step_op['lr_next']
             input_optims_params_next = step_op['input_optims_params_next']
-            loss_curr = tf.squeeze(self.loss({'problem': problem, 'vars_next': vars_next}))
+
+            loss_curr = tf.squeeze(tf.log(self.loss({'problem': problem, 'vars_next': vars_next}) + 1e-15))
             if self.use_rel_loss:
-                loss_next = loss + tf.log(loss_curr + 1e-15) - log_loss_0
+                loss_next = loss + loss_curr - log_loss_0
             else:
+                if self.use_input_optim_loss:
+                    for vars_next in step_op['input_optims_vars_next']:
+                        input_optims_loss = self.loss({'problem': problem, 'vars_next': vars_next})
+                        input_optims_log_loss = tf.log(input_optims_loss + 1e-15)
+                        if self.use_input_optim_loss_rel:
+                            loss_curr += (loss_curr - input_optims_log_loss)
+                        else:
+                            loss_curr += tf.cond(tf.greater(loss_curr, input_optims_log_loss),
+                                                      lambda: loss_curr - input_optims_log_loss,
+                                                      lambda: 0.0)
                 loss_next = loss + loss_curr
             return t + 1, loss_next, vars_next, input_optims_params_next, lr_next
 
@@ -1561,8 +1572,6 @@ class AUGOptimsRNN(AUGOptims):
         name="unroll")
         # _, loss_final, problem_variables_next, input_optims_params_next, lr_next = update_rnn(0, loss, problem_variables, input_optims_params, lr)
         avg_loss = loss_final / unroll_len
-        if not self.use_rel_loss:
-            avg_loss = tf.log(avg_loss + 1e-15)
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
                 'loss': avg_loss, 'lr_next': lr_next}
 
