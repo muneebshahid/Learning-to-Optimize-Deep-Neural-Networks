@@ -57,7 +57,7 @@ class Adam(Optimizer):
     def __init__(self, problem, args=None):
         super(Adam, self).__init__(problem, args)
         self.learn_betas = args['learn_betas'] if 'learn_betas' in args else False
-        self.decay_learning_rate = args['decay_learning_rate']
+        self.decay_learning_rate = False#args['decay_learning_rate']
         if self.decay_learning_rate:
             self.min_lr = args['min_lr']
             self.max_lr = args['max_lr']

@@ -1116,6 +1116,13 @@ class AUGOptims(Meta_Optimizer):
     use_input_optim_loss = None
     use_rel_loss = None
 
+    min_lr = None
+    max_lr = None
+    t_max = None
+    decay_learning_rate = None
+
+
+
     def __init__(self, problems, problems_eval, args):
         super(AUGOptims, self).__init__(problems, problems_eval, args)
         def get_optimizers(problem):
@@ -1123,53 +1130,53 @@ class AUGOptims(Meta_Optimizer):
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
                                                      'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'], 't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr, 't_max': self.t_max}))
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.9, 'beta_2': 0.999,
                                                      'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                   't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                   't_max': self.t_max}))
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.8, 'beta_2': 0.888,
                                                      'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                   't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                   't_max': self.t_max}))
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.7, 'beta_2': 0.777,
                                                      'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                   't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                   't_max': self.t_max}))
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.6, 'beta_2': 0.666,
                                                      'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                   't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                   't_max': self.t_max}))
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.5, 'beta_2': 0.555,
                                                    'eps': 1e-8, 'learn_betas': self.learn_betas,
                                                    'decay_learning_rate': args['decay_learning_rate'],
-                                                   'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                   't_max': args['t_max']}))
+                                                   'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                   't_max': self.t_max}))
             if self.num_input_optims == 11:
                 input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.95, 'beta_2': 0.9995,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas, 'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
+                                                       'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                       't_max': self.t_max}))
                 input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.85, 'beta_2': 0.8885,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas, 'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
+                                                       'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                       't_max': self.t_max}))
                 input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.75, 'beta_2': 0.7775,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas, 'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
+                                                       'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                       't_max': self.t_max}))
                 input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.65, 'beta_2': 0.6665,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas, 'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
+                                                       'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                       't_max': self.t_max}))
                 input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.55, 'beta_2': 0.5555,
                                                        'eps': 1e-8, 'learn_betas': self.learn_betas, 'decay_learning_rate': args['decay_learning_rate'],
-                                                       'min_lr': args['min_lr'], 'max_lr': args['max_lr'],
-                                                       't_max': args['t_max']}))
+                                                       'min_lr': self.min_lr, 'max_lr': self.max_lr,
+                                                       't_max': self.t_max}))
             return input_optimizers
 
         self.layer_width = args['layer_width']
@@ -1195,6 +1202,10 @@ class AUGOptims(Meta_Optimizer):
         self.lr_dist = tf.Variable(tf.constant(args['lr_dist'], shape=[len(args['lr_dist']), 1], dtype=tf.float32),
                                    name='lr_dist')
         self.learn_betas = args['learn_betas']
+        self.min_lr = args['min_lr']
+        self.max_lr = args['max_lr']
+        self.t_max = args['t_max']
+        self.decay_learning_rate = args['decay_learning_rate']
         self.input_optimizers_train = []
         self.input_optimizers_eval = []
 
@@ -1238,6 +1249,12 @@ class AUGOptims(Meta_Optimizer):
 
         if self.learn_lr:
             self.lr = [tf.Variable(tf.random_uniform([shape, 1], 1e-1, 1e-4)) for shape in self.problems[0].variables_flattened_shape]
+
+        if self.decay_learning_rate:
+            self.lr = tf.Variable(args['lr'])
+            self.t_curr = tf.Variable(0)
+            self.lr_eval = [tf.Variable(args['lr']) for problem in self.problems_eval]
+            self.t_curr_eval = [tf.Variable(0) for problem in self.problems_eval]
 
     def network(self, args=None):
         with tf.name_scope('Optimizer_Network'):
@@ -1308,12 +1325,11 @@ class AUGOptims(Meta_Optimizer):
         betas_1_base_next = []
         betas_2_base_next = []
         lr_next = []
-        std_adam = None
         std_adam_step = []
         problem = args['problem']
         problem_variables = args['variables'] if 'variables' in args else problem.variables
+        lr = args['lr']
 
-        lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
         input_optims_params = args['input_optim_params'] if ('input_optim_params' in
                                                              args) else [optimizer.optim_params for optimizer
                                                                          in args['input_optimizers']]
@@ -1341,14 +1357,20 @@ class AUGOptims(Meta_Optimizer):
                                            'gradients': gradients, 'optim_params': std_adam_params})
 
         stacked_steps = self.stack_inputs(input_optims_vars_steps_next)
-        for var, var_flat, stacked_step, var_lr in zip(problem_variables, problem_variables_flat, stacked_steps, lr):
+        for var, var_flat, stacked_step  in zip(problem_variables, problem_variables_flat, stacked_steps):
             output, beta_1_output, beta_2_output, lr_output = self.network({'inputs': stacked_step})
             if self.learn_lr:
                 applied_lr = lr_output
                 lr_next.append(applied_lr)
             else:
-                applied_lr = self.lr
-                lr_next = lr
+                if self.decay_learning_rate:
+                    t_curr = args['t_curr']
+                    applied_lr = self.min_lr + 0.5 * (self.max_lr - self.min_lr) * (
+                    1 + tf.cos(tf.divide(t_curr, self.t_max) * np.pi))
+                    applied_lr = tf.cast(applied_lr, tf.float32)
+                else:
+                    applied_lr = lr
+                lr_next = applied_lr
             step = output * applied_lr
             step = problem.set_shape(step, like_variable=var, op_name='reshape_output')
             var_next = var + step
@@ -1385,6 +1407,15 @@ class AUGOptims(Meta_Optimizer):
             updates_list.extend([input_optimizer.updates({'optim_params_next': optim_params_next}) for optim_params_next,
                                                                                                        input_optimizer in
                                  zip(input_optims_params_next, input_optimizers)])
+            if self.decay_learning_rate:
+                problem_lr = args['lr']
+                problem_lr_next = args['lr_next']
+                problem_t_curr = args['t_curr']
+                problem_t_curr_next = args['t_curr_next'] if 't_curr_next' in args else (problem_t_curr + 1)
+                lr_updates = [tf.assign(problem_lr, problem_lr_next)]
+                with tf.control_dependencies(lr_updates):
+                    lr_updates.append(tf.assign(problem_t_curr, problem_t_curr_next))
+                updates_list.extend(lr_updates)
             if self.use_adam_loss and 'std_adam' in args:
                 std_adam = args['std_adam']
                 std_adam_step = args['std_adam_step']
@@ -1397,6 +1428,9 @@ class AUGOptims(Meta_Optimizer):
         reset_ops = [self.reset_problems(problems)]
         if self.learn_lr:
             reset_ops.append(tf.variables_initializer(self.lr))
+        if self.decay_learning_rate:
+            reset_ops.append(tf.variables_initializer([args['lr'],
+                                                       args['t_curr']]))
         if self.use_adam_loss and 'std_adam' in args:
             std_adam = args['std_adam']
             reset_ops.append(tf.variables_initializer([std_adam.t]))
@@ -1406,8 +1440,8 @@ class AUGOptims(Meta_Optimizer):
             reset_ops.append(tf.variables_initializer([optimizer.t]))
             reset_ops.append(tf.variables_initializer(optimizer.ms))
             reset_ops.append(tf.variables_initializer(optimizer.vs))
-            if self.decay_learning_rate:
-                reset_ops.append(tf.variables_initializer([optimizer.t_curr, optimizer.lr]))
+            # if self.decay_learning_rate:
+            #     reset_ops.append(tf.variables_initializer([optimizer.t_curr, optimizer.lr]))
             if self.learn_betas:
                 reset_ops.append(tf.variables_initializer(optimizer.beta_1))
                 reset_ops.append(tf.variables_initializer(optimizer.beta_2))
@@ -1443,29 +1477,45 @@ class AUGOptims(Meta_Optimizer):
         self.ops_reset_problem_val = []
 
         # validation
-        for problem_eval, input_optimizers_eval in zip(self.problems_eval, self.input_optimizers_eval):
+        for i, (problem_eval, input_optimizers_eval) in enumerate(zip(self.problems_eval, self.input_optimizers_eval)):
             problem_eval_variables = problem_eval.variables
             val_args = {'problem': problem_eval, 'variables': problem_eval_variables,
-                        'input_optimizers': input_optimizers_eval}
+                        'input_optimizers': input_optimizers_eval, 'lr': self.lr}
+            reset_args_val = {'problems': [problem_eval], 'input_optimizers': input_optimizers_eval}
+
+            if self.decay_learning_rate:
+                val_args['lr'] = self.lr_eval[i]
+                val_args['t_curr'] = self.t_curr_eval[i]
+                reset_args_val['lr'] = self.lr_eval[i]
+                reset_args_val['t_curr'] = self.t_curr_eval[i]
+
             val_step = self.step(val_args)
             val_args['vars_next'] = val_step['vars_next']
             val_args['input_optims_params_next'] = val_step['input_optims_params_next']
+            if self.decay_learning_rate:
+                val_args['lr_next'] = val_step['lr_next']
             updates_val = self.updates(val_args)
             loss_prob_val = self.loss(val_args)
             self.ops_loss_problem_val.append(loss_prob_val)
             self.ops_updates_val.append(updates_val)
-            self.ops_reset_problem_val.append(self.reset({'problems': [problem_eval],
-                                                          'input_optimizers': input_optimizers_eval}))
+            self.ops_reset_problem_val.append(self.reset(reset_args_val))
 
         # train
         problem = self.problems[0]
         problem_variables = problem.variables
         loss_prob = self.loss({'problem': problem})
         args = {'problem': problem, 'variables': problem_variables,
-                'input_optimizers': self.input_optimizers_train, 'std_adam': self.std_adam}
+                'input_optimizers': self.input_optimizers_train, 'std_adam': self.std_adam, 'lr': self.lr}
+        reset_args = {'problems': [problem], 'input_optimizers': self.input_optimizers_train, 'lr': self.lr,
+                      'std_adam': self.std_adam}
+        if self.decay_learning_rate:
+            args['t_curr'] = self.t_curr
+            reset_args['t_curr'] = self.t_curr
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
+        if self.decay_learning_rate:
+            args['lr_next'] = step['lr_next']
         loss_next = self.loss(args)
         optim_log_loss = tf.log(loss_next + 1e-15)
         if self.use_input_optim_loss:
@@ -1490,7 +1540,8 @@ class AUGOptims(Meta_Optimizer):
             optim_log_loss = 2 * optim_log_loss - log_std_adam_loss
         updates = self.updates(args)
         meta_step = self.minimize(optim_log_loss)
-        reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train, 'std_adam': self.std_adam})
+
+        reset = self.reset(reset_args)
         self.ops_step.append(step)
         self.ops_updates.append(updates)
         self.ops_loss_problem.append(loss_prob)
