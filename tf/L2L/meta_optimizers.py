@@ -1581,18 +1581,19 @@ class AUGOptimsRNN(AUGOptims):
         problem = args['problem']
         problem_variables = args['variables']
         log_loss_0 = tf.squeeze(tf.log(args['loss_prob_0'] + 1e-15))
-        lr = args['lr'] if self.learn_lr else [self.lr for variable in problem_variables]
+        lr = args['lr']
+        t_curr = args['t_curr'] if self.decay_learning_rate else 0
         unroll_len = args['unroll_len']
         input_optimizers = args['input_optimizers']
         input_optims_params = [optimizer.optim_params for optimizer in input_optimizers]
         loss = 0.0
 
-        def update_rnn(t, loss, problem_variables, input_optims_params, lr):
+        def update_rnn(t, loss, problem_variables, input_optims_params, lr, t_curr):
             step_op = super(AUGOptimsRNN, self).step({'problem': problem,
                                                       'variables': problem_variables,
                                                       'input_optimizers': input_optimizers,
                                                       'input_optim_params': input_optims_params,
-                                                      'lr': lr})
+                                                      'lr': lr, 't_curr': t_curr})
             vars_next = step_op['vars_next']
             lr_next = step_op['lr_next']
             input_optims_params_next = step_op['input_optims_params_next']
@@ -1612,19 +1613,19 @@ class AUGOptimsRNN(AUGOptims):
                                                       lambda: loss_curr - input_optims_log_loss,
                                                       lambda: 0.0)
                 loss_next = loss + loss_curr
-            return t + 1, loss_next, vars_next, input_optims_params_next, lr_next
+            return t + 1, loss_next, vars_next, input_optims_params_next, lr_next, t_curr + 1
 
-        t_final, loss_final, problem_variables_next, input_optims_params_next, lr_next = tf.while_loop(
+        t_final, loss_final, problem_variables_next, input_optims_params_next, lr_next, t_curr_final = tf.while_loop(
         cond=lambda t, *_: t < unroll_len,
         body=update_rnn,
-        loop_vars=([0, loss, problem_variables, input_optims_params, lr]),
+        loop_vars=([0, loss, problem_variables, input_optims_params, lr, t_curr]),
         parallel_iterations=1,
         swap_memory=True,
         name="unroll")
         # _, loss_final, problem_variables_next, input_optims_params_next, lr_next = update_rnn(0, loss, problem_variables, input_optims_params, lr)
         avg_loss = loss_final / unroll_len
         return {'vars_next': problem_variables_next, 'input_optims_params_next': input_optims_params_next,
-                'loss': avg_loss, 'lr_next': lr_next}
+                'loss': avg_loss, 'lr_next': lr_next, 't_curr_next': t_curr_final}
 
 
     def build(self):
@@ -1640,21 +1641,28 @@ class AUGOptimsRNN(AUGOptims):
         self.ops_reset_problem_val = []
 
         # validation
-        for problem_eval, input_optimizers_eval in zip(self.problems_eval, self.input_optimizers_eval):
+        for i, (problem_eval, input_optimizers_eval) in enumerate(zip(self.problems_eval, self.input_optimizers_eval)):
             problem_eval_variables = problem_eval.variables
             loss_prob_0_eval = self.loss({'problem': problem_eval})
             val_args = {'problem': problem_eval, 'variables': problem_eval_variables,
                         'input_optimizers': input_optimizers_eval, 'unroll_len': self.unroll_len_val,
-                        'loss_prob_0': loss_prob_0_eval}
+                        'loss_prob_0': loss_prob_0_eval, 'lr': self.lr}
+            reset_args_val = {'problems': [problem_eval], 'input_optimizers': input_optimizers_eval}
+            if self.decay_learning_rate:
+                val_args['lr'] = self.lr_eval[i]
+                val_args['t_curr'] = self.t_curr_eval[i]
+                reset_args_val['lr'] = self.lr_eval[i]
+                reset_args_val['t_curr'] = self.t_curr_eval[i]
             val_step = self.step(val_args)
             val_args['vars_next'] = val_step['vars_next']
             val_args['input_optims_params_next'] = val_step['input_optims_params_next']
+            val_args['lr_next'] = val_step['lr_next']
+            val_args['t_curr_next'] = val_step['t_curr_next']
             updates_val = self.updates(val_args)
             loss_prob_val = self.loss(val_args)
             self.ops_loss_problem_val.append(loss_prob_val)
             self.ops_updates_val.append(updates_val)
-            self.ops_reset_problem_val.append(self.reset({'problems': [problem_eval],
-                                                          'input_optimizers': input_optimizers_eval}))
+            self.ops_reset_problem_val.append(self.reset(reset_args_val))
 
         problem = self.problems[0]
         problem_variables = problem.variables
@@ -1665,15 +1673,20 @@ class AUGOptimsRNN(AUGOptims):
         args = {'problem': problem, 'variables': problem_variables,
                 'variables_flat': problem_variables_flat, 'gradients': gradients, 'unroll_len': self.unroll_len,
                 'lr': self.lr, 'loss_prob_0': loss_prob, 'input_optimizers': self.input_optimizers_train}
+        reset_args = {'problems': [problem], 'input_optimizers': self.input_optimizers_train, 'lr': self.lr,
+                      'std_adam': self.std_adam}
+        if self.decay_learning_rate:
+            args['t_curr'] = self.t_curr
+            reset_args['t_curr'] = self.t_curr
         step = self.step(args)
         args['vars_next'] = step['vars_next']
         args['lr_next'] = step['lr_next']
         args['input_optims_params_next'] = step['input_optims_params_next']
-
+        args['t_curr_next'] = step['t_curr_next']
         updates = self.updates(args)
         step_loss = step['loss']
         meta_step = self.minimize(step_loss)
-        reset = self.reset({'problems': [problem], 'input_optimizers': self.input_optimizers_train})
+        reset = self.reset(reset_args)
         self.ops_step.append(step)
         self.ops_prob_acc = problem.accuracy()
         self.ops_updates.append(updates)
