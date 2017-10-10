@@ -90,7 +90,7 @@ def aug_optim():
 
     args['decay_learning_rate'] = False
     args['min_lr'] = 0.0
-    args['max_lr'] = args['lr_input_optims']
+    args['max_lr'] = args['lr']
     args['t_max'] = 'NEED TO SET'
 
     args['lr_dist'] = [1e-1, 1e-2, 1e-3, 1e-4, 0.0]
