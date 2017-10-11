@@ -1798,10 +1798,22 @@ class AUGOptimsGRU(Meta_Optimizer):
         with tf.variable_scope('optimizer_core'):
             # Formulate variables for all states as it allows to use tf.assign() for states
             def get_states(batch_size):
-                state = self.rnn.zero_state(batch_size, tf.float32)
-                state = tf.Variable(state, trainable=False)
+                if self.hidden_layers == 0:
+                    state = self.rnn.zero_state(batch_size, tf.float32)
+                    state = tf.Variable(state, trainable=False)
+                else:
+                    state_variable = []
+                    for state in self.rnn.zero_state(batch_size, tf.float32):
+                        state_variable.append(tf.Variable(state, trainable=False))
+                    state = tuple(state_variable)
                 return state
-            self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+
+
+            if self.hidden_layers == 0:
+                self.rnn = tf.contrib.rnn.GRUCell(self.state_size)
+            else:
+                self.rnn = tf.contrib.rnn.MultiRNNCell(
+                    [tf.contrib.rnn.GRUCell(self.state_size) for _ in range(self.hidden_layers)])
 
             with tf.variable_scope('hidden_states'):
                 for problem in self.problems:
