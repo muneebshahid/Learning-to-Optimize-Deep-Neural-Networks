@@ -44,8 +44,8 @@ with l2l.as_default():
     # problem_eval_2 = problems.Rosenbrock({'prefix': 'eval_2',  'minval': -10, 'maxval': 10})
     problems_eval = [problem_eval_1, problem_eval_2]
     if restore_network:
-        io_path = util.get_model_path(flag_optimizer='Mlp', model_id=model_id) if restore_network else None
-    optim = meta_optimizers.AUGOptimsGRU([problem], [problem_eval_1, problem_eval_2], args=config_args)
+        io_path = util.get_model_path(flag_optimizer='Mlp', model_id=str(model_id)) if restore_network else None
+    optim = meta_optimizers.AUGOptimsGRU([problem], problems_eval, args=config_args)
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
