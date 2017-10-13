@@ -16,7 +16,10 @@ class Meta_Optimizer():
     io_handle = None
     problems = None
     problems_eval = None
+    meta_learning_rate = None
+    decay_meta_learning_rate = None
     meta_optimizer_optimizer = None
+    meta_global_step = None
     preprocessor = None
     preprocessor_args = None
     optimizer_variables = None
@@ -41,9 +44,22 @@ class Meta_Optimizer():
         if self.is_availble('preprocess', args):
             self.preprocessor = args['preprocess'][0]
             self.preprocessor_args = args['preprocess'][1]
-        self.meta_optimizer_optimizer = tf.train.RMSPropOptimizer(args['meta_learning_rate'] if
-                                                                  self.is_availble('meta_learning_rate', args) else .01,
-                                                                  name='meta_optimizer_optimizer')
+
+        self.decay_meta_learning_rate = args['decay_meta_learning_rate']
+        self.meta_global_step = tf.Variable(0, trainable=False)
+        if self.decay_meta_learning_rate:
+            starter_learning_rate = args['starter_learning_rate']
+            end_learning_rate = args['end_learning_rate']
+            decay_steps = args['decay_steps']
+            power = args['power']
+            self.meta_learning_rate = tf.train.polynomial_decay(learning_rate=starter_learning_rate,
+                                                                global_step=self.meta_global_step,
+                                                                decay_steps=decay_steps,
+                                                                end_learning_rate=end_learning_rate,
+                                                                power=power)
+        else:
+            self.meta_learning_rate = tf.Variable(args['meta_learning_rate'], trainable=False)
+        self.meta_optimizer_optimizer = tf.train.RMSPropOptimizer(self.meta_learning_rate, name='meta_optimizer_optimizer')
         self.optimizer_variables = []
 
     def init_saver_handle(self):
@@ -93,7 +109,7 @@ class Meta_Optimizer():
         pass
 
     def minimize(self, loss):
-        return self.meta_optimizer_optimizer.minimize(loss, var_list=self.optimizer_variables)
+        return (self.meta_optimizer_optimizer.minimize(loss, var_list=self.optimizer_variables, global_step=self.meta_global_step))
 
     def build(self):
         self.init_saver_handle()

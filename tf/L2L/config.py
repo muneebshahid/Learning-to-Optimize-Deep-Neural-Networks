@@ -4,6 +4,11 @@ args = {'meta_learning_rate'}
 def common():
     args = {}
     args['meta_learning_rate'] = .0001
+    args['decay_meta_learning_rate'] = False
+    args['starter_learning_rate'] = 0.0001
+    args['end_learning_rate'] = 0.000005
+    args['decay_steps'] = 'NEED TO SET'
+    args['power'] = 4
     args['layer_width'] = 50
     args['hidden_layers'] = 0
     args['network_activation'] = tf.nn.relu

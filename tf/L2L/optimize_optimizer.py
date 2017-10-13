@@ -14,7 +14,7 @@ with l2l.as_default():
     io_path = None
     save_network = True
 
-    config_args = config.aug_optim_gru()
+    config_args = config.aug_optim()
     unroll_len = config_args['unroll_len']
     reset_epoch_ext = int(5000 / unroll_len)
     reset_limits_lower = []
@@ -28,24 +28,24 @@ with l2l.as_default():
     #########################
     model_id = 0
     cifar_path = '../../../cifar/'
-    problem = problems.cifar10(
-       {'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
-    problem_eval_1 = problems.cifar10(
-       {'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
-    problem_eval_2 = problems.cifar10(
-       {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
+    # problem = problems.cifar10(
+    #    {'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
+    # problem_eval_1 = problems.cifar10(
+    #    {'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
+    # problem_eval_2 = problems.cifar10(
+    #    {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
 
     # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
     # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
     # problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
 
-    # problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
-    # problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
     # problem_eval_2 = problems.Rosenbrock({'prefix': 'eval_2',  'minval': -10, 'maxval': 10})
-    problems_eval = [problem_eval_1, problem_eval_2]
+    problems_eval = [problem_eval_1]
     if restore_network:
         io_path = util.get_model_path(flag_optimizer='Mlp', model_id=str(model_id)) if restore_network else None
-    optim = meta_optimizers.AUGOptimsGRU([problem], problems_eval, args=config_args)
+    optim = meta_optimizers.AUGOptims([problem], problems_eval, args=config_args)
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
@@ -83,6 +83,7 @@ with l2l.as_default():
             print('SAVING NETWORK DISABLED')
         print('Optim Norm: ', sess.run(optim_norm))
         print('Init Optim Grad Norm: ', sess.run(optim_grad_norm))
+        print('Meta LR: ', sess.run(optim.meta_learning_rate))
         print('Next Update after ', reset_upper_limit)
 
         total_loss_optim = 0
@@ -112,6 +113,7 @@ with l2l.as_default():
             if (epoch + 1) % epoch_print_interval == 0:
                 util.print_update(epoch, epochs, avg_optim_loss, np.log10(avg_prob_loss),
                                   avg_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                print('Meta LR: ', sess.run(optim.meta_learning_rate))
                 print('PROBLEM NORM: ', problem_norm_run)
 
             if loss_prob < 1e-15 or reset_counter >= reset_upper_limit:

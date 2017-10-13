@@ -31,12 +31,16 @@ problem = None#problems.ElementwiseSquare(args={'meta': meta, 'minval':-10, 'max
 if meta:
     io_path = None#util.get_model_path('', '1000000_FINAL')
     cifar_path = '../../../cifar/'
-    problem = problems.cifar10({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
-    problem_eval_1 = problems.cifar10({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
+    # problem = problems.cifar10({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
+    # problem_eval_1 = problems.cifar10({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     # problem_eval_2 = problems.cifar10(
     #     {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
     # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+
+    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+
     optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], args=config.aug_optim())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
