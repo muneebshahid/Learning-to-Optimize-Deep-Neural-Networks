@@ -543,13 +543,13 @@ class MlpNormHistory(Meta_Optimizer):
             name='grad_dist')
 
         problem = problems[0]
-        #problem_eval = problems_eval[0]
+        problem_eval = problems_eval[0]
 
         self.vari_hist_train, self.grad_hist_train, self.delta_mv_avg_train, \
         self.sq_vari_hist_train, self.sq_grad_hist_train = self.initializers(problem)
 
-        # self.vari_hist_eval, self.grad_hist_eval, self.delta_mv_avg_eval, \
-        # self.sq_vari_hist_eval, self.sq_grad_hist_eval = self.initializers(problem_eval, 'eval')
+        self.vari_hist_eval, self.grad_hist_eval, self.delta_mv_avg_eval, \
+        self.sq_vari_hist_eval, self.sq_grad_hist_eval = self.initializers(problem_eval, 'eval')
 
     def normalize_values(self, history_tensor, squared_history=None, switch=0):
         epsilon = 1e-15
@@ -777,7 +777,7 @@ class MlpNormHistory(Meta_Optimizer):
 
     def run_init(self, val=False, index=None):
         if val:
-            ops_init = []#self.ops_init_eval
+            ops_init = self.ops_init_eval
         else:
             ops_init = self.ops_init_train
         for i in range(self.limit):
@@ -785,7 +785,7 @@ class MlpNormHistory(Meta_Optimizer):
 
     def run_reset(self, val=False, index=None):
         if val:
-            ops_reset = []#self.ops_reset_problem_eval
+            ops_reset = self.ops_reset_problem_eval
         else:
             ops_reset = self.ops_reset_problem_train
         self.session.run(ops_reset)
@@ -815,23 +815,23 @@ class MlpNormHistory(Meta_Optimizer):
         return reset
 
     def build(self):
-        #problem = self.problems_eval[0]
-        # eval_args = {'problem': problem, 'vari_hist': self.vari_hist_eval, 'grad_hist': self.grad_hist_eval,
-        #              'sq_vari_hist': self.sq_vari_hist_eval, 'sq_grad_hist': self.sq_grad_hist_eval,
-        #              'vars_next': [variable.initialized_value() for variable in problem.variables],
-        #              'delta_mv_avg': self.delta_mv_avg_eval, 'init_ops':True}
-        # self.ops_loss_problem_eval = self.loss(eval_args)
-        # self.ops_init_eval = self.updates(eval_args)
-        # eval_args['init_ops'] = False
-        # self.ops_step_eval = self.step(eval_args)
-        # eval_args['vars_next'] = self.ops_step_eval['vars_next']
-        # eval_args['vari_hist_next'] = self.ops_step_eval['vari_hist_next']
-        # eval_args['grad_hist_next'] = self.ops_step_eval['grad_hist_next']
-        # eval_args['sq_vari_hist_next'] = self.ops_step_eval['sq_vari_hist_next']
-        # eval_args['sq_grad_hist_next'] = self.ops_step_eval['sq_grad_hist_next']
-        # eval_args['delta_mv_avg_next'] = self.ops_step_eval['delta_mv_avg_next']
-        # self.ops_updates_eval = self.updates(eval_args)
-        # self.ops_reset_problem_eval = self.reset_problem(eval_args)
+        problem = self.problems_eval[0]
+        eval_args = {'problem': problem, 'vari_hist': self.vari_hist_eval, 'grad_hist': self.grad_hist_eval,
+                     'sq_vari_hist': self.sq_vari_hist_eval, 'sq_grad_hist': self.sq_grad_hist_eval,
+                     'vars_next': [variable.initialized_value() for variable in problem.variables],
+                     'delta_mv_avg': self.delta_mv_avg_eval, 'init_ops':True}
+        self.ops_loss_problem_eval = self.loss(eval_args)
+        self.ops_init_eval = self.updates(eval_args)
+        eval_args['init_ops'] = False
+        self.ops_step_eval = self.step(eval_args)
+        eval_args['vars_next'] = self.ops_step_eval['vars_next']
+        eval_args['vari_hist_next'] = self.ops_step_eval['vari_hist_next']
+        eval_args['grad_hist_next'] = self.ops_step_eval['grad_hist_next']
+        eval_args['sq_vari_hist_next'] = self.ops_step_eval['sq_vari_hist_next']
+        eval_args['sq_grad_hist_next'] = self.ops_step_eval['sq_grad_hist_next']
+        eval_args['delta_mv_avg_next'] = self.ops_step_eval['delta_mv_avg_next']
+        self.ops_updates_eval = self.updates(eval_args)
+        self.ops_reset_problem_eval = self.reset_problem(eval_args)
 
 
         problem = self.problems[0]

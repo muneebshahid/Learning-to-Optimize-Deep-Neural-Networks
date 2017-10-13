@@ -35,13 +35,13 @@ if meta:
     # problem_eval_1 = problems.cifar10({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     # problem_eval_2 = problems.cifar10(
     #     {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
-    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
-    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+    # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
+    # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
 
-    # problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
-    # problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
 
-    optim = meta_optimizers.MlpNormHistory([problem], [], args=config.mlp_norm_history())
+    optim = meta_optimizers.MlpNormHistory([problem], [problem_eval_1], args=config.mlp_norm_history())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates_train, optim.ops_loss_train, optim.ops_loss_problem_train, optim.ops_meta_step_train, []
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
