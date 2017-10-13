@@ -24,6 +24,29 @@ def mlp_norm_history():
     args['limit'] = 6
     args['step_dist_max_step'] = 1.0
     args['grad_only'] = True
+    args['use_momentum'] = True
+    args['min_lr'] = 1e-3
+    args['ref_point'] = 0  # 0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
+    args['decay_min_lr'] = False
+    args['decay_min_lr_max'] = 1e-3
+    args['decay_min_lr_min'] = 1e-4
+    args['decay_min_lr_steps'] = 20000
+    args['learn_lr'] = False
+    args['enable_noise_est'] = False
+    args['normalize_with_sq_grad'] = False
+    args['use_tanh_output'] = False
+    args['use_delta_mv_avg'] = False
+    args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
+    args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
+    args['network_out_dims'] = 1 if args['use_tanh_output'] else 12
+    args['network_out_dims'] = 19 if args['min_lr'] is None else args['network_out_dims']
+    return args
+
+def mlp_norm_history_old():
+    args = common()
+    args['limit'] = 6
+    args['step_dist_max_step'] = 1.0
+    args['grad_only'] = True
     args['grad_sign_only'] = False
     args['use_momentum'] = True
     args['momentum_base'] = 1.1

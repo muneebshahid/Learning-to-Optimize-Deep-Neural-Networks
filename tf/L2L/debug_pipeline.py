@@ -35,15 +35,15 @@ if meta:
     # problem_eval_1 = problems.cifar10({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
     # problem_eval_2 = problems.cifar10(
     #     {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False, 'path': cifar_path})
-    # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
-    # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': True})
+    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
 
-    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
-    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+    # problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    # problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
 
-    optim = meta_optimizers.AUGOptims([problem], [problem_eval_1], args=config.aug_optim())
+    optim = meta_optimizers.MlpNormHistory([problem], [], args=config.mlp_norm_history())
     optim.build()
-    updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates, optim.ops_loss, optim.ops_loss_problem, optim.ops_meta_step, optim.ops_prob_acc
+    updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates_train, optim.ops_loss_train, optim.ops_loss_problem_train, optim.ops_meta_step_train, []
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]
     norm_optim_variables = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_deltas = [tf.norm(delta) for step in optim.ops_step for delta in step['deltas']]
@@ -59,7 +59,7 @@ else:
 norm_problem_variables = [tf.norm(variable) for problem in optim.problems for variable in problem.variables]
 # input_grads = tf.gradients(problem.loss(problem.variables), problem.variables)
 # input_grads_norm = [tf.norm(grad) for grad in input_grads]
-optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
+optim_grad = tf.gradients(loss_optim, optim.optimizer_variables)
 optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
 # for i, grad in enumerate(grad_optim):
 #     name = 'w' if (i % 2) == 0 else 'b'
@@ -75,6 +75,7 @@ tf.train.start_queue_runners(iis)
 if meta:
     optim.set_session(iis)
     optim.run_init()
+    optim.run_init(True)
 update_summaries = False
 if update_summaries:
     all_summ = tf.summary.merge_all()
@@ -98,8 +99,8 @@ check_nan_optim = tf.is_nan(norm_optim_variables)
 
 def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interval=None):
     global all_summ
-    loss_final_optim = np.zeros(len(loss_optim))
-    loss_final_prob = np.zeros(len(loss_problem))
+    loss_final_optim = np.zeros(len([loss_optim]))
+    loss_final_prob = np.zeros(len([loss_problem]))
     print('current loss optim: ', iis.run(loss_optim))
     print('current loss prob: ', np.log10(iis.run(loss_problem)))
     total_time = 0
@@ -110,10 +111,9 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
         start = timer()
         if not update_summaries:
             all_summ = []
-        _, _, loss_optim_run, loss_prob_run, run_step, grad_norm = iis.run([meta_step, updates,
+        _, _, loss_optim_run, loss_prob_run, grad_norm = iis.run([meta_step, updates,
                                                 loss_optim,
                                                 loss_problem,
-                                                optim.ops_step,
                                                 optim_grad_norm])
         if True in iis.run(check_nan_prob):
             print('NAN found prob after, exit')
@@ -149,7 +149,6 @@ def itr(itr, print_interval=1000, write_interval=None, show_prob=0, reset_interv
             # print('norm_input_grads: ', iis.run(input_grads_norm))
             print('loss optim: ', loss_final_optim / print_interval)
             print('loss prob: ', np.log10(loss_final_prob / print_interval))
-            print('acc prob: ', iis.run(prob_acc))
             print('time:' , total_time / print_interval)
             loss_final_optim = 0
             loss_final_prob = 0

@@ -27,7 +27,7 @@ if is_rnn:
 else:
     configs = config.mlp_norm_history()
 
-optimizer = meta_optimizers.MlpNormHistory(problems=problems, path=None, args=configs)
+optimizer = meta_optimizers.MlpNormHistoryMultiProblems(problems=problems, path=None, args=configs)
 optimizer.build()
 
 sess = tf.Session()

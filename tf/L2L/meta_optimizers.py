@@ -7,6 +7,7 @@ import pickle
 from preprocess import Preprocess
 from timeit import default_timer as timer
 from optimizers import Adam
+import itertools
 
 
 
@@ -25,16 +26,20 @@ class Meta_Optimizer():
     optimizer_variables = None
     session = None
 
-    ops_step = None
-    ops_updates = None
-    ops_loss = None
-    ops_meta_step = None
-    ops_reset_problem = None
-    ops_prob_acc = None
+    ops_init_train = None
+    ops_reset_problem_train = None
+    ops_step_train = None
+    ops_updates_train = None
+    ops_loss_train = None
+    ops_loss_problem_train = None
+    ops_meta_step_train = None
 
-    ops_updates_val = None
-    ops_loss_problem_val = None
-    ops_reset_problem_val = None
+    ops_init_eval = None
+    ops_reset_problem_eval = None
+    ops_step_eval = None
+    ops_updates_eval = None
+    ops_loss_eval = None
+    ops_loss_problem_eval = None
 
     def __init__(self, problems, problems_eval, args):
         # if path is not None:
@@ -452,6 +457,412 @@ class MlpMovingAverage(MlpSimple):
         return reset
 
 class MlpNormHistory(Meta_Optimizer):
+    network_in_dims = None
+    network_out_dims = None
+    layer_width = None
+    hidden_layers = None
+    limit = None
+    use_momentums = None
+    network_activation = None
+    gradients_only = None
+
+    vari_hist_train = None
+    grad_hist_train = None
+    delta_mv_avg_train = None
+    sq_vari_hist_train = None
+    sq_grad_hist_train = None
+    
+    vari_hist_eval = None
+    grad_hist_eval = None
+    delta_mv_avg_eval = None
+    sq_vari_hist_eval = None
+    sq_grad_hist_eval = None
+
+
+    def initializers(self, problem , mode='train'):
+        delta_mv_avg = []
+        sq_vari_hist = []
+        sq_grad_hist = []
+
+        vari_hist = [tf.get_variable('vari_hist_' + mode + '_' + str(i), initializer=tf.zeros_initializer,
+                                                           shape=[shape, self.limit], trainable=False)
+                                           for i, shape in enumerate(problem.variables_flattened_shape)]
+        grad_hist = [tf.get_variable('grad_mom' + mode + '_' + str(i), initializer=tf.zeros_initializer,
+                         shape=[shape, self.limit], trainable=False)
+                     for i, shape in enumerate(problem.variables_flattened_shape)]
+        if self.use_delta_mv_avg:
+            delta_mv_avg = [tf.get_variable('delta_mv_avg' + str(i),
+                             initializer=tf.ones(shape=[shape, self.limit],
+                                                 dtype=tf.float32) * 0.5,
+                             trainable=False)
+             for i, shape in enumerate(problem.variables_flattened_shape)]
+
+        if self.normalize_with_sq_grad or self.use_noise_est:
+            sq_vari_hist = [tf.get_variable('sq_vari_mom_' + mode + '_' + str(i), initializer=tf.zeros_initializer,
+                             shape=[shape, self.limit], trainable=False)
+             for i, shape in enumerate(problem.variables_flattened_shape)]
+            sq_grad_hist = [tf.get_variable('sq_grad_mom_' + mode + '_' + str(i), initializer=tf.zeros_initializer,
+                             shape=[shape, self.limit], trainable=False)
+             for i, shape in enumerate(problem.variables_flattened_shape)]
+
+        return vari_hist, grad_hist, delta_mv_avg, sq_vari_hist, sq_grad_hist
+
+    def __init__(self, problems, problems_eval, args):
+        super(MlpNormHistory, self).__init__(problems, problems_eval, args)
+        self.gradients_only = args['grad_only']
+        self.layer_width = args['layer_width']
+        self.hidden_layers = args['hidden_layers']
+        self.network_activation = args['network_activation']
+        self.limit = args['limit']
+        self.network_in_dims =  args['network_in_dims']
+        self.network_out_dims = args['network_out_dims']
+        self.use_momentums = args['use_momentum']
+        self.min_lr = tf.Variable(args['min_lr'], dtype=tf.float32)
+        self.decay_min_lr = args['decay_min_lr']
+        self.decay_min_lr_max = args['decay_min_lr_max']
+        self.decay_min_lr_min = args['decay_min_lr_min']
+        self.decay_min_lr_steps = args['decay_min_lr_steps']
+        self.normalize_with_sq_grad = args['normalize_with_sq_grad']
+        self.use_delta_mv_avg  = args['use_delta_mv_avg']
+        self.use_noise_est = args['enable_noise_est']
+        self.learn_lr = args['learn_lr']
+        self.ref_point = args['ref_point']
+        self.step_dist_max_step = args['step_dist_max_step']
+        self.use_tanh_output = args['use_tanh_output']
+
+        self.momentum_alpha = tf.expand_dims(tf.linspace(0.5, 0.99, self.limit), 0)
+        self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
+
+        self.step_dist = tf.Variable(
+            tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
+            name='step_dist')
+        self.sign_dist = tf.Variable(tf.constant([-1.0, 1.0], shape=[2, 1], dtype=tf.float32),
+                                     name='sign_dist')
+        self.lr_dist = tf.Variable(
+            tf.constant([1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 0.0], shape=[6, 1], dtype=tf.float32),
+            name='grad_dist')
+
+        problem = problems[0]
+        #problem_eval = problems_eval[0]
+
+        self.vari_hist_train, self.grad_hist_train, self.delta_mv_avg_train, \
+        self.sq_vari_hist_train, self.sq_grad_hist_train = self.initializers(problem)
+
+        # self.vari_hist_eval, self.grad_hist_eval, self.delta_mv_avg_eval, \
+        # self.sq_vari_hist_eval, self.sq_grad_hist_eval = self.initializers(problem_eval, 'eval')
+
+    def normalize_values(self, history_tensor, squared_history=None, switch=0):
+        epsilon = 1e-15
+        with tf.name_scope('Input_Normalizer'):
+            if self.normalize_with_sq_grad and squared_history is not None:
+                normalized_values = tf.divide(history_tensor, tf.sqrt(squared_history) + epsilon)
+            else:
+                if switch == 0:
+                    norm = tf.norm(history_tensor, ord=np.inf, axis=1, keep_dims=True)
+                    ones = tf.ones(tf.shape(norm))
+                    divisor = tf.where(tf.equal(norm, 0.0), ones, norm)
+                    normalized_values = tf.divide(history_tensor, divisor)
+                else:
+                    max_values = tf.reduce_max(history_tensor, 1)
+                    min_values = tf.reduce_min(history_tensor, 1)
+                    max_values = tf.reshape(max_values, [tf.shape(max_values)[0], 1])
+                    min_values = tf.reshape(min_values, [tf.shape(min_values)[0], 1])
+                    diff = (max_values - min_values) + epsilon
+                    # normalized_values = 2 * (history_tensor - min_values) / diff - 1.0
+                    normalized_values = (history_tensor - min_values) / diff
+            return normalized_values
+
+    def network(self, args=None):
+        with tf.name_scope('Optimizer_network'):
+            delta_lr = None
+            activations = args['inputs']
+            activations = layer_fc(name='in', dims=[self.network_in_dims, self.layer_width], inputs=activations,
+                                   variable_list=self.optimizer_variables, activation=self.network_activation)
+            for layer in range(self.hidden_layers):
+                activations = layer_fc(str(layer + 1), dims=[self.layer_width, self.layer_width], inputs=activations,
+                                       variable_list=self.optimizer_variables, activation=self.network_activation)
+            activations = layer_fc('out', dims=[self.layer_width, self.network_out_dims], inputs=activations,
+                              variable_list=self.optimizer_variables)
+
+            if self.use_tanh_output:
+                end_index = 1
+                step_activation = tf.slice(activations, [0, 0], [-1, end_index])
+                delta_x_step = tf.nn.tanh(step_activation)
+            else:
+                end_index = 12
+                lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
+                lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
+                lr_x_step_magnitude = tf.matmul(lr_x_step_magnitude, self.step_dist)
+
+                lr_x_step_sign = tf.slice(activations, [0, 10], [-1, 2], 'x_step_sign')
+                lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
+                lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
+                delta_x_step = lr_x_step_magnitude * lr_x_step_sign
+
+            if self.learn_lr:
+                lr_minstep = tf.slice(activations, [0, end_index], [-1, 6], 'lr_min_step')
+                lr_minstep = tf.nn.softmax(lr_minstep, 1)
+                delta_lr = tf.matmul(lr_minstep, self.lr_dist)
+
+            if delta_lr is None:
+                delta_lr = tf.constant(0.0)
+
+            return [delta_x_step, delta_lr]
+
+    def step(self, args=None):
+        problem = args['problem']
+        problem_vari_hist = args['vari_hist']
+        problem_grad_hist = args['grad_hist']
+        problem_sq_vari_hist = args['sq_vari_hist']
+        problem_sq_grad_hist = args['sq_grad_hist']
+        problem_delta_mv_avg = args['delta_mv_avg']
+
+        vars_next = []
+        deltas_mv_avg_next = []
+
+        for (variable, variable_flat, batch_vari_hist, batch_grad_hist,
+             batch_sq_vari_hist, batch_sq_grad_hist,
+             batch_delta_mv_avg) in itertools.izip_longest(problem.variables, problem.variables_flat,
+                                                         problem_vari_hist, problem_grad_hist,
+                                                         problem_sq_vari_hist, problem_sq_grad_hist,
+                                                         problem_delta_mv_avg):
+
+            normalized_variable_history = self.normalize_values(batch_vari_hist, batch_sq_vari_hist)
+            normalized_grad_history = self.normalize_values(batch_grad_hist, batch_sq_grad_hist)
+
+            if self.use_noise_est:
+                def noise_measure(inputs):
+                    epsilon = 1e-15
+                    mean_input = tf.reduce_mean(inputs, 1, keep_dims=True)
+                    rel_noise = inputs / (mean_input + epsilon)
+                    return self.normalize_values(rel_noise)
+
+                normalized_noise_vari_hist = noise_measure(batch_sq_vari_hist)
+                normalized_noise_grad_hist = noise_measure(batch_sq_grad_hist)
+                normalized_variable_history = tf.concat([normalized_variable_history, normalized_noise_vari_hist], 1)
+                normalized_grad_history = tf.concat([normalized_grad_history, normalized_noise_grad_hist], 1)
+
+            if self.gradients_only:
+                network_input = normalized_grad_history
+            else:
+                network_input = tf.concat([normalized_variable_history, normalized_grad_history], 1, name='final_input')
+
+            deltas_x, delta_lr = self.network({'inputs': network_input})
+
+            max_values = tf.reduce_max(batch_vari_hist, axis=1, keep_dims=True)
+            min_values = tf.reduce_min(batch_vari_hist, axis=1, keep_dims=True)
+
+            if self.use_delta_mv_avg:
+                delta_mv_avg_next = batch_delta_mv_avg * self.momentum_alpha + deltas_x * (1 - self.momentum_alpha)
+                deltas_mv_avg_next.append(delta_mv_avg_next)
+                deltas_x = tf.reduce_mean(delta_mv_avg_next, axis=1, keep_dims=True)
+
+            if self.ref_point == 0:
+                ref = variable_flat
+            else:
+                ref = (max_values + min_values) / 2.0
+            diff = max_values - min_values
+
+            if self.learn_lr:
+                lr = delta_lr
+            else:
+                lr = self.min_lr
+            default_lr = diff + lr
+
+            mean = tf.multiply(deltas_x, default_lr)
+            new_points = tf.add(ref, mean, 'new_points')
+            new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
+            vars_next.append(new_points)
+
+        flat_gradients = problem.get_gradients(vars_next)
+        flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(vars_next)]
+        vari_hist_next = []
+        grad_hist_next = []
+        sq_vari_hist_next = []
+        sq_grad_hist_next = []
+        for variables, gradients, batch_vari_hist, batch_grad_hist, batch_sq_vari_hist, batch_sq_grad_hist in \
+                itertools.izip_longest(flat_variables, flat_gradients, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist,
+                    problem_sq_grad_hist):
+            if self.use_momentums:
+                updated_vari_hist = batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha)
+                updated_grad_hist = batch_grad_hist * self.momentum_alpha + gradients * (1 - self.momentum_alpha)
+            else:
+                updated_vari_hist = tf.concat([batch_vari_hist[:, 1:], variables], axis=1)
+                updated_grad_hist = tf.concat([batch_grad_hist[:, 1:], gradients], axis=1)
+            vari_hist_next.append(updated_vari_hist)
+            grad_hist_next.append(updated_grad_hist)
+            if self.normalize_with_sq_grad or self.use_noise_est:
+                updated_sq_vari_hist = batch_sq_vari_hist * self.momentum_alpha + tf.square(updated_vari_hist) * (
+                1 - self.momentum_alpha)
+                updated_sq_grad_hist = batch_sq_grad_hist * self.momentum_alpha + tf.square(updated_grad_hist) * (
+                1 - self.momentum_alpha)
+                sq_vari_hist_next.append(updated_sq_vari_hist)
+                sq_grad_hist_next.append(updated_sq_grad_hist)
+
+        return {'vars_next': vars_next,
+                'vari_hist_next': vari_hist_next,
+                'grad_hist_next': grad_hist_next,
+                'sq_vari_hist_next': sq_vari_hist_next,
+                'sq_grad_hist_next': sq_grad_hist_next,
+                'delta_mv_avg_next': deltas_mv_avg_next}
+
+    def updates(self, args=None):
+        with tf.name_scope('mlp_x_optimizer_updates'):
+            x_next = args['vars_next']
+            problem = args['problem']
+            problem_vari_hist = args['vari_hist']
+            problem_grad_hist = args['grad_hist']
+            problem_sq_vari_hist = args['sq_vari_hist']
+            problem_sq_grad_hist = args['sq_grad_hist']
+            problem_delta_mv_avg = args['delta_mv_avg']
+            init_ops = args['init_ops']
+
+            update_list = []
+            flat_gradients = problem.get_gradients(x_next)
+            flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
+
+            if init_ops:
+                for (batch_variables, batch_gradients,
+                     batch_vari_hist, batch_grad_hist,
+                     batch_sq_vari_hist, batch_sq_grad_hist) in itertools.izip_longest(flat_variables,
+                                                              flat_gradients,
+                                                              problem_vari_hist,
+                                                              problem_grad_hist,
+                                                              problem_sq_vari_hist,
+                                                              problem_sq_grad_hist):
+                    tiled_batch_variables = tf.tile(batch_variables, [1, self.limit])
+                    tiled_batch_grads = tf.tile(batch_gradients, [1, self.limit])
+                    update_list.append(tf.assign(batch_vari_hist, tiled_batch_variables))
+                    update_list.append(tf.assign(batch_grad_hist, tiled_batch_grads))
+                    if self.normalize_with_sq_grad or self.use_noise_est:
+                        update_list.append(tf.assign(batch_sq_vari_hist, tf.square(tiled_batch_variables)))
+                        update_list.append(tf.assign(batch_sq_grad_hist, tf.square(tiled_batch_grads)))
+            else:
+                problem_vari_hist_next = args['vari_hist_next']
+                problem_grad_hist_next = args['grad_hist_next']
+                problem_sq_vari_hist_next = [None for variable in problem.variables]
+                problem_sq_grad_hist_next = [None for variable in problem.variables]
+                problem_delta_mv_avg_next = [None for variable in problem.variables]
+                if self.normalize_with_sq_grad or self.use_noise_est:
+                    problem_sq_vari_hist_next = args['sq_vari_hist_next']
+                    problem_sq_grad_hist_next = args['sq_grad_hist_next']
+                if self.use_delta_mv_avg:
+                    problem_delta_mv_avg_next = args['delta_mv_avg_next']
+                update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
+                                    zip(problem.variables, x_next)])
+                for (batch_variables, batch_gradients,
+                     batch_vari_hist, batch_grad_hist,
+                     batch_sq_vari_hist, batch_sq_grad_hist, batch_delta_mv_avg,
+                     batch_vari_hist_next, batch_grad_hist_next,
+                     batch_sq_vari_hist_next, batch_sq_grad_hist_next,
+                     batch_delta_mv_avg_next) in itertools.izip_longest(flat_variables,
+                                                     flat_gradients,
+                                                     problem_vari_hist,
+                                                     problem_grad_hist,
+                                                     problem_sq_vari_hist,
+                                                     problem_sq_grad_hist,
+                                                     problem_delta_mv_avg,
+                                                     problem_vari_hist_next,
+                                                     problem_grad_hist_next,
+                                                     problem_sq_vari_hist_next,
+                                                     problem_sq_grad_hist_next,
+                                                     problem_delta_mv_avg_next):
+                    update_list.append(tf.assign(batch_vari_hist, batch_vari_hist_next))
+                    update_list.append(tf.assign(batch_grad_hist, batch_grad_hist_next))
+                    if self.normalize_with_sq_grad or self.use_noise_est:
+                            update_list.append(tf.assign(batch_sq_grad_hist, batch_sq_grad_hist_next))
+                    if self.use_delta_mv_avg:
+                        update_list.append(tf.assign(batch_delta_mv_avg, batch_delta_mv_avg_next))
+            return update_list
+
+    def run_init(self, val=False, index=None):
+        if val:
+            ops_init = []#self.ops_init_eval
+        else:
+            ops_init = self.ops_init_train
+        for i in range(self.limit):
+            self.session.run(ops_init)
+
+    def run_reset(self, val=False, index=None):
+        if val:
+            ops_reset = []#self.ops_reset_problem_eval
+        else:
+            ops_reset = self.ops_reset_problem_train
+        self.session.run(ops_reset)
+        self.run_init(val)
+
+    def loss(self, args=None):
+        problem = args['problem']
+        variables = args['vars_next'] if 'vars_next' in args else problem.variables
+        return problem.loss(variables)
+
+    def reset_problem(self, args):
+        problem = args['problem']
+        problem_vari_hist = args['vari_hist']
+        problem_grad_hist = args['grad_hist']
+        problem_sq_vari_hist = args['sq_vari_hist']
+        problem_sq_grad_hist = args['sq_grad_hist']
+        problem_delta_mv_avg = args['delta_mv_avg']
+        reset = []
+        reset.append(super(MlpNormHistory, self).reset_problem(problem))
+        reset.append(tf.variables_initializer(problem_vari_hist, name='reset_vari_hist'))
+        reset.append(tf.variables_initializer(problem_grad_hist, name='reset_grad_hist'))
+        if self.normalize_with_sq_grad or self.use_noise_est:
+            reset.append(tf.variables_initializer(problem_sq_vari_hist, name='reset_sq_vari_hist'))
+            reset.append(tf.variables_initializer(problem_sq_grad_hist, name='reset_sq_grad_hist'))
+        if self.use_delta_mv_avg:
+            reset.append(tf.variables_initializer(problem_delta_mv_avg, name='reset_delta_mv_avg'))
+        return reset
+
+    def build(self):
+        #problem = self.problems_eval[0]
+        # eval_args = {'problem': problem, 'vari_hist': self.vari_hist_eval, 'grad_hist': self.grad_hist_eval,
+        #              'sq_vari_hist': self.sq_vari_hist_eval, 'sq_grad_hist': self.sq_grad_hist_eval,
+        #              'vars_next': [variable.initialized_value() for variable in problem.variables],
+        #              'delta_mv_avg': self.delta_mv_avg_eval, 'init_ops':True}
+        # self.ops_loss_problem_eval = self.loss(eval_args)
+        # self.ops_init_eval = self.updates(eval_args)
+        # eval_args['init_ops'] = False
+        # self.ops_step_eval = self.step(eval_args)
+        # eval_args['vars_next'] = self.ops_step_eval['vars_next']
+        # eval_args['vari_hist_next'] = self.ops_step_eval['vari_hist_next']
+        # eval_args['grad_hist_next'] = self.ops_step_eval['grad_hist_next']
+        # eval_args['sq_vari_hist_next'] = self.ops_step_eval['sq_vari_hist_next']
+        # eval_args['sq_grad_hist_next'] = self.ops_step_eval['sq_grad_hist_next']
+        # eval_args['delta_mv_avg_next'] = self.ops_step_eval['delta_mv_avg_next']
+        # self.ops_updates_eval = self.updates(eval_args)
+        # self.ops_reset_problem_eval = self.reset_problem(eval_args)
+
+
+        problem = self.problems[0]
+        train_args = {'problem': problem, 'vari_hist': self.vari_hist_train, 'grad_hist': self.grad_hist_train,
+                     'sq_vari_hist': self.sq_vari_hist_train, 'sq_grad_hist': self.sq_grad_hist_train,
+                     'vars_next': [variable.initialized_value() for variable in problem.variables],
+                     'delta_mv_avg': self.delta_mv_avg_train, 'init_ops':True}
+
+        self.ops_loss_problem_train = self.loss(train_args)
+        self.ops_init_train = self.updates(train_args)
+        train_args['init_ops'] = False
+        self.ops_step_train = self.step(train_args)
+        train_args['vars_next'] = self.ops_step_train['vars_next']
+        train_args['vari_hist_next'] = self.ops_step_train['vari_hist_next']
+        train_args['grad_hist_next'] = self.ops_step_train['grad_hist_next']
+        train_args['sq_vari_hist_next'] = self.ops_step_train['sq_vari_hist_next']
+        train_args['sq_grad_hist_next'] = self.ops_step_train['sq_grad_hist_next']
+        train_args['delta_mv_avg_next'] = self.ops_step_train['delta_mv_avg_next']
+        self.ops_updates_train = self.updates(train_args)
+        if 'loss' in self.ops_step_train:
+            self.ops_loss_train = self.ops_step_train['loss']
+        else:
+            self.ops_loss_train = tf.log(self.loss(train_args) + 1e-15)
+        self.ops_meta_step_train = self.minimize(self.ops_loss_train)
+        self.ops_reset_problem_train = self.reset_problem(train_args)
+
+
+
+
+
+class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
     network_in_dims = None
     network_out_dims = None
@@ -506,7 +917,7 @@ class MlpNormHistory(Meta_Optimizer):
 
 
     def __init__(self, problems, path, args):
-        super(MlpNormHistory, self).__init__(problems, path, args)
+        super(MlpNormHistoryMultiProblems, self).__init__(problems, path, args)
         self.gradients_only = args['grad_only']
         self.gradient_sign_only = args['grad_sign_only']
         self.layer_width = args['layer_width']
@@ -752,7 +1163,7 @@ class MlpNormHistory(Meta_Optimizer):
             problem_dist_mv_avg = args['dist_mv_avg']
             problem_delta_mv_avg = args['delta_mv_avg']
             problem_lr_mv_avg = args['lr_mv_avg']
-            x_next = list()
+            vars_next = list()
             deltas_list = []
             deltas_mv_avg_next = []
             lr_mv_avg_next = []
@@ -850,10 +1261,10 @@ class MlpNormHistory(Meta_Optimizer):
                 mean = tf.multiply(deltas_x, default_lr)
                 new_points = tf.add(ref, mean, 'new_points')
                 new_points = problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
-                x_next.append(new_points)
+                vars_next.append(new_points)
 
-            flat_gradients = problem.get_gradients(x_next)
-            flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
+            flat_gradients = problem.get_gradients(vars_next)
+            flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(vars_next)]
             vari_hist_next = []
             grad_hist_next = []
             sq_vari_hist_next = []
@@ -870,7 +1281,7 @@ class MlpNormHistory(Meta_Optimizer):
                     sq_vari_hist_next.append(updated_sq_vari_hist)
                     sq_grad_hist_next.append(updated_sq_grad_hist)
 
-            return {'x_next': x_next, 'deltas_list': deltas_list,
+            return {'vars_next': vars_next, 'deltas_list': deltas_list,
                     'vari_hist_next': vari_hist_next,
                     'grad_hist_next': grad_hist_next,
                     'sq_vari_hist_next': sq_vari_hist_next,
@@ -1017,7 +1428,7 @@ class MlpNormHistory(Meta_Optimizer):
             return update_list
 
     def reset_optimizer(self):
-        reset = super(MlpNormHistory, self).reset_optimizer()
+        reset = super(MlpNormHistoryMultiProblems, self).reset_optimizer()
         return reset
 
     def reset_problem(self, args):
@@ -1029,7 +1440,7 @@ class MlpNormHistory(Meta_Optimizer):
         problem_delta_mv_avg = args['delta_mv_avg']
         problem_lr_mv_avg = args['lr_mv_avg']
         reset = []
-        reset.append(super(MlpNormHistory, self).reset_problem(problem))
+        reset.append(super(MlpNormHistoryMultiProblems, self).reset_problem(problem))
         reset.append(tf.variables_initializer(problem_vari_hist, name='reset_vari_hist'))
         reset.append(tf.variables_initializer(problem_grad_hist, name='reset_grad_hist'))
         if self.normalize_with_sq_grad or self.use_noise_est:
@@ -2494,7 +2905,7 @@ class AUGOptimsGRUAll(Meta_Optimizer):
         op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
-class GRUNormHistory(MlpNormHistory):
+class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
     unroll_len = None
     state_size = None
     hidden_states = None
@@ -2503,7 +2914,7 @@ class GRUNormHistory(MlpNormHistory):
     rnn_w, rnn_b = None, None
 
     def __init__(self, problems, path, args):
-        super(GRUNormHistory, self).__init__(problems, path, args)
+        super(GRUNormHistoryMultiProblems, self).__init__(problems, path, args)
         self.state_size = args['state_size']
         self.unroll_len = args['unroll_len']
         self.gru = args['gru']
@@ -2787,7 +3198,7 @@ class GRUNormHistory(MlpNormHistory):
             return update_list
 
     def reset_problem(self, args):
-        reset_ops = super(GRUNormHistory, self).reset_problem(args)
+        reset_ops = super(GRUNormHistoryMultiProblems, self).reset_problem(args)
         hidden_states = args['hidden_states']
         reset_ops.append(tf.variables_initializer(nest.flatten(hidden_states), name='reset_states'))
         return reset_ops
@@ -3195,7 +3606,7 @@ class L2L2(Meta_Optimizer):
         self.init_saver_handle()
 
 
-class MlpHistoryGradNormMinStep(MlpNormHistory):
+class MlpHistoryGradNormMinStepMultiProblems(MlpNormHistoryMultiProblems):
 
     sign_dist = None
     lr_dist = None
@@ -3210,7 +3621,7 @@ class MlpHistoryGradNormMinStep(MlpNormHistory):
         args['step_dist_dims'] = 10
         args['step_dist_minval'] = 0
         args['step_dist_maxval'] = 1.0
-        super(MlpHistoryGradNormMinStep, self).__init__(problems, path, args)
+        super(MlpHistoryGradNormMinStepMultiProblems, self).__init__(problems, path, args)
 
 
     def network(self, args=None):
@@ -3221,7 +3632,7 @@ class MlpHistoryGradNormMinStep(MlpNormHistory):
                                                       'history_ptr': args['history_ptr']})
             final_input = final_var_grad_history
             activations = final_input
-            activations = super(MlpNormHistory, self).network({'preprocessed_gradient': activations})[0]
+            activations = super(MlpNormHistoryMultiProblems, self).network({'preprocessed_gradient': activations})[0]
 
             lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
             lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
@@ -3276,12 +3687,12 @@ class MlpHistoryGradNormMinStep(MlpNormHistory):
             return {'x_next': x_next, 'deltas': deltas_list}
 
 
-class MlpXHistoryGradSign(MlpNormHistory):
+class MlpXHistoryMultiProblemsGradSign(MlpNormHistoryMultiProblems):
 
     def network(self, args=None):
         with tf.name_scope('mlp_x_optimizer_network'):
             args['inputs'][1] = tf.sign(args['inputs'][1])
-            return super(MlpXHistoryGradSign, self).network(args)
+            return super(MlpXHistoryMultiProblemsGradSign, self).network(args)
 
 
 class MlpXHistoryCont(MlpSimple):
