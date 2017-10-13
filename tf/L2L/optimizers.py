@@ -184,8 +184,8 @@ class XHistoryGradNorm(Optimizer):
         with tf.name_scope('optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
             self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
-            self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
-                                                            var_list=self.problem.variables, name='guide_step')
+            self.guide_step = []#self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
+                                #                            var_list=self.problem.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
             self.grad_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
@@ -244,7 +244,7 @@ class XHistoryGradNorm(Optimizer):
             diff = max_values - min_values
             ref_points = tf.divide(max_values + min_values, 2.0)
             noise = tf.random_normal([ref_points.shape[0].value, 1], 0, .01)
-            mean = tf.multiply(deltas, diff)
+            mean = tf.multiply(deltas, diff + 1e-2)
             noisey_mean = mean * (1 + noise)
             new_points = tf.subtract(ref_points, noisey_mean, 'new_points')
             new_points = self.problem.set_shape(new_points, like_variable=variable, op_name='reshaped_new_points')
@@ -320,7 +320,7 @@ class XSign(Optimizer):
             self.session.run(update_ops)
             self.session.run(self.guide_step)
 
-    def step(self):
+    def step(self, args=None):
         x_next = list()
         deltas_list = []
         for i, (variable_flat, variable_avg, sign_avg) in enumerate(zip(self.problem.variables_flat, self.variable_avg,
@@ -328,9 +328,9 @@ class XSign(Optimizer):
             ref_points = (variable_avg + variable_flat) / 2.0
             diff = tf.abs(variable_avg - variable_flat)
             mean = tf.subtract(ref_points, tf.multiply(sign_avg, diff))
-            noise = tf.random_normal([mean.shape[0].value, 1], 0, .01)
-            noisey_mean = mean * (1 + noise)
-            new_points = tf.subtract(ref_points, noisey_mean, 'new_points')
+            # noise = tf.random_normal([mean.shape[0].value, 1], 0, .01)
+            # noisey_mean = mean * (1 + noise)
+            new_points = tf.subtract(ref_points, mean, 'new_points')
             deltas_list.append(sign_avg)
             new_points = self.problem.set_shape(new_points, i=i, op_name='reshaped_new_points')
             x_next.append(new_points)
@@ -344,7 +344,7 @@ class XSign(Optimizer):
                              for gradient, sign_avg in zip(gradients, self.sign_avg)])
         return updates_list
 
-    def updates(self, args):
+    def updates(self, args=None):
         update_list = [tf.assign(variable, updated_var) for variable, updated_var in
                        zip(self.problem.variables, args['x_next'])]
         flat_gradients = self.problem.get_gradients(args['x_next'])
@@ -352,7 +352,7 @@ class XSign(Optimizer):
         update_list.extend(self.update_avg_ops([flat_variables, flat_gradients]))
         return update_list
 
-    def build(self):
+    def build(self, args=None):
         self.ops_step = self.step()
         self.ops_updates = self.updates({'x_next': self.ops_step['x_next']})
         self.ops_loss = self.loss(self.ops_step['x_next'])
