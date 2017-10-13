@@ -59,7 +59,8 @@ class Meta_Optimizer():
                                                                 power=power)
         else:
             self.meta_learning_rate = tf.Variable(args['meta_learning_rate'], trainable=False)
-        self.meta_optimizer_optimizer = tf.train.RMSPropOptimizer(self.meta_learning_rate, name='meta_optimizer_optimizer')
+        optimizer = tf.train.AdamOptimizer if args['Adam'] else tf.train.RMSPropOptimizer
+        self.meta_optimizer_optimizer = optimizer(self.meta_learning_rate, name='meta_optimizer_optimizer')
         self.optimizer_variables = []
 
     def init_saver_handle(self):
