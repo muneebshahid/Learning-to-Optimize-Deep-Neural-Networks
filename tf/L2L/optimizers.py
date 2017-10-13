@@ -42,6 +42,9 @@ class Optimizer():
     def build(self, args=None):
         pass
 
+    def run_init(self):
+        pass
+
 class Adam(Optimizer):
 
     ms = None

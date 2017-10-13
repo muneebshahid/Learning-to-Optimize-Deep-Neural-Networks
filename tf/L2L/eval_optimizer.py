@@ -18,7 +18,7 @@ results_dir = 'tf_summary/'
 model_id = '50000'
 
 load_model = True
-meta = True
+meta = False
 optimize = False
 
 l2l = tf.Graph()
@@ -47,6 +47,8 @@ with l2l.as_default():
     else:
         meta_step = []
 
+    # optim_adam = optimizers.XHistoryGradNorm(problem, {'limit': 5})
+    # optim_adam.build()
     optim_adam = optimizers.Adam(problem, {'lr': args['lr_input_optims'],
                                            'beta_1': 0.5, 'beta_2': 0.555,
                                            'eps': 1e-8, 'learn_betas': False,
@@ -54,8 +56,7 @@ with l2l.as_default():
                                            'min_lr': args['min_lr'],
                                            'max_lr': args['max_lr'],
                                            't_max': args['t_max']})
-    step_args = optim_adam.step()
-    adam_min_step = optim_adam.updates(step_args)
+    optim_adam.build()
 
     problem_norms = []
     if meta:
@@ -65,7 +66,10 @@ with l2l.as_default():
                 norm += tf.norm(variable)
             problem_norms.append(norm)
     with tf.Session() as sess:
+
         sess.run(tf.global_variables_initializer())
+        optim_adam.set_session(sess)
+        optim_adam.run_init()
         tf.train.start_queue_runners(sess)
         # problem.restore(sess, '/home/shahidm/thesis/save_nets/mnist_save_vars_conv/mnist_variables')
         # problem.restore(sess, '/home/shahidm/thesis/save_nets/cifar_variables/cifar_variables')
@@ -103,7 +107,7 @@ with l2l.as_default():
                 if meta:
                     _, _, curr_loss, curr_acc_train, curr_acc_test, summaries  = sess.run([optim_meta.ops_updates, meta_step, l, acc_train, acc_test, all_summ])
                 else:
-                    _, curr_loss, curr_acc_train, curr_acc_test, summaries = sess.run([adam_min_step, l, acc_train, acc_test, all_summ])
+                    _, curr_loss, curr_acc_train, curr_acc_test, summaries = sess.run([optim_adam.ops_updates, l, acc_train, acc_test, all_summ])
                 total_loss += np.array(curr_loss)
                 total_acc_train += np.array(curr_acc_train)
                 total_acc_test += np.array(curr_acc_test)
