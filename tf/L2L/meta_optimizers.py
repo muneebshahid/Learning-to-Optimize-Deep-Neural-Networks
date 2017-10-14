@@ -541,8 +541,7 @@ class MlpNormHistory(Meta_Optimizer):
         self.use_rel_loss = args['use_rel_loss']
         self.unroll_len = args['unroll_len']
 
-        self.momentum_alpha = tf.expand_dims(tf.linspace(0.5, 0.99, self.limit), 0)
-        self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
+        self.momentum_alpha = tf.expand_dims(tf.linspace(0.2, 0.9, self.limit), 0)
 
         self.step_dist = tf.Variable(
             tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
@@ -894,7 +893,24 @@ class MlpNormHistory(Meta_Optimizer):
             self.ops_loss_train = tf.log(self.loss(train_args) + 1e-15)
         self.ops_meta_step_train = self.minimize(self.ops_loss_train)
         self.ops_reset_problem_train = self.reset_problem(train_args)
+        self.init_saver_handle()
 
+
+    def run(self, args=None):
+        if args['train']:
+            ops_meta_step = self.ops_meta_step_train
+            ops_loss = self.ops_loss_train
+            ops_loss_problem = self.ops_loss_problem_train
+            ops_updates = self.ops_updates_train
+        else:
+            ops_meta_step = []
+            ops_loss = []
+            ops_loss_problem = self.ops_loss_problem_eval
+            ops_updates = self.ops_updates_eval
+
+        start = timer()
+        op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
+        return timer() - start, [op_loss], [pr_loss]
 
 class MlpNormHistoryRNN(MlpNormHistory):
 
@@ -1159,7 +1175,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                     self.session.run(guide_step)
 
     def run_reset(self, index=None, optimizer=False):
-        reset_ops = self.ops_reset_problem[index] if index is not None else self.ops_reset_problem
+        reset_ops = self.ops_reset_problem_train[index] if index is not None else self.ops_reset_problem_train
         self.session.run(reset_ops)
         if optimizer:
             self.session.run(self.ops_reset_optim)
@@ -1377,7 +1393,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             for variables, gradients, batch_vari_hist, batch_grad_hist, batch_sq_vari_hist, batch_sq_grad_hist in \
                     zip(flat_variables, flat_gradients, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist, problem_sq_grad_hist):
                 updated_vari_hist = batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha)
-                updated_grad_hist = batch_grad_hist * self.momentum_alpha + gradients * (1 - self.momentum_alpha)
+                updated_grad_hist = tf.add(batch_grad_hist * self.momentum_alpha,gradients * (1 - self.momentum_alpha), name='grad_hist_next')
                 vari_hist_next.append(updated_vari_hist)
                 grad_hist_next.append(updated_grad_hist)
                 if self.normalize_with_sq_grad or self.use_noise_est:
@@ -1386,7 +1402,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                     sq_vari_hist_next.append(updated_sq_vari_hist)
                     sq_grad_hist_next.append(updated_sq_grad_hist)
 
-            return {'vars_next': vars_next, 'deltas_list': deltas_list,
+            return {'x_next': vars_next, 'deltas_list': deltas_list,
                     'vari_hist_next': vari_hist_next,
                     'grad_hist_next': grad_hist_next,
                     'sq_vari_hist_next': sq_vari_hist_next,
@@ -1401,7 +1417,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         batch_gradients = args['batch_gradients']
         batch_vari_hist = args['batch_vari_hist']
         batch_vari_hist_next = args['batch_vari_hist_next']
-        batch_grad_hist = args['batch_grad_hist_next']
+        batch_grad_hist = args['batch_grad_hist']
         batch_grad_hist_next = args['batch_grad_hist_next']
         batch_sq_vari_hist = args['batch_sq_vari_hist']
         batch_sq_vari_hist_next = args['batch_sq_vari_hist_next']
@@ -1506,8 +1522,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
             flat_gradients = problem.get_gradients(x_next)
             flat_variables = [problem.flatten_input(i, variable) for i, variable in enumerate(x_next)]
-            for batch_no, (variable, grads, batch_vari_hist, batch_vari_hist_next, batch_grad_hist_next, batch_grad_hist,
-                 batch_sq_vari_hist, batch_sq_vari_hist_next, batch_sq_grad_hist,batch_sq_grad_hist_next,
+            for batch_no, (variable, grads, batch_vari_hist, batch_vari_hist_next, batch_grad_hist, batch_grad_hist_next,
+                 batch_sq_vari_hist, batch_sq_vari_hist_next, batch_sq_grad_hist, batch_sq_grad_hist_next,
                  batch_dist_mvg_avg, batch_delta_mv_avg, batch_delta_mv_avg_next, batch_lr_mv_avg, batch_lr_mv_avg_next) in enumerate(zip(flat_variables,
                                                                                                    flat_gradients,
                                                                                                    problem_vari_hist, problem_vari_hist_next,
@@ -1565,11 +1581,11 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
     def run(self, args=None):
         if args['train']:
-            ops_meta_step = self.ops_meta_step
+            ops_meta_step = self.ops_meta_step_train
         else:
             ops_meta_step = []
         start = timer()
-        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss, self.ops_loss_problem, ops_meta_step, self.ops_updates])
+        op_loss, pr_loss, _, _ = self.session.run([self.ops_loss_train, self.ops_loss_problem_train, ops_meta_step, self.ops_updates_train])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
     def updates_global(self):
@@ -1580,16 +1596,16 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         return global_update_ops
 
     def build(self):
-        self.ops_step = []
-        self.ops_updates = []
+        self.ops_step_train = []
+        self.ops_updates_train = []
         self.ops_global_updates = []
-        self.ops_loss = []
-        self.ops_meta_step = []
+        self.ops_loss_train = []
+        self.ops_meta_step_train = []
         self.ops_final_loss = 0
-        self.ops_reset_problem = []
+        self.ops_reset_problem_train = []
         self.ops_reset_optim = None
         self.ops_init = []
-        self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
+        self.ops_loss_problem_train = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
         for problem_no, (problem, vari_hist, grad_hist, sq_vari_hist,
                          sq_grad_hist, dist_mv_avg, delta_mv_avg, lr_mv_avg) in enumerate(zip(self.problems, self.vari_hist,
                                                                                    self.grad_hist, self.sq_vari_hist,
@@ -1620,12 +1636,12 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             updates = self.updates(args)
             loss_next = tf.log(self.loss(args) + 1e-20)
             reset = self.reset_problem(args)
-            self.ops_step.append(step)
-            self.ops_updates.append(updates)
+            self.ops_step_train.append(step)
+            self.ops_updates_train.append(updates)
             loss = tf.squeeze(loss_next - loss_curr)
-            self.ops_loss.append(loss)
-            self.ops_meta_step.append(self.minimize(loss))
-            self.ops_reset_problem.append(reset)
+            self.ops_loss_train.append(loss)
+            self.ops_meta_step_train.append(self.minimize(loss))
+            self.ops_reset_problem_train.append(reset)
         self.ops_reset_optim = self.reset_optimizer()
         self.ops_global_updates.append(self.updates_global())
         self.init_saver_handle()
