@@ -14,7 +14,7 @@ with l2l.as_default():
     io_path = None
     save_network = True
 
-    config_args = config.aug_optim()
+    config_args = config.mlp_norm_history_old()
     unroll_len = config_args['unroll_len']
     reset_epoch_ext = int(5000 / unroll_len)
     reset_limits_lower = []
@@ -35,20 +35,20 @@ with l2l.as_default():
     # problem_eval_2 = problems.cifar10(
     #    {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
 
-    # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
-    # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': True, 'full': False})
+    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
     # problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
 
-    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
-    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+    # problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    # problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
     # problem_eval_2 = problems.Rosenbrock({'prefix': 'eval_2',  'minval': -10, 'maxval': 10})
     problems_eval = [problem_eval_1]
     if restore_network:
         io_path = util.get_model_path(flag_optimizer='Mlp', model_id=str(model_id)) if restore_network else None
-    optim = meta_optimizers.AUGOptims([problem], problems_eval, args=config_args)
+    optim = meta_optimizers.MlpNormHistoryMultiProblems([problem], problems_eval, args=config_args)
     optim.build()
 
-    optim_grad = tf.gradients(optim.ops_loss, optim.optimizer_variables)
+    optim_grad = tf.gradients(optim.ops_loss_train, optim.optimizer_variables)
     optim_grad_norm = [tf.norm(grad) for grad in optim_grad]
     optim_norm = [tf.norm(variable) for variable in optim.optimizer_variables]
     # norm_grads = [tf.norm(gradients) for gradients in optim.problems.get_gradients()]
@@ -116,7 +116,7 @@ with l2l.as_default():
                 print('Meta LR: ', sess.run(optim.meta_learning_rate))
                 print('PROBLEM NORM: ', problem_norm_run)
 
-            if loss_prob < 1e-15 or reset_counter >= reset_upper_limit:
+            if loss_prob < 1e-15 or reset_counter >= reset_upper_limit or problem_norm_run > 1e4:
                 util.print_update(epoch, epochs, avg_optim_loss, np.log10(avg_prob_loss),
                                   avg_time, sess.run(optim_norm), sess.run(optim_grad_norm))
                 print('PROBLEM NORM: ', problem_norm_run)
