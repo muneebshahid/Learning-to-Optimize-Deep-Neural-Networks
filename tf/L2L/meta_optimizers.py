@@ -1005,7 +1005,6 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     sign_dist = None
     lr_dist = None
     history_range = None
-    min_lr = None
     min_step_max = None
     momentum_alpha = None
     momentum_alpha_inv = None
@@ -1035,6 +1034,14 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     use_diff = None
     use_tanh_output = None
 
+    unroll_len = None
+    unroll_len_val = None
+    min_lr_train = None
+    min_lr_train_eval = None
+
+    global_step_train = None
+    global_step_eval = None
+
 
 
     def __init__(self, problems, path, args):
@@ -1049,7 +1056,12 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         self.network_out_dims = args['network_out_dims']
         self.use_momentums = args['use_momentum']
         self.history_range = args['history_range']
-        self.min_lr = args['min_lr']
+
+        self.min_lr_train = args['min_lr']
+        self.global_step_train = tf.Variable(0)
+        self.min_lr_eval = args['min_lr']
+        self.global_step_eval = tf.Variable(0)
+
         self.decay_min_lr = args['decay_min_lr']
         self.decay_min_lr_max = args['decay_min_lr_max']
         self.decay_min_lr_min = args['decay_min_lr_min']
@@ -1071,8 +1083,9 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         self.diff = args['use_diff']
         self.use_tanh_output = args['use_tanh_output']
 
+
         if self.decay_min_lr:
-            self.min_lr = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
+            self.min_lr_train = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
 
         with tf.name_scope('Optim_Init'):
             self.step_dist = tf.Variable(tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
@@ -1286,7 +1299,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                 lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
                 lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
                 delta_x_step = lr_x_step_magnitude * lr_x_step_sign
-            if self.min_lr is None:
+            if self.min_lr_train is None:
                 lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 9], 'grad_step_mag')
                 lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
                 lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_delta_dist)
@@ -1404,9 +1417,9 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                 else:
                     diff = 0
 
-                if self.min_lr is not None:
+                if self.min_lr_train is not None:
                     if self.min_step_max:
-                        default_lr = tf.maximum(diff, self.min_lr)
+                        default_lr = tf.maximum(diff, self.min_lr_train)
                     else:
                         if self.learn_lr:
                             if self.use_lr_mv_avg:
@@ -1421,7 +1434,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                             else:
                                 lr = delta_lr
                         else:
-                            lr = self.min_lr
+                            lr = self.min_lr_train
                         default_lr = diff + lr
                 else:
                     default_lr = diff
@@ -1642,7 +1655,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         global_update_ops = []
         if self.decay_min_lr:
             one_step = (self.decay_min_lr_max - self.decay_min_lr_min) / self.decay_min_lr_steps
-            global_update_ops.append(tf.assign_sub(self.min_lr, one_step))
+            global_update_ops.append(tf.assign_sub(self.min_lr_train, one_step))
         return global_update_ops
 
     def run_init(self, val=False, index=None):
@@ -1682,7 +1695,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                     'sq_vari_hist': sq_vari_hist, 'sq_grad_hist': sq_grad_hist,
                     'x_next': [variable.initialized_value() for variable in problem.variables],
                     'dist_mv_avg': dist_mv_avg, 'delta_mv_avg': delta_mv_avg, 'lr_mv_avg': lr_mv_avg,
-                    'update_problem_vars': False, 'init_ops': True}
+                    'update_problem_vars': False, 'init_ops': True, 'min_lr': self.min_lr_train,  'global_step': self.global_step_eval, 'unroll_len': self.unroll_len_val}
             init_ops = [self.updates(eval_args)]
             eval_args['init_ops'] = False
             self.ops_init_eval.append(init_ops)
@@ -1722,7 +1735,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                     'sq_vari_hist': sq_vari_hist, 'sq_grad_hist': sq_grad_hist,
                     'x_next': [variable.initialized_value() for variable in problem.variables],
                     'dist_mv_avg': dist_mv_avg, 'delta_mv_avg': delta_mv_avg, 'lr_mv_avg': lr_mv_avg,
-                    'update_problem_vars': False, 'init_ops': True}
+                    'update_problem_vars': False, 'init_ops': True, 'min_lr': self.min_lr_train, 'global_step': self.global_step_train, 'unroll_len': self.unroll_len}
 
             init_ops = [self.updates(args)]
             args['init_ops'] = False
@@ -1745,13 +1758,115 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             reset = self.reset_problem(args)
             self.ops_step_train.append(step)
             self.ops_updates_train.append(updates)
-            loss = tf.squeeze(loss_next - loss_curr)
+            loss = step['loss'] if 'loss' in step else tf.squeeze(loss_next - loss_curr)
             self.ops_loss_train.append(loss)
             self.ops_meta_step_train.append(self.minimize(loss))
             self.ops_reset_problem_train.append(reset)
         self.ops_reset_optim = self.reset_optimizer()
         self.ops_global_updates.append(self.updates_global())
         self.init_saver_handle()
+
+
+
+class MlpNormHistoryMultiRNN(MlpNormHistoryMultiProblems):
+
+    unroll_len = None
+    unroll_len_val = None
+    use_rel_loss = None
+    def __init__(self, problems, problems_eval, args):
+        super(MlpNormHistoryMultiRNN, self).__init__(problems, problems_eval, args)
+        self.use_rel_loss = args['use_rel_loss']
+        self.unroll_len = args['unroll_len']
+        self.unroll_len_val = args['unroll_len_val']
+
+    def step(self, args=None):
+        problem = args['problem']
+        problem_variables = problem.variables
+        problem_vari_hist = args['vari_hist']
+        problem_grad_hist = args['grad_hist']
+        problem_sq_vari_hist = args['sq_vari_hist']
+        problem_sq_grad_hist = args['sq_grad_hist']
+        problem_delta_mv_avg = args['delta_mv_avg']
+
+        problem_dist_mv_avg = args['dist_mv_avg']
+        problem_lr_mv_avg = args['lr_mv_avg']
+
+        unroll_len = args['unroll_len']
+        min_lr = args['min_lr']
+        global_step = args['global_step']
+
+        loss_0 = tf.log(self.loss({'problem': problem}) + 1e-15)
+
+        def update_rnn(t, loss, problem_variables, vari_hist, grad_hist, sq_vari_hist, sq_grad_hist, delta_mv_avg, min_lr, global_step):
+            step = super(MlpNormHistoryMultiRNN, self).step({'problem': problem,
+                                                        'vari_hist': vari_hist,
+                                                        'grad_hist': grad_hist,
+                                                        'sq_vari_hist': sq_vari_hist,
+                                                        'sq_grad_hist': sq_grad_hist,
+                                                        'delta_mv_avg': delta_mv_avg,
+                                                             'min_lr': min_lr,
+                                                             'global_step': global_step,
+                                                        'dist_mv_avg':   problem_dist_mv_avg,
+                                                            'lr_mv_avg': problem_lr_mv_avg,
+                                                             })
+            vars_next = step['x_next']
+            vari_hist_next = step['vari_hist_next']
+            grad_hist_next = step['grad_hist_next']
+
+            if self.use_noise_est or self.normalize_with_sq_grad:
+                sq_vari_hist_next = step['sq_vari_hist_next']
+                sq_grad_hist_next = step['sq_grad_hist_next']
+            else:
+                sq_vari_hist_next = sq_vari_hist
+                sq_grad_hist_next = sq_grad_hist
+            if self.use_delta_mv_avg:
+                delta_mv_avg_next = step['delta_mv_avg_next']
+            else:
+                delta_mv_avg_next = delta_mv_avg
+            if self.decay_min_lr:
+                min_lr_next = step['min_lr_next']
+                global_step_next = step['global_step_next']
+            else:
+                min_lr_next = min_lr
+                global_step_next = global_step
+            loss_curr = tf.log(self.loss({'problem': problem, 'x_next': vars_next}) + 1e-15)
+            if self.use_rel_loss:
+                loss_curr = loss_curr - loss_0
+            loss_next = loss + loss_curr
+            return t + 1, loss_next, vars_next, vari_hist_next, grad_hist_next, sq_vari_hist_next, sq_grad_hist_next, delta_mv_avg_next, min_lr_next, global_step_next
+        #
+        (t_final, loss_final, vars_next,
+         vari_hist_next, grad_hist_next,
+         sq_vari_hist_next,
+         sq_grad_hist_next, deltas_mv_avg_next,
+         min_lr_next,  global_step_next) = tf.while_loop(
+        cond=lambda t, *_: t < unroll_len,
+        body=update_rnn,
+        loop_vars=([0, 0.0, problem_variables, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist,
+                    problem_sq_grad_hist, problem_delta_mv_avg, min_lr, global_step]),
+        parallel_iterations=1,
+        swap_memory=True,
+        name="unroll")
+
+        # (t_final, loss_final, vars_next,
+        # vari_hist_next, grad_hist_next,
+        # sq_vari_hist_next,
+        # sq_grad_hist_next, deltas_mv_avg_next,
+        # min_lr_next, global_step_next)= update_rnn(0, 0.0, problem_variables, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist,
+        # problem_sq_grad_hist, problem_delta_mv_avg, min_lr, global_step)
+
+        avg_loss = loss_final / unroll_len
+        return {'x_next': vars_next,
+                'vari_hist_next': vari_hist_next,
+                'grad_hist_next': grad_hist_next,
+                'sq_vari_hist_next': sq_vari_hist_next,
+                'sq_grad_hist_next': sq_grad_hist_next,
+                'delta_mv_avg_next': deltas_mv_avg_next,
+                'min_lr_next': min_lr_next,
+                'global_step_next':  global_step_next,
+                'loss': avg_loss,
+                'lr_mv_avg_next': [], 'delta_lr': [],
+                }
 
 class AUGOptims(Meta_Optimizer):
 
@@ -3208,7 +3323,7 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
             lr_x_step_sign = tf.nn.softmax(lr_x_step_sign, 1)
             lr_x_step_sign = tf.matmul(lr_x_step_sign, self.sign_dist)
             delta_x_step = lr_x_step_magnitude * lr_x_step_sign
-            if self.min_lr is None:
+            if self.min_lr_train is None:
                 lr_grad_step_magnitude = tf.slice(activations, [0, 12], [-1, 5], 'grad_step_mag')
                 lr_grad_step_magnitude = tf.nn.softmax(lr_grad_step_magnitude, 1)
                 lr_grad_step_magnitude = tf.matmul(lr_grad_step_magnitude, self.lr_dist)
@@ -3286,11 +3401,11 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
                     ref = (max_values + min_values) / 2.0
 
                     default_step = diff
-                    if self.min_lr is not None:
+                    if self.min_lr_train is not None:
                         if self.min_step_max:
-                            default_step = tf.maximum(diff, self.min_lr)
+                            default_step = tf.maximum(diff, self.min_lr_train)
                         else:
-                            default_step = diff + self.min_lr
+                            default_step = diff + self.min_lr_train
                     mean = tf.multiply(deltas_x, default_step) + deltas_g
                     problem_variables[batch_no] = tf.add(ref, mean, 'new_points')
                 original_shaped_variables = [problem.set_shape(flat_variable, i=variable_no, op_name='reshape_variable') for variable_no, flat_variable in enumerate(problem_variables)]

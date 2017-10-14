@@ -87,10 +87,11 @@ def mlp_norm_history_old():
 
 
 def rnn_norm_history():
-    args = mlp_norm_history()
+    args = mlp_norm_history_old()
     args['gru'] = False
+    args['use_rel_loss'] = False
     args['state_size'] = 5
-    args['unroll_len'] = 20
+    args['unroll_len'] = 10
     return args
 
 def l2l2():
