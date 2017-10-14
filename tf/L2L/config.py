@@ -36,10 +36,17 @@ def mlp_norm_history():
     args['normalize_with_sq_grad'] = False
     args['use_tanh_output'] = False
     args['use_delta_mv_avg'] = False
+    args['use_rel_loss'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
     args['network_out_dims'] = 1 if args['use_tanh_output'] else 12
     args['network_out_dims'] = 19 if args['min_lr'] is None else args['network_out_dims']
+    return args
+
+
+def mlp_norm_history_rnn():
+    args = mlp_norm_history()
+    args['unroll_len'] = 20
     return args
 
 def mlp_norm_history_old():
