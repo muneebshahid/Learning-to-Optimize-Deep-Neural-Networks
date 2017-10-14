@@ -1392,8 +1392,12 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             sq_grad_hist_next = []
             for variables, gradients, batch_vari_hist, batch_grad_hist, batch_sq_vari_hist, batch_sq_grad_hist in \
                     zip(flat_variables, flat_gradients, problem_vari_hist, problem_grad_hist, problem_sq_vari_hist, problem_sq_grad_hist):
-                updated_vari_hist = batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha)
-                updated_grad_hist = tf.add(batch_grad_hist * self.momentum_alpha,gradients * (1 - self.momentum_alpha), name='grad_hist_next')
+                if self.use_momentums:
+                    updated_vari_hist = batch_vari_hist * self.momentum_alpha + variables * (1 - self.momentum_alpha)
+                    updated_grad_hist = tf.add(batch_grad_hist * self.momentum_alpha,gradients * (1 - self.momentum_alpha), name='grad_hist_next')
+                else:
+                    updated_vari_hist = tf.concat([batch_vari_hist[:, 1:], variables], axis=1)
+                    updated_grad_hist = tf.concat([batch_grad_hist[:, 1:], gradients], axis=1)
                 vari_hist_next.append(updated_vari_hist)
                 grad_hist_next.append(updated_grad_hist)
                 if self.normalize_with_sq_grad or self.use_noise_est:
@@ -1452,20 +1456,20 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             if self.use_momentums:
                 # oldest_history_index = tf.cond(tf.equal(history_ptr, self.limit - 1), lambda: 0, lambda: history_ptr + 1)
                 # oldest_history_slice = tf.slice(batch_grad_history, [0, oldest_history_index], [-1, 1])
-                oldest_history_slice = batch_variables
-                updated_vari_hist = batch_vari_hist * momentum_alpha + batch_variables * (1 - momentum_alpha)
-                updated_grad_hist= batch_grad_hist * momentum_alpha + batch_gradients * (1 - momentum_alpha)
+                # oldest_history_slice = batch_variables
+                # updated_vari_hist = batch_vari_hist * momentum_alpha + batch_variables * (1 - momentum_alpha)
+                # updated_grad_hist = batch_grad_hist * momentum_alpha + batch_gradients * (1 - momentum_alpha)
                 history_ops.append(tf.assign(batch_vari_hist, batch_vari_hist_next))
                 history_ops.append(tf.assign(batch_grad_hist, batch_grad_hist_next))
             else:
-                updated_vari_hist = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
-                updated_grad_hist = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
-                history_ops.append(tf.assign(batch_vari_hist, updated_vari_hist))
-                history_ops.append(tf.assign(batch_grad_hist, updated_grad_hist))
+                # updated_vari_hist = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
+                # updated_grad_hist = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
+                history_ops.append(tf.assign(batch_vari_hist, batch_vari_hist_next))
+                history_ops.append(tf.assign(batch_grad_hist, batch_grad_hist_next))
             if self.normalize_with_sq_grad or self.use_noise_est:
                 with tf.control_dependencies(history_ops):
-                    updated_sq_vari_hist = batch_sq_vari_hist * momentum_alpha + tf.square(updated_vari_hist) * (1 - momentum_alpha)
-                    updated_sq_grad_hist = batch_sq_grad_hist * momentum_alpha + tf.square(updated_grad_hist) * (1 - momentum_alpha)
+                    # updated_sq_vari_hist = batch_sq_vari_hist * momentum_alpha + tf.square(updated_vari_hist) * (1 - momentum_alpha)
+                    # updated_sq_grad_hist = batch_sq_grad_hist * momentum_alpha + tf.square(updated_grad_hist) * (1 - momentum_alpha)
                     history_ops.append(tf.assign(batch_sq_vari_hist, batch_sq_vari_hist_next))
                     history_ops.append(tf.assign(batch_sq_grad_hist, batch_sq_grad_hist_next))
             if self.use_dist_mv_avg:
