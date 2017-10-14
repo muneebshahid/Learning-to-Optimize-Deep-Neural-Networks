@@ -994,12 +994,12 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     use_guide_step = None
     gradients_only = None
     gradient_sign_only = None
-    vari_hist = None
-    grad_hist = None
+    vari_hist_train = None
+    grad_hist_train = None
     history_ptr = None
     update_window = None
     guide_optimizer = None
-    guide_step = None
+    guide_step_train = None
     network_activation = None
     li, lr = None, None
     sign_dist = None
@@ -1013,17 +1013,17 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     grad_mom = None
     vari_mom = None
     normalize_with_sq_grad = None
-    sq_vari_hist = None
-    sq_grad_hist = None
+    sq_vari_hist_train = None
+    sq_grad_hist_train = None
     use_dist_mv_avg = None
     dist_mv_avg = None
     use_noise_est = None
     use_log_noise = None
     use_delta_mv_avg = None
     step_dist_max_step = None
-    delta_mv_avg = None
+    delta_mv_avg_train = None
     learn_lr = None
-    lr_mv_avg = None
+    lr_mv_avg_train = None
     use_lr_mv_avg = None
     learn_lr_delta = None
     lr_delta_dist = None
@@ -1093,93 +1093,139 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                 self.momentum_alpha = tf.expand_dims(tf.linspace(0.2, 0.9, self.limit), 0)#tf.constant(np.array(alpha), shape=[1, self.limit], dtype=tf.float32)
                 self.momentum_alpha_inv = tf.subtract(1.0, self.momentum_alpha)
 
-            (self.guide_step, self.vari_hist, self.grad_hist,
-             self.grad_mom, self.vari_mom, self.sq_vari_hist,
-             self.sq_grad_hist, self.dist_mv_avg, self.delta_mv_avg, self.lr_mv_avg) = [], [], [], [], [], [], [], [], [], []
+            (self.guide_step_train, self.vari_hist_train, self.grad_hist_train,
+             self.grad_mom, self.vari_mom, self.sq_vari_hist_train,
+             self.sq_grad_hist_train, self.dist_mv_avg, self.delta_mv_avg_train, self.lr_mv_avg_train) = [], [], [], [], [], [], [], [], [], []
 
             for i, problem in enumerate(self.problems):
-                with tf.variable_scope('problem_' + str(i)):
+                with tf.variable_scope('problem_' + 'train' + '_' + str(i)):
                     if self.use_guide_step:
-                        self.guide_step.append(self.guide_optimizer.minimize(problem.loss(problem.variables),
-                                                                             var_list=problem.variables,
-                                                                             name='guide_step'))
+                        self.guide_step_train.append(self.guide_optimizer.minimize(problem.loss(problem.variables),
+                                                                                   var_list=problem.variables,
+                                                                                   name='guide_step'))
                     else:
-                        self.guide_step.append([])
-                    self.vari_hist.append([tf.get_variable('vari_hist' + str(i), initializer=tf.zeros_initializer,
-                                                           shape=[shape, self.limit], trainable=False)
-                                           for i, shape in enumerate(problem.variables_flattened_shape)])
-                    self.grad_hist.append([tf.get_variable('grad_mom' + str(i), initializer=tf.zeros_initializer,
-                                                           shape=[shape, self.limit], trainable=False)
-                                           for i, shape in enumerate(problem.variables_flattened_shape)])
+                        self.guide_step_train.append([])
+                    self.vari_hist_train.append([tf.get_variable('vari_hist' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
+                                                                 shape=[shape, self.limit], trainable=False)
+                                                 for i, shape in enumerate(problem.variables_flattened_shape)])
+                    self.grad_hist_train.append([tf.get_variable('grad_mom' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
+                                                                 shape=[shape, self.limit], trainable=False)
+                                                 for i, shape in enumerate(problem.variables_flattened_shape)])
                     if self.normalize_with_sq_grad or self.use_noise_est:
-                        self.sq_vari_hist.append([tf.get_variable('sq_vari_mom' + str(i), initializer=tf.zeros_initializer,
-                                                                  shape=[shape, self.limit], trainable=False)
-                                                  for i, shape in enumerate(problem.variables_flattened_shape)])
-                        self.sq_grad_hist.append([tf.get_variable('sq_grad_mom' + str(i), initializer=tf.zeros_initializer,
-                                                                  shape=[shape, self.limit], trainable=False)
-                                                  for i, shape in enumerate(problem.variables_flattened_shape)])
+                        self.sq_vari_hist_train.append([tf.get_variable('sq_vari_mom' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
+                                                                        shape=[shape, self.limit], trainable=False)
+                                                        for i, shape in enumerate(problem.variables_flattened_shape)])
+                        self.sq_grad_hist_train.append([tf.get_variable('sq_grad_mom' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
+                                                                        shape=[shape, self.limit], trainable=False)
+                                                        for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
-                        self.sq_vari_hist.append([0.0 for variable in problem.variables])
-                        self.sq_grad_hist.append([0.0 for variable in problem.variables])
+                        self.sq_vari_hist_train.append([0.0 for variable in problem.variables])
+                        self.sq_grad_hist_train.append([0.0 for variable in problem.variables])
 
                     if self.use_dist_mv_avg:
-                        self.dist_mv_avg.append([tf.get_variable('dist_mv_avg' + str(i), initializer=tf.zeros_initializer,
+                        self.dist_mv_avg.append([tf.get_variable('dist_mv_avg' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
                                                                   shape=[shape, self.limit], trainable=False)
                                                   for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
                         self.dist_mv_avg.append([0.0 for variable in problem.variables])
 
                     if self.use_delta_mv_avg:
-                        self.delta_mv_avg.append([tf.get_variable('delta_mv_avg' + str(i),
-                                                                  initializer=tf.ones(shape=[shape, self.limit],
+                        self.delta_mv_avg_train.append([tf.get_variable('delta_mv_avg' + 'train' + '_' + str(i),
+                                                                        initializer=tf.ones(shape=[shape, self.limit],
                                                                                       dtype=tf.float32) * 0.5,
-                                                                  trainable=False)
-                                                  for i, shape in enumerate(problem.variables_flattened_shape)])
+                                                                        trainable=False)
+                                                        for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
-                        self.delta_mv_avg.append([0.0 for variable in problem.variables])
+                        self.delta_mv_avg_train.append([0.0 for variable in problem.variables])
                     if self.use_lr_mv_avg:
                         min_val = 1e-6
                         max_val = 1e-3
                         if self.learn_lr_delta:
                             min_val = tf.log(min_val)
                             max_val = tf.log(max_val)
-                        self.lr_mv_avg.append([tf.get_variable('min_step_mv_avg' + str(i),
-                                                               initializer=tf.random_uniform(shape=[shape, 1], minval=min_val, maxval=max_val),
-                                                               trainable=False) for i, shape in enumerate(problem.variables_flattened_shape)])
+                        self.lr_mv_avg_train.append([tf.get_variable('min_step_mv_avg' + 'train' + '_' + str(i),
+                                                                     initializer=tf.random_uniform(shape=[shape, 1], minval=min_val, maxval=max_val),
+                                                                     trainable=False) for i, shape in enumerate(problem.variables_flattened_shape)])
                     else:
-                        self.lr_mv_avg.append([0.0 for variable in problem.variables])
+                        self.lr_mv_avg_train.append([0.0 for variable in problem.variables])
                     if self.learn_momentum_base:
-                        self.momentum_alpha.append([tf.get_variable('mom_alpha' + str(i), initializer=tf.zeros_initializer,
+                        self.momentum_alpha.append([tf.get_variable('mom_alpha' + 'train' + '_' + str(i), initializer=tf.zeros_initializer,
                                                               shape=[shape, 1], trainable=False)
                                                     for i, shape in enumerate(problem.variables_flattened_shape)])
-    def run_init(self, args=None):
-        if args is None or args['problem_index'] is None:
-            problems = self.problems
-            guide_steps = self.guide_step
-            ops_init = self.ops_init
-        else:
-            index = args['problem_index']
-            problems = [self.problems[index]]
-            guide_steps = [self.guide_step[index]]
-            ops_init = [self.ops_init[index]]
-        with tf.name_scope('Init_With_Session'):
-            for problem, guide_step, op_init in zip(problems, guide_steps, ops_init):
-                for update in range(self.limit):
-                    if self.use_guide_step:
-                        if update == 0:
-                            self.session.run(op_init[0])
-                        else:
-                            self.session.run(op_init[1])
-                    else:
-                        self.session.run(ops_init)
-                    self.session.run(guide_step)
 
-    def run_reset(self, index=None, optimizer=False):
-        reset_ops = self.ops_reset_problem_train[index] if index is not None else self.ops_reset_problem_train
-        self.session.run(reset_ops)
-        if optimizer:
-            self.session.run(self.ops_reset_optim)
-        self.run_init({'problem_index': index})
+                (self.guide_step_eval, self.vari_hist_eval, self.grad_hist_eval,
+                 self.grad_mom, self.vari_mom, self.sq_vari_hist_eval,
+                 self.sq_grad_hist_eval, self.dist_mv_avg, self.delta_mv_avg_eval,
+                 self.lr_mv_avg_eval) = [], [], [], [], [], [], [], [], [], []
+                for i, problem in enumerate(self.problems_eval):
+                    with tf.variable_scope('problem_' + 'eval' + '_' + str(i)):
+                        if self.use_guide_step:
+                            self.guide_step_eval.append(self.guide_optimizer.minimize(problem.loss(problem.variables),
+                                                                                       var_list=problem.variables,
+                                                                                       name='guide_step'))
+                        else:
+                            self.guide_step_eval.append([])
+                        self.vari_hist_eval.append(
+                            [tf.get_variable('vari_hist' + 'eval' + '_' + str(i), initializer=tf.zeros_initializer,
+                                             shape=[shape, self.limit], trainable=False)
+                             for i, shape in enumerate(problem.variables_flattened_shape)])
+                        self.grad_hist_eval.append(
+                            [tf.get_variable('grad_mom' + 'eval' + '_' + str(i), initializer=tf.zeros_initializer,
+                                             shape=[shape, self.limit], trainable=False)
+                             for i, shape in enumerate(problem.variables_flattened_shape)])
+                        if self.normalize_with_sq_grad or self.use_noise_est:
+                            self.sq_vari_hist_eval.append([tf.get_variable('sq_vari_mom' + 'eval' + '_' + str(i),
+                                                                            initializer=tf.zeros_initializer,
+                                                                            shape=[shape, self.limit], trainable=False)
+                                                            for i, shape in
+                                                            enumerate(problem.variables_flattened_shape)])
+                            self.sq_grad_hist_eval.append([tf.get_variable('sq_grad_mom' + 'eval' + '_' + str(i),
+                                                                            initializer=tf.zeros_initializer,
+                                                                            shape=[shape, self.limit], trainable=False)
+                                                            for i, shape in
+                                                            enumerate(problem.variables_flattened_shape)])
+                        else:
+                            self.sq_vari_hist_eval.append([0.0 for variable in problem.variables])
+                            self.sq_grad_hist_eval.append([0.0 for variable in problem.variables])
+
+                        if self.use_dist_mv_avg:
+                            self.dist_mv_avg.append([tf.get_variable('dist_mv_avg' + 'eval' + '_' + str(i),
+                                                                     initializer=tf.zeros_initializer,
+                                                                     shape=[shape, self.limit], trainable=False)
+                                                     for i, shape in enumerate(problem.variables_flattened_shape)])
+                        else:
+                            self.dist_mv_avg.append([0.0 for variable in problem.variables])
+
+                        if self.use_delta_mv_avg:
+                            self.delta_mv_avg_eval.append([tf.get_variable('delta_mv_avg' + 'eval' + '_' + str(i),
+                                                                            initializer=tf.ones(
+                                                                                shape=[shape, self.limit],
+                                                                                dtype=tf.float32) * 0.5,
+                                                                            trainable=False)
+                                                            for i, shape in
+                                                            enumerate(problem.variables_flattened_shape)])
+                        else:
+                            self.delta_mv_avg_eval.append([0.0 for variable in problem.variables])
+                        if self.use_lr_mv_avg:
+                            min_val = 1e-6
+                            max_val = 1e-3
+                            if self.learn_lr_delta:
+                                min_val = tf.log(min_val)
+                                max_val = tf.log(max_val)
+                            self.lr_mv_avg_eval.append([tf.get_variable('min_step_mv_avg' + 'eval' + '_' + str(i),
+                                                                         initializer=tf.random_uniform(shape=[shape, 1],
+                                                                                                       minval=min_val,
+                                                                                                       maxval=max_val),
+                                                                         trainable=False) for i, shape in
+                                                         enumerate(problem.variables_flattened_shape)])
+                        else:
+                            self.lr_mv_avg_eval.append([0.0 for variable in problem.variables])
+                        if self.learn_momentum_base:
+                            self.momentum_alpha.append(
+                                [tf.get_variable('mom_alpha' + 'eval' + '_' + str(i), initializer=tf.zeros_initializer,
+                                                 shape=[shape, 1], trainable=False)
+                                 for i, shape in enumerate(problem.variables_flattened_shape)])
+
 
 
     def normalize_values(self, history_tensor, squared_history=None, switch=0):
@@ -1599,22 +1645,79 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             global_update_ops.append(tf.assign_sub(self.min_lr, one_step))
         return global_update_ops
 
+    def run_init(self, val=False, index=None):
+        if val:
+            ops_init = self.ops_init_eval
+        else:
+            ops_init = self.ops_init_train
+        for i in range(self.limit):
+            self.session.run(ops_init)
+
+    def run_reset(self, val=False, index=None):
+        if val:
+            ops_reset = self.ops_reset_problem_eval
+        else:
+            ops_reset = self.ops_reset_problem_train
+        self.session.run(ops_reset)
+        self.run_init(val)
+
     def build(self):
+        self.ops_reset_optim = None
+        self.ops_global_updates = []
+
+        self.ops_init_eval = []
+        self.ops_step_eval = []
+        self.ops_updates_eval = []
+        self.ops_loss_eval = []
+        self.ops_loss_problem_eval = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems_eval]
+        self.ops_meta_step_eval = []
+        self.ops_reset_problem_eval = []
+
+        for problem_no, (problem, vari_hist, grad_hist, sq_vari_hist,
+                         sq_grad_hist, dist_mv_avg, delta_mv_avg, lr_mv_avg) in enumerate(zip(self.problems_eval, self.vari_hist_eval,
+                                                                                              self.grad_hist_eval, self.sq_vari_hist_eval,
+                                                                                              self.sq_grad_hist_eval, self.dist_mv_avg,
+                                                                                              self.delta_mv_avg_eval, self.lr_mv_avg_eval)):
+            eval_args = {'problem_no': problem_no, 'problem': problem, 'vari_hist': vari_hist, 'grad_hist': grad_hist,
+                    'sq_vari_hist': sq_vari_hist, 'sq_grad_hist': sq_grad_hist,
+                    'x_next': [variable.initialized_value() for variable in problem.variables],
+                    'dist_mv_avg': dist_mv_avg, 'delta_mv_avg': delta_mv_avg, 'lr_mv_avg': lr_mv_avg,
+                    'update_problem_vars': False, 'init_ops': True}
+            init_ops = [self.updates(eval_args)]
+            eval_args['init_ops'] = False
+            self.ops_init_eval.append(init_ops)
+            step = self.step(eval_args)
+            eval_args['x_next'] = step['x_next']
+            eval_args['vari_hist_next'] = step['vari_hist_next']
+            eval_args['grad_hist_next'] = step['grad_hist_next']
+            eval_args['sq_vari_hist_next'] = step['sq_vari_hist_next']
+            eval_args['sq_grad_hist_next'] = step['sq_grad_hist_next']
+            eval_args['update_problem_vars'] = True
+            eval_args['delta_mv_avg_next'] = step['delta_mv_avg_next']
+            eval_args['lr_mv_avg_next'] = step['lr_mv_avg_next']
+            updates = self.updates(eval_args)
+            self.ops_step_eval.append(step)
+            self.ops_updates_eval.append(updates)
+            reset = self.reset_problem(eval_args)
+            self.ops_reset_problem_eval.append(reset)
+
+
+
+        self.ops_init_train = []
         self.ops_step_train = []
         self.ops_updates_train = []
-        self.ops_global_updates = []
         self.ops_loss_train = []
-        self.ops_meta_step_train = []
-        self.ops_final_loss = 0
-        self.ops_reset_problem_train = []
-        self.ops_reset_optim = None
-        self.ops_init = []
         self.ops_loss_problem_train = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
+        self.ops_meta_step_train = []
+        self.ops_reset_problem_train = []
+
+
+
         for problem_no, (problem, vari_hist, grad_hist, sq_vari_hist,
-                         sq_grad_hist, dist_mv_avg, delta_mv_avg, lr_mv_avg) in enumerate(zip(self.problems, self.vari_hist,
-                                                                                   self.grad_hist, self.sq_vari_hist,
-                                                                                   self.sq_grad_hist, self.dist_mv_avg,
-                                                                                   self.delta_mv_avg, self.lr_mv_avg)):
+                         sq_grad_hist, dist_mv_avg, delta_mv_avg, lr_mv_avg) in enumerate(zip(self.problems, self.vari_hist_train,
+                                                                                              self.grad_hist_train, self.sq_vari_hist_train,
+                                                                                              self.sq_grad_hist_train, self.dist_mv_avg,
+                                                                                              self.delta_mv_avg_train, self.lr_mv_avg_train)):
             args = {'problem_no': problem_no, 'problem': problem, 'vari_hist': vari_hist, 'grad_hist': grad_hist,
                     'sq_vari_hist': sq_vari_hist, 'sq_grad_hist': sq_grad_hist,
                     'x_next': [variable.initialized_value() for variable in problem.variables],
@@ -1625,7 +1728,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             args['init_ops'] = False
             if self.use_guide_step:
                 init_ops.append(self.updates(args))
-            self.ops_init.append(init_ops)
+            self.ops_init_train.append(init_ops)
 
             loss_curr = tf.log(self.loss(args) + 1e-20)
             step = self.step(args)
@@ -3076,7 +3179,7 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
                 self.rnn_w = tf.get_variable('softmax_w', [self.state_size, self.network_out_dims])
                 self.rnn_b = tf.get_variable('softmax_b', [self.network_out_dims])
 
-            network_input = self.get_network_input(self.vari_hist[0][0], self.grad_hist[0][0], 0, self.vari_mom[0][0], self.grad_mom[0][0])
+            network_input = self.get_network_input(self.vari_hist_train[0][0], self.grad_hist_train[0][0], 0, self.vari_mom[0][0], self.grad_mom[0][0])
             self.network({'inputs': network_input, 'hidden_states': self.hidden_states[0][0], 'init': True})
 
     def network(self, args=None):
@@ -3339,8 +3442,8 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
         self.ops_init = []
         self.ops_loss_problem = [tf.squeeze(self.loss({'problem': problem})) for problem in self.problems]
         for problem_no, (problem, variable_history, grad_sign_history, history_ptr, vari_mom, grad_mom, hidden_states) in enumerate(zip(self.problems,
-                                                                                                 self.vari_hist,
-                                                                                       self.grad_hist,
+                                                                                                 self.vari_hist_train,
+                                                                                       self.grad_hist_train,
                                                                                        self.history_ptr,
                                                                                        self.vari_mom,
                                                                                        self.grad_mom,
