@@ -1058,9 +1058,9 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         self.history_range = args['history_range']
 
         self.min_lr_train = args['min_lr']
-        self.global_step_train = tf.Variable(0)
+        self.global_step_train = tf.Variable(0.0)
         self.min_lr_eval = args['min_lr']
-        self.global_step_eval = tf.Variable(0)
+        self.global_step_eval = tf.Variable(0.0)
 
         self.decay_min_lr = args['decay_min_lr']
         self.decay_min_lr_max = args['decay_min_lr_max']
@@ -1086,6 +1086,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
         if self.decay_min_lr:
             self.min_lr_train = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
+            self.min_lr_eval = tf.Variable(self.decay_min_lr_max, dtype=tf.float32)
 
         with tf.name_scope('Optim_Init'):
             self.step_dist = tf.Variable(tf.constant(np.linspace(0.0, self.step_dist_max_step, 10), shape=[10, 1], dtype=tf.float32),
@@ -1341,6 +1342,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             problem_sq_vari_hist = args['sq_vari_hist']
             problem_sq_grad_hist = args['sq_grad_hist']
             problem_dist_mv_avg = args['dist_mv_avg']
+            problem_min_lr = args['min_lr']
+            problem_global_step = args['global_step']
             problem_delta_mv_avg = args['delta_mv_avg']
             problem_lr_mv_avg = args['lr_mv_avg']
             vars_next = list()
@@ -1348,6 +1351,15 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             deltas_mv_avg_next = []
             lr_mv_avg_next = []
             delta_lr_next = []
+
+            min_lr_next = problem_min_lr
+            global_step_next = problem_global_step
+
+            if self.decay_min_lr:
+                global_step_next = tf.minimum(problem_global_step + 1, self.decay_min_lr_steps)
+                min_lr_next = (self.decay_min_lr_max - self.decay_min_lr_min) * tf.pow(
+                    (1 - global_step_next / self.decay_min_lr_steps), 1.0) + self.decay_min_lr_min
+
             for (variable, variable_flat, batch_vari_hist, batch_grad_hist,
                  batch_sq_vari_hist, batch_sq_grad_hist, batch_dist_mv_avg,
                  batch_delta_mv_avg, batch_lr_mv_avg) in zip(problem.variables, problem.variables_flat,
@@ -1434,7 +1446,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                             else:
                                 lr = delta_lr
                         else:
-                            lr = self.min_lr_train
+                            lr = min_lr_next
                         default_lr = diff + lr
                 else:
                     default_lr = diff
@@ -1471,7 +1483,10 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                     'sq_vari_hist_next': sq_vari_hist_next,
                     'sq_grad_hist_next': sq_grad_hist_next,
                     'delta_mv_avg_next': deltas_mv_avg_next,
-                    'lr_mv_avg_next': lr_mv_avg_next, 'delta_lr': delta_lr_next}
+                    'min_lr_next': min_lr_next,
+                    'global_step_next': global_step_next,
+                    'lr_mv_avg_next': lr_mv_avg_next,
+                    'delta_lr': delta_lr_next}
 
     def update_history_ops(self, args):
         problem_no = args['problem_no']
@@ -1567,6 +1582,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             problem_sq_grad_hist_next = [None for variable in problem.variables]
             problem_delta_mv_avg_next = [None for variable in problem.variables]
             problem_lr_mv_avg_next = [None for variable in problem.variables]
+
+            update_list = []
             if not init_ops:
                 problem_vari_hist_next = args['vari_hist_next']
                 problem_grad_hist_next = args['grad_hist_next']
@@ -1578,7 +1595,11 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
                 if self.use_lr_mv_avg:
                     problem_lr_mv_avg_next = args['lr_mv_avg_next']
 
-            update_list = []
+                if self.decay_min_lr:
+                    update_list.append(tf.assign(args['min_lr'], args['min_lr_next']))
+                    update_list.append(tf.assign(args['global_step'], args['global_step_next']))
+
+
             if update_problem_vars:
                 update_list.extend([tf.assign(variable, updated_var) for variable, updated_var in
                                zip(problem.variables, x_next)])
@@ -1634,6 +1655,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             reset.append(tf.variables_initializer(problem_delta_mv_avg, name='reset_delta_mv_avg'))
         if self.use_lr_mv_avg:
             reset.append(tf.variables_initializer(problem_lr_mv_avg, name='reset_lr_mv_avg'))
+        if self.decay_min_lr:
+            reset.append(tf.variables_initializer([args['min_lr'], args['global_step']]))
         return reset
 
     def loss(self, args=None):
@@ -1708,6 +1731,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             eval_args['update_problem_vars'] = True
             eval_args['delta_mv_avg_next'] = step['delta_mv_avg_next']
             eval_args['lr_mv_avg_next'] = step['lr_mv_avg_next']
+            eval_args['min_lr_next'] = step['min_lr_next']
+            eval_args['global_step_next'] = step['global_step_next']
             updates = self.updates(eval_args)
             self.ops_step_eval.append(step)
             self.ops_updates_eval.append(updates)
@@ -1753,6 +1778,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             args['update_problem_vars'] = True
             args['delta_mv_avg_next'] = step['delta_mv_avg_next']
             args['lr_mv_avg_next'] = step['lr_mv_avg_next']
+            args['min_lr_next'] = step['min_lr_next']
+            args['global_step_next'] = step['global_step_next']
             updates = self.updates(args)
             loss_next = tf.log(self.loss(args) + 1e-20)
             reset = self.reset_problem(args)

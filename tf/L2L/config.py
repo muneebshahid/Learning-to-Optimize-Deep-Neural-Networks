@@ -18,38 +18,7 @@ def common():
     args['use_guide_step'] = False
     return args
 
-
 def mlp_norm_history():
-    args = common()
-    args['limit'] = 6
-    args['step_dist_max_step'] = 1.0
-    args['grad_only'] = True
-    args['use_momentum'] = True
-    args['min_lr'] = 1e-4
-    args['ref_point'] = 1  # 0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
-    args['decay_min_lr'] = False
-    args['decay_min_lr_max'] = args['min_lr']
-    args['decay_min_lr_min'] = 1e-5
-    args['decay_min_lr_steps'] = 'NEED TO SET'
-    args['learn_lr'] = False
-    args['enable_noise_est'] = False
-    args['normalize_with_sq_grad'] = False
-    args['use_tanh_output'] = False
-    args['use_delta_mv_avg'] = False
-    args['use_rel_loss'] = False
-    args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
-    args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
-    args['network_out_dims'] = 1 if args['use_tanh_output'] else 12
-    args['network_out_dims'] = 19 if args['min_lr'] is None else args['network_out_dims']
-    return args
-
-
-def mlp_norm_history_rnn():
-    args = mlp_norm_history()
-    args['unroll_len'] = 1
-    return args
-
-def mlp_norm_history_old():
     args = common()
     args['limit'] = 6
     args['step_dist_max_step'] = 1.0
@@ -85,9 +54,8 @@ def mlp_norm_history_old():
     args['network_out_dims'] += (1 if args['learn_lr_delta'] else 0)
     return args
 
-
-def rnn_norm_history():
-    args = mlp_norm_history_old()
+def mlp_norm_history_rnn():
+    args = mlp_norm_history()
     args['gru'] = False
     args['use_rel_loss'] = False
     args['state_size'] = 5
