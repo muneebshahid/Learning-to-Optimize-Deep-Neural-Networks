@@ -3,7 +3,7 @@ args = {'meta_learning_rate'}
 
 def common():
     args = {}
-    args['meta_learning_rate'] = .0001
+    args['meta_learning_rate'] = .001
     args['Adam'] = False
     args['decay_meta_learning_rate'] = False
     args['starter_learning_rate'] = 0.0001
@@ -25,18 +25,18 @@ def mlp_norm_history():
     args['step_dist_max_step'] = 1.0
     args['grad_only'] = True
     args['use_momentum'] = True
-    args['min_lr'] = 1
-    args['ref_point'] = 0  # 0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
-    args['decay_min_lr'] = True
-    args['decay_min_lr_max'] = 1
-    args['decay_min_lr_min'] = 1e-2
-    args['decay_min_lr_steps'] = 100
+    args['min_lr'] = 1e-4
+    args['ref_point'] = 1  # 0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
+    args['decay_min_lr'] = False
+    args['decay_min_lr_max'] = args['min_lr']
+    args['decay_min_lr_min'] = 1e-5
+    args['decay_min_lr_steps'] = 'NEED TO SET'
     args['learn_lr'] = False
     args['enable_noise_est'] = False
-    args['normalize_with_sq_grad'] = True
+    args['normalize_with_sq_grad'] = False
     args['use_tanh_output'] = False
-    args['use_delta_mv_avg'] = True
-    args['use_rel_loss'] = True
+    args['use_delta_mv_avg'] = False
+    args['use_rel_loss'] = False
     args['network_in_dims'] = args['limit'] if args['grad_only'] else args['limit'] * 2
     args['network_in_dims'] *= (2 if args['enable_noise_est'] else 1)
     args['network_out_dims'] = 1 if args['use_tanh_output'] else 12
@@ -58,9 +58,9 @@ def mlp_norm_history_old():
     args['use_momentum'] = True
     args['momentum_base'] = 1.1
     args['history_range'] = None
-    args['min_lr'] = 1e-3
-    args['ref_point'] = 0 #0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
-    args['use_diff'] = False
+    args['min_lr'] = 1e-4
+    args['ref_point'] = 1 #0 = last update, 1 = (max + min) / 2, 2 = learn a weighted average
+    args['use_diff'] = True
     args['decay_min_lr'] = False
     args['decay_min_lr_max'] = 1e-3
     args['decay_min_lr_min'] = 1e-4
