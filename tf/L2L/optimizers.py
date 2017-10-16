@@ -187,8 +187,8 @@ class XHistoryGradNorm(Optimizer):
         with tf.name_scope('optimizer_input_init'):
             self.history_ptr = tf.Variable(0, 'history_ptr')
             self.guide_optimizer = tf.train.AdamOptimizer(.01, name='guide_optimizer')
-            self.guide_step = []#self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
-                                #                            var_list=self.problem.variables, name='guide_step')
+            self.guide_step = self.guide_optimizer.minimize(self.problem.loss(self.problem.variables),
+                                                           var_list=self.problem.variables, name='guide_step')
             self.variable_history = [tf.get_variable('variable_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
                                      for i, shape in enumerate(self.problem.variables_flattened_shape)]
             self.grad_history = [tf.get_variable('gradients_sign_history' + str(i), initializer=tf.zeros_initializer, shape=[shape, self.limit], trainable=False)
