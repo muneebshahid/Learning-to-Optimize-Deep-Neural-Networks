@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-decay_steps = 10000
-learning_rate = 0.001
-end_learning_rate = 0.00001
-power = 5
+decay_steps = 50000
+learning_rate = 0.0003
+end_learning_rate = 0.000005
+power = 4
 
 learrning_rates = []
 for global_step in range(decay_steps):
