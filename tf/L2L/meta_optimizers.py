@@ -1000,6 +1000,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     update_window = None
     guide_optimizer = None
     guide_step_train = None
+    guide_step_eval = None
     network_activation = None
     li, lr = None, None
     sign_dist = None
@@ -1511,8 +1512,14 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         momentum_alpha = self.momentum_alpha[problem_no][batch_no] if self.learn_momentum_base else self.momentum_alpha
 
         if init_ops:
-            tiled_batch_variables = tf.tile(batch_variables, [1, self.limit])
-            tiled_batch_grads = tf.tile(batch_gradients, [1, self.limit])
+            # tiled_batch_variables = tf.tile(batch_variables, [1, self.limit])
+            # tiled_batch_grads = tf.tile(batch_gradients, [1, self.limit])
+            if self.use_momentums:
+                tiled_batch_variables = batch_vari_hist * self.momentum_alpha + batch_variables * (1 - self.momentum_alpha)
+                tiled_batch_grads = batch_grad_hist * self.momentum_alpha + batch_gradients * (1 - self.momentum_alpha),
+            else:
+                tiled_batch_variables = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
+                tiled_batch_grads = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
             history_ops.append(tf.assign(batch_vari_hist, tiled_batch_variables))
             history_ops.append(tf.assign(batch_grad_hist, tiled_batch_grads))
             if self.normalize_with_sq_grad or self.use_noise_est:
@@ -1684,10 +1691,15 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
     def run_init(self, val=False, index=None):
         if val:
             ops_init = self.ops_init_eval
+            guide_step = self.guide_step_eval
         else:
             ops_init = self.ops_init_train
+            guide_step = self.guide_step_train
         for i in range(self.limit):
+            if self.use_guide_step:
+                self.session.run(guide_step)
             self.session.run(ops_init)
+
 
     def run_reset(self, val=False, index=None):
         if val:
@@ -1764,8 +1776,8 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
             init_ops = [self.updates(args)]
             args['init_ops'] = False
-            if self.use_guide_step:
-                init_ops.append(self.updates(args))
+            # if self.use_guide_step:
+            #     init_ops.append(self.updates(args))
             self.ops_init_train.append(init_ops)
 
             loss_curr = tf.log(self.loss(args) + 1e-20)

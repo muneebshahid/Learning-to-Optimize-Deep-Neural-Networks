@@ -15,7 +15,7 @@ def common():
     args['network_activation'] = tf.nn.relu
     args['unroll_len'] = 1
     args['unroll_len_val'] = 1
-    args['use_guide_step'] = False
+    args['use_guide_step'] = True
     return args
 
 def mlp_norm_history():
@@ -24,7 +24,7 @@ def mlp_norm_history():
     args['step_dist_max_step'] = 1.0
     args['grad_only'] = True
     args['grad_sign_only'] = False
-    args['use_momentum'] = True
+    args['use_momentum'] = False
     args['momentum_base'] = 1.1
     args['history_range'] = None
     args['min_lr'] = 1e-4
