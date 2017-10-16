@@ -1919,10 +1919,23 @@ class AUGOptims(Meta_Optimizer):
     t_max = None
     decay_learning_rate = None
 
-
-
     def __init__(self, problems, problems_eval, args):
         super(AUGOptims, self).__init__(problems, problems_eval, args)
+
+        self.ops_step = []
+        self.ops_loss_train = []
+        self.ops_updates_train = []
+        self.ops_meta_step = []
+        self.ops_reset_problem_train = []
+        self.ops_reset = []
+        self.ops_loss_problem_train = []
+        self.ops_prob_acc = []
+        self.ops_loss_std_adam = 0
+
+        self.ops_updates_val = []
+        self.ops_loss_problem_val = []
+        self.ops_reset_problem_val = []
+
         def get_optimizers(problem):
             input_optimizers = []
             input_optimizers.append(Adam(problem, {'lr': self.lr_input_optims, 'beta_1': 0.99, 'beta_2': 0.9999,
@@ -2249,7 +2262,7 @@ class AUGOptims(Meta_Optimizer):
         if val:
             ops_reset = self.ops_reset_problem_val
         else:
-            ops_reset = self.ops_reset_problem
+            ops_reset = self.ops_reset_problem_train
         reset_ops = ops_reset[index] if index is not None else ops_reset
         self.session.run(reset_ops)
 
@@ -2260,20 +2273,6 @@ class AUGOptims(Meta_Optimizer):
             return problem.loss(variables)
 
     def build(self):
-        self.ops_step = []
-        self.ops_loss = []
-        self.ops_updates = []
-        self.ops_meta_step = []
-        self.ops_reset_problem = []
-        self.ops_reset = []
-        self.ops_loss_problem = []
-        self.ops_prob_acc = []
-        self.ops_loss_std_adam = 0
-
-        self.ops_updates_val = []
-        self.ops_loss_problem_val = []
-        self.ops_reset_problem_val = []
-
         # validation
         for i, (problem_eval, input_optimizers_eval) in enumerate(zip(self.problems_eval, self.input_optimizers_eval)):
             problem_eval_variables = problem_eval.variables
@@ -2341,20 +2340,20 @@ class AUGOptims(Meta_Optimizer):
 
         reset = self.reset(reset_args)
         self.ops_step.append(step)
-        self.ops_updates.append(updates)
-        self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(optim_log_loss)
+        self.ops_updates_train.append(updates)
+        self.ops_loss_problem_train.append(loss_prob)
+        self.ops_loss_train.append(optim_log_loss)
         self.ops_meta_step.append(meta_step)
-        self.ops_reset_problem.append(reset)
-        self.ops_reset.append(self.ops_reset_problem)
+        self.ops_reset_problem_train.append(reset)
+        self.ops_reset.append(self.ops_reset_problem_train)
         self.init_saver_handle()
 
     def run(self, args=None):
         if args['train']:
             ops_meta_step = self.ops_meta_step
-            ops_loss = self.ops_loss
-            ops_loss_problem = self.ops_loss_problem
-            ops_updates = self.ops_updates
+            ops_loss = self.ops_loss_train
+            ops_loss_problem = self.ops_loss_problem_train
+            ops_updates = self.ops_updates_train
         else:
             ops_meta_step = []
             ops_loss = []
@@ -2427,17 +2426,6 @@ class AUGOptimsRNN(AUGOptims):
 
 
     def build(self):
-        self.ops_step = []
-        self.ops_loss = []
-        self.ops_updates = []
-        self.ops_meta_step = []
-        self.ops_reset_problem = []
-        self.ops_reset = []
-        self.ops_loss_problem = []
-        self.ops_loss_problem_val = []
-        self.ops_updates_val = []
-        self.ops_reset_problem_val = []
-
         # validation
         for i, (problem_eval, input_optimizers_eval) in enumerate(zip(self.problems_eval, self.input_optimizers_eval)):
             problem_eval_variables = problem_eval.variables
@@ -2487,12 +2475,12 @@ class AUGOptimsRNN(AUGOptims):
         reset = self.reset(reset_args)
         self.ops_step.append(step)
         self.ops_prob_acc = problem.accuracy()
-        self.ops_updates.append(updates)
-        self.ops_loss_problem.append(loss_prob)
-        self.ops_loss.append(step_loss)
+        self.ops_updates_train.append(updates)
+        self.ops_loss_problem_train.append(loss_prob)
+        self.ops_loss_train.append(step_loss)
         self.ops_meta_step.append(meta_step)
-        self.ops_reset_problem.append(reset)
-        self.ops_reset.append(self.ops_reset_problem)
+        self.ops_reset_problem_train.append(reset)
+        self.ops_reset.append(self.ops_reset_problem_train)
         self.init_saver_handle()
 
 
