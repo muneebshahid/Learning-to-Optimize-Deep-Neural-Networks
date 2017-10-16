@@ -105,7 +105,7 @@ with l2l.as_default():
             start = time.time()
             for j in range(itr_per_epoch):
                 if meta:
-                    _, _, curr_loss, curr_acc_train, curr_acc_test, summaries  = sess.run([optim_meta.ops_updates, meta_step, l, acc_train, acc_test, all_summ])
+                    _, _, curr_loss, curr_acc_train, curr_acc_test, summaries  = sess.run([optim_meta.ops_updates_train, meta_step, l, acc_train, acc_test, all_summ])
                 else:
                     _, curr_loss, curr_acc_train, curr_acc_test, summaries = sess.run([optim_adam.ops_updates, l, acc_train, acc_test, all_summ])
                 total_loss += np.array(curr_loss)

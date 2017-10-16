@@ -14,16 +14,16 @@ with l2l.as_default():
     io_path = None
     save_network = True
 
-    config_args = config.mlp_norm_history_old()
+    config_args = config.aug_optim_rnn()
     unroll_len = config_args['unroll_len']
     reset_epoch_ext = int(5000 / unroll_len)
     reset_limits_lower = []
     reset_limits_upper = []
     #########################
-    epochs = int(1000000 / unroll_len)
+    epochs = int(100000 / unroll_len)
     epoch_print_interval = int(500 / unroll_len)
-    eval_interval = int(50000 / unroll_len)
-    validation_epochs = int(20000)
+    eval_interval = int(20000 / unroll_len)
+    validation_epochs = int(2000)
     eval_print_interval = 1000
     #########################
     model_id = 0
@@ -35,17 +35,17 @@ with l2l.as_default():
     # problem_eval_2 = problems.cifar10(
     #    {'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True, 'path': cifar_path})
 
-    problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
-    problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+    # problem = problems.Mnist({'prefix': 'train', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
+    # problem_eval_1 = problems.Mnist({'prefix': 'eval_1', 'minval': 0, 'maxval': 100, 'conv': False, 'full': False})
     # problem_eval_2 = problems.Mnist({'prefix': 'eval_2', 'minval': 0, 'maxval': 100, 'conv': True, 'full': True})
 
-    # problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
-    # problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
+    problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
+    problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
     # problem_eval_2 = problems.Rosenbrock({'prefix': 'eval_2',  'minval': -10, 'maxval': 10})
     problems_eval = [problem_eval_1]
     if restore_network:
         io_path = util.get_model_path(flag_optimizer='Mlp', model_id=str(model_id)) if restore_network else None
-    optim = meta_optimizers.MlpNormHistoryMultiProblems([problem], problems_eval, args=config_args)
+    optim = meta_optimizers.AUGOptimsRNN([problem], problems_eval, args=config_args)
     optim.build()
 
     optim_grad = tf.gradients(optim.ops_loss_train, optim.optimizer_variables)
@@ -63,9 +63,9 @@ with l2l.as_default():
             norm += tf.norm(variable)
         problem_eval_norms.append(norm)
 
-    reset_limit_init = [200 / unroll_len, 500/ unroll_len]
+    reset_limit_init = [50 / unroll_len, 200/ unroll_len]
     # reset_limit_later = [1000 / unroll_len, 10000 / unroll_len]
-    reset_limit_later = [1000 / unroll_len, 39000 / unroll_len]
+    reset_limit_later = [1000 / unroll_len, 20000 / unroll_len]
 
     with tf.Session() as sess:
         reset_upper_limit = np.random.uniform(reset_limit_init[0], reset_limit_init[1])
@@ -119,6 +119,7 @@ with l2l.as_default():
             if loss_prob < 1e-15 or reset_counter >= reset_upper_limit or problem_norm_run > 1e4:
                 util.print_update(epoch, epochs, avg_optim_loss, np.log10(avg_prob_loss),
                                   avg_time, sess.run(optim_norm), sess.run(optim_grad_norm))
+                print('Meta LR: ', sess.run(optim.meta_learning_rate))
                 print('PROBLEM NORM: ', problem_norm_run)
                 total_loss_optim = 0
                 total_loss_prob = 0
