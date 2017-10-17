@@ -23,7 +23,7 @@ with l2l.as_default():
     epochs = int(100000 / unroll_len)
     epoch_print_interval = int(500 / unroll_len)
     eval_interval = int(20000 / unroll_len)
-    validation_epochs = int(2000)
+    validation_epochs = int(20000)
     eval_print_interval = 1000
     #########################
     model_id = 0

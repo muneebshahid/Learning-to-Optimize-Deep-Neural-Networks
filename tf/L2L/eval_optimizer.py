@@ -49,13 +49,14 @@ with l2l.as_default():
 
     # optim_adam = optimizers.XHistoryGradNorm(problem, {'limit': 5})
     # optim_adam.build()
-    optim_adam = optimizers.Adam(problem, {'lr': args['lr_input_optims'],
+    adam_args = config.aug_optim()
+    optim_adam = optimizers.Adam(problem, {'lr': adam_args['lr_input_optims'],
                                            'beta_1': 0.5, 'beta_2': 0.555,
                                            'eps': 1e-8, 'learn_betas': False,
-                                           'decay_learning_rate': args['decay_learning_rate'],
-                                           'min_lr': args['min_lr'],
-                                           'max_lr': args['max_lr'],
-                                           't_max': args['t_max']})
+                                           'decay_learning_rate': adam_args['decay_learning_rate'],
+                                           'min_lr': adam_args['min_lr'],
+                                           'max_lr': adam_args['max_lr'],
+                                           't_max': adam_args['t_max']})
     optim_adam.build()
 
     problem_norms = []
