@@ -41,7 +41,7 @@ if meta:
     problem = problems.Rosenbrock({'prefix': 'train',  'minval': -10, 'maxval': 10})
     problem_eval_1 = problems.Rosenbrock({'prefix': 'eval_1',  'minval': -10, 'maxval': 10})
 
-    optim = meta_optimizers.MlpNormHistoryRNN([problem], [problem_eval_1], args=config.mlp_norm_history_rnn())
+    optim = meta_optimizers.MlpNormHistory([problem], [problem_eval_1], args=config.mlp_norm_history())
     optim.build()
     updates, loss_optim, loss_problem, meta_step, prob_acc = optim.ops_updates_train, optim.ops_loss_train, optim.ops_loss_problem_train, optim.ops_meta_step_train, []
     mean_optim_variables = [tf.reduce_mean(variable) for variable in optim.optimizer_variables]

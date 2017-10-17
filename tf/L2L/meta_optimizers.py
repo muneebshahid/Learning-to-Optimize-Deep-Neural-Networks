@@ -456,7 +456,7 @@ class MlpMovingAverage(MlpSimple):
         reset.append(tf.variables_initializer(self.avg_gradients))
         return reset
 
-class MlpNormHistory(Meta_Optimizer):
+class MlpNormHistoryDEP(Meta_Optimizer):
     network_in_dims = None
     network_out_dims = None
     layer_width = None
@@ -510,7 +510,7 @@ class MlpNormHistory(Meta_Optimizer):
         return vari_hist, grad_hist, delta_mv_avg, sq_vari_hist, sq_grad_hist
 
     def __init__(self, problems, problems_eval, args):
-        super(MlpNormHistory, self).__init__(problems, problems_eval, args)
+        super(MlpNormHistoryDEP, self).__init__(problems, problems_eval, args)
         self.gradients_only = args['grad_only']
         self.layer_width = args['layer_width']
         self.hidden_layers = args['hidden_layers']
@@ -832,7 +832,7 @@ class MlpNormHistory(Meta_Optimizer):
         problem_sq_grad_hist = args['sq_grad_hist']
         problem_delta_mv_avg = args['delta_mv_avg']
         reset = []
-        reset.append(super(MlpNormHistory, self).reset_problem(problem))
+        reset.append(super(MlpNormHistoryDEP, self).reset_problem(problem))
         reset.append(tf.variables_initializer(problem_vari_hist, name='reset_vari_hist'))
         reset.append(tf.variables_initializer(problem_grad_hist, name='reset_grad_hist'))
         if self.normalize_with_sq_grad or self.use_noise_est:
@@ -912,12 +912,12 @@ class MlpNormHistory(Meta_Optimizer):
         op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
         return timer() - start, [op_loss], [pr_loss]
 
-class MlpNormHistoryRNN(MlpNormHistory):
+class MlpNormHistoryRNNDEP(MlpNormHistoryDEP):
 
     unroll_len = None
     unroll_len_val = None
     def __init__(self, problems, problems_eval, args):
-        super(MlpNormHistoryRNN, self).__init__(problems, problems_eval, args)
+        super(MlpNormHistoryRNNDEP, self).__init__(problems, problems_eval, args)
         self.unroll_len = args['unroll_len']
         self.unroll_len_val = args['unroll_len_val']
 
@@ -935,14 +935,14 @@ class MlpNormHistoryRNN(MlpNormHistory):
         loss_0 = tf.log(self.loss({'problem': problem}) + 1e-15)
 
         def update_rnn(t, loss, problem_variables, vari_hist, grad_hist, sq_vari_hist, sq_grad_hist, delta_mv_avg, min_lr, global_step):
-            step = super(MlpNormHistoryRNN, self).step({'problem': problem,
+            step = super(MlpNormHistoryRNNDEP, self).step({'problem': problem,
                                                         'vari_hist': vari_hist,
                                                         'grad_hist': grad_hist,
                                                         'sq_vari_hist': sq_vari_hist,
                                                         'sq_grad_hist': sq_grad_hist,
                                                         'delta_mv_avg': delta_mv_avg,
-                                                        'min_lr': min_lr,
-                                                        'global_step': global_step})
+                                                           'min_lr': min_lr,
+                                                           'global_step': global_step})
             vars_next = step['vars_next']
             vari_hist_next = step['vari_hist_next']
             grad_hist_next = step['grad_hist_next']
@@ -983,7 +983,7 @@ class MlpNormHistoryRNN(MlpNormHistory):
 
 
 
-class MlpNormHistoryMultiProblems(Meta_Optimizer):
+class MlpNormHistory(Meta_Optimizer):
 
     network_in_dims = None
     network_out_dims = None
@@ -1046,7 +1046,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
 
     def __init__(self, problems, path, args):
-        super(MlpNormHistoryMultiProblems, self).__init__(problems, path, args)
+        super(MlpNormHistory, self).__init__(problems, path, args)
         self.gradients_only = args['grad_only']
         self.gradient_sign_only = args['grad_sign_only']
         self.layer_width = args['layer_width']
@@ -1640,7 +1640,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
             return update_list
 
     def reset_optimizer(self):
-        reset = super(MlpNormHistoryMultiProblems, self).reset_optimizer()
+        reset = super(MlpNormHistory, self).reset_optimizer()
         return reset
 
     def reset_problem(self, args):
@@ -1652,7 +1652,7 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
         problem_delta_mv_avg = args['delta_mv_avg']
         problem_lr_mv_avg = args['lr_mv_avg']
         reset = []
-        reset.append(super(MlpNormHistoryMultiProblems, self).reset_problem(problem))
+        reset.append(super(MlpNormHistory, self).reset_problem(problem))
         reset.append(tf.variables_initializer(problem_vari_hist, name='reset_vari_hist'))
         reset.append(tf.variables_initializer(problem_grad_hist, name='reset_grad_hist'))
         if self.normalize_with_sq_grad or self.use_noise_est:
@@ -1807,13 +1807,13 @@ class MlpNormHistoryMultiProblems(Meta_Optimizer):
 
 
 
-class MlpNormHistoryMultiRNN(MlpNormHistoryMultiProblems):
+class MlpNormHistoryRNN(MlpNormHistory):
 
     unroll_len = None
     unroll_len_val = None
     use_rel_loss = None
     def __init__(self, problems, problems_eval, args):
-        super(MlpNormHistoryMultiRNN, self).__init__(problems, problems_eval, args)
+        super(MlpNormHistoryRNN, self).__init__(problems, problems_eval, args)
         self.use_rel_loss = args['use_rel_loss']
         self.unroll_len = args['unroll_len']
         self.unroll_len_val = args['unroll_len_val']
@@ -1837,17 +1837,17 @@ class MlpNormHistoryMultiRNN(MlpNormHistoryMultiProblems):
         loss_0 = tf.log(self.loss({'problem': problem}) + 1e-15)
 
         def update_rnn(t, loss, problem_variables, vari_hist, grad_hist, sq_vari_hist, sq_grad_hist, delta_mv_avg, min_lr, global_step):
-            step = super(MlpNormHistoryMultiRNN, self).step({'problem': problem,
+            step = super(MlpNormHistoryRNN, self).step({'problem': problem,
                                                         'vari_hist': vari_hist,
                                                         'grad_hist': grad_hist,
                                                         'sq_vari_hist': sq_vari_hist,
                                                         'sq_grad_hist': sq_grad_hist,
                                                         'delta_mv_avg': delta_mv_avg,
-                                                             'min_lr': min_lr,
-                                                             'global_step': global_step,
+                                                        'min_lr': min_lr,
+                                                        'global_step': global_step,
                                                         'dist_mv_avg':   problem_dist_mv_avg,
-                                                            'lr_mv_avg': problem_lr_mv_avg,
-                                                             })
+                                                        'lr_mv_avg': problem_lr_mv_avg,
+                                                        })
             vars_next = step['x_next']
             vari_hist_next = step['vari_hist_next']
             grad_hist_next = step['grad_hist_next']
@@ -3275,7 +3275,7 @@ class AUGOptimsGRUAll(Meta_Optimizer):
         op_loss, pr_loss, _, _ = self.session.run([ops_loss, ops_loss_problem, ops_meta_step, ops_updates])
         return timer() - start, np.array(op_loss), np.array(pr_loss)
 
-class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
+class GRUNormHistory(MlpNormHistory):
     unroll_len = None
     state_size = None
     hidden_states = None
@@ -3284,7 +3284,7 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
     rnn_w, rnn_b = None, None
 
     def __init__(self, problems, path, args):
-        super(GRUNormHistoryMultiProblems, self).__init__(problems, path, args)
+        super(GRUNormHistory, self).__init__(problems, path, args)
         self.state_size = args['state_size']
         self.unroll_len = args['unroll_len']
         self.gru = args['gru']
@@ -3568,7 +3568,7 @@ class GRUNormHistoryMultiProblems(MlpNormHistoryMultiProblems):
             return update_list
 
     def reset_problem(self, args):
-        reset_ops = super(GRUNormHistoryMultiProblems, self).reset_problem(args)
+        reset_ops = super(GRUNormHistory, self).reset_problem(args)
         hidden_states = args['hidden_states']
         reset_ops.append(tf.variables_initializer(nest.flatten(hidden_states), name='reset_states'))
         return reset_ops
@@ -3976,7 +3976,7 @@ class L2L2(Meta_Optimizer):
         self.init_saver_handle()
 
 
-class MlpHistoryGradNormMinStepMultiProblems(MlpNormHistoryMultiProblems):
+class MlpHistoryGradNormMinStep(MlpNormHistory):
 
     sign_dist = None
     lr_dist = None
@@ -3991,7 +3991,7 @@ class MlpHistoryGradNormMinStepMultiProblems(MlpNormHistoryMultiProblems):
         args['step_dist_dims'] = 10
         args['step_dist_minval'] = 0
         args['step_dist_maxval'] = 1.0
-        super(MlpHistoryGradNormMinStepMultiProblems, self).__init__(problems, path, args)
+        super(MlpHistoryGradNormMinStep, self).__init__(problems, path, args)
 
 
     def network(self, args=None):
@@ -4002,7 +4002,7 @@ class MlpHistoryGradNormMinStepMultiProblems(MlpNormHistoryMultiProblems):
                                                       'history_ptr': args['history_ptr']})
             final_input = final_var_grad_history
             activations = final_input
-            activations = super(MlpNormHistoryMultiProblems, self).network({'preprocessed_gradient': activations})[0]
+            activations = super(MlpNormHistory, self).network({'preprocessed_gradient': activations})[0]
 
             lr_x_step_magnitude = tf.slice(activations, [0, 0], [-1, 10], 'x_step_mag')
             lr_x_step_magnitude = tf.nn.softmax(lr_x_step_magnitude, 1)
@@ -4057,12 +4057,12 @@ class MlpHistoryGradNormMinStepMultiProblems(MlpNormHistoryMultiProblems):
             return {'x_next': x_next, 'deltas': deltas_list}
 
 
-class MlpXHistoryMultiProblemsGradSign(MlpNormHistoryMultiProblems):
+class MlpXHistoryGradSign(MlpNormHistory):
 
     def network(self, args=None):
         with tf.name_scope('mlp_x_optimizer_network'):
             args['inputs'][1] = tf.sign(args['inputs'][1])
-            return super(MlpXHistoryMultiProblemsGradSign, self).network(args)
+            return super(MlpXHistoryGradSign, self).network(args)
 
 
 class MlpXHistoryCont(MlpSimple):

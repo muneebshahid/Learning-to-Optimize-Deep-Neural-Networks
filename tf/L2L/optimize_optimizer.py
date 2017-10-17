@@ -66,7 +66,7 @@ with l2l.as_default():
     reset_limit_init = [50 / unroll_len, 200/ unroll_len]
     # reset_limit_later = [1000 / unroll_len, 10000 / unroll_len]
     reset_limit_later = [1000 / unroll_len, 20000 / unroll_len]
-
+    lr = optim.lr
     with tf.Session() as sess:
         reset_upper_limit = np.random.uniform(reset_limit_init[0], reset_limit_init[1])
         reset_counter = 1
@@ -113,13 +113,15 @@ with l2l.as_default():
             if (epoch + 1) % epoch_print_interval == 0:
                 util.print_update(epoch, epochs, avg_optim_loss, np.log10(avg_prob_loss),
                                   avg_time, sess.run(optim_norm), sess.run(optim_grad_norm))
-                print('Meta LR: ', sess.run(optim.meta_learning_rate))
+                print('LR: ', sess.run(optim.meta_learning_rate))
+                print('META LR', sess.run(lr))
                 print('PROBLEM NORM: ', problem_norm_run)
 
             if loss_prob < 1e-15 or reset_counter >= reset_upper_limit or problem_norm_run > 1e4:
                 util.print_update(epoch, epochs, avg_optim_loss, np.log10(avg_prob_loss),
                                   avg_time, sess.run(optim_norm), sess.run(optim_grad_norm))
-                print('Meta LR: ', sess.run(optim.meta_learning_rate))
+                print('LR: ', sess.run(optim.meta_learning_rate))
+                print('META LR', sess.run(lr))
                 print('PROBLEM NORM: ', problem_norm_run)
                 total_loss_optim = 0
                 total_loss_prob = 0
