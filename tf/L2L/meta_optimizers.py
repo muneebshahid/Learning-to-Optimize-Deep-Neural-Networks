@@ -1516,7 +1516,7 @@ class MlpNormHistory(Meta_Optimizer):
             # tiled_batch_grads = tf.tile(batch_gradients, [1, self.limit])
             if self.use_momentums:
                 tiled_batch_variables = batch_vari_hist * self.momentum_alpha + batch_variables * (1 - self.momentum_alpha)
-                tiled_batch_grads = batch_grad_hist * self.momentum_alpha + batch_gradients * (1 - self.momentum_alpha),
+                tiled_batch_grads = batch_grad_hist * self.momentum_alpha + batch_gradients * (1 - self.momentum_alpha)
             else:
                 tiled_batch_variables = tf.concat([batch_vari_hist[:, 1:], batch_variables], axis=1)
                 tiled_batch_grads = tf.concat([batch_grad_hist[:, 1:], batch_gradients], axis=1)
