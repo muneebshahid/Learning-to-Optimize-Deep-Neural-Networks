@@ -33,6 +33,7 @@ class Meta_Optimizer():
     ops_loss_train = None
     ops_loss_problem_train = None
     ops_meta_step_train = None
+    ops_prob_acc = None
 
     ops_init_eval = None
     ops_reset_problem_eval = None
@@ -1354,12 +1355,16 @@ class MlpNormHistory(Meta_Optimizer):
             delta_lr_next = []
 
             min_lr_next = problem_min_lr
-            global_step_next = problem_global_step
+            global_step_next = problem_global_step + 1
 
             if self.decay_min_lr:
-                global_step_next = tf.minimum(problem_global_step + 1, self.decay_min_lr_steps)
-                min_lr_next = (self.decay_min_lr_max - self.decay_min_lr_min) * tf.pow(
-                    (1 - global_step_next / self.decay_min_lr_steps), 1.0) + self.decay_min_lr_min
+                # global_step_next = tf.minimum(problem_global_step + 1, self.decay_min_lr_steps)
+                # min_lr_next = (self.decay_min_lr_max - self.decay_min_lr_min) * tf.pow(
+                #     (1 - global_step_next / self.decay_min_lr_steps), 1.0) + self.decay_min_lr_min
+
+                min_lr_next = self.decay_min_lr_min + 0.5 * (self.decay_min_lr_max - self.decay_min_lr_min) * (
+                    1 + tf.cos(tf.divide(global_step_next, self.decay_min_lr_steps) * np.pi))
+                min_lr_next = tf.cast(min_lr_next, tf.float32)
 
             for (variable, variable_flat, batch_vari_hist, batch_grad_hist,
                  batch_sq_vari_hist, batch_sq_grad_hist, batch_dist_mv_avg,
@@ -1801,6 +1806,7 @@ class MlpNormHistory(Meta_Optimizer):
             self.ops_loss_train.append(loss)
             self.ops_meta_step_train.append(self.minimize(loss))
             self.ops_reset_problem_train.append(reset)
+        self.ops_prob_acc = self.problems[0].accuracy()
         self.ops_reset_optim = self.reset_optimizer()
         self.ops_global_updates.append(self.updates_global())
         self.init_saver_handle()
@@ -2200,7 +2206,6 @@ class AUGOptims(Meta_Optimizer):
             vars_next.append(var_next)
             betas_1_base_next.append(beta_1_output)
             betas_2_base_next.append(beta_2_output)
-
         if self.learn_betas:
             for i in range(self.num_input_optims):
                 beta_1_curr = [tf.pow(beta_1_base, tf.pow(2.0, -i * 2)) * self.beta_max for beta_1_base in betas_1_base_next]
@@ -2357,6 +2362,7 @@ class AUGOptims(Meta_Optimizer):
         self.ops_loss_train.append(optim_log_loss)
         self.ops_meta_step.append(meta_step)
         self.ops_reset_problem_train.append(reset)
+        self.ops_prob_acc = problem.accuracy()
         self.ops_reset.append(self.ops_reset_problem_train)
         self.init_saver_handle()
 
