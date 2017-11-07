@@ -888,7 +888,7 @@ class cifar10(Problem):
 
         with tf.device('/cpu:0'):
             self.train_images_batch, self.train_labels_batch = self.distorted_inputs(path, batch_size=128)
-            self.eval_images_batch, self.eval_labels_batch = self.inputs(False, path, batch_size=128)
+            self.eval_images_batch, self.eval_labels_batch = self.inputs(True, path, batch_size=128)
 
     def network(self, batch, variables):
         conv1 = tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(batch, variables[0], [1, 1, 1, 1], padding='SAME'), variables[1]))
@@ -908,6 +908,14 @@ class cifar10(Problem):
         local4 = tf.nn.relu(tf.matmul(local3, variables[6]) + variables[7])
         softmax_linear = tf.add(tf.matmul(local4, variables[8]), variables[9])
         return softmax_linear
+
+    def accuracy(self, mode='train'):
+        images = self.eval_images_batch
+        labels = self.eval_labels_batch
+        logits = self.network(images, self.variables)
+        top_k_op = tf.nn.in_top_k(logits, labels, 1)
+        correct_prediction = tf.cast(top_k_op, tf.float32)
+        return tf.reduce_mean(correct_prediction)
 
     def loss(self, variables, mode='train'):
         """Add L2Loss to all the trainable variables.
