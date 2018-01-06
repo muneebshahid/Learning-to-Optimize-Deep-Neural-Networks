@@ -4,17 +4,17 @@
 move from handcrafted features to learned ones. These learned features often
 outperform manually crated features. Learning to optimize follows in the same
 footsteps and tries to learn an optimizer. In this thesis we present two approaches
-in the same direction, \Learning to Optimize With Normalized Inputs"
-and \Multiscale Adam". In both approaches we train meta optimizers such that
-given gradient information as input they output a gradient step. The rst approach,
-\Learning to Optimize With Normalized Inputs" uses normalized history
-of gradients as inputs. We explore various congurations of this approach e.g.
-eect of using dierent history sizes. We also compare the learned optimizer
+in the same direction, Learning to Optimize With Normalized Inputs"
+and Multiscale Adam". In both approaches we train meta optimizers such that
+given gradient information as input they output a gradient step. The first approach,
+Learning to Optimize With Normalized Inputs" uses normalized history
+of gradients as inputs. We explore various configurations of this approach e.g.
+effect of using different history sizes. We also compare the learned optimizer
 with Adam and RMSProp. Our trained optimizer outperforms both Adam and
 RMSProp on the neural network it was trained on. Furthermore when applied
 on an unseen neural network (Cifar10 ), the learned optimizer shows competitive
-performance displaying its ability to generalize. The other approach, \Multiscale
-Adam" uses Adam running at dierent timescales as inputs and outputs a gradient
+performance displaying its ability to generalize. The other approach, Multiscale
+Adam" uses Adam running at different timescales as inputs and outputs a gradient
 step that is a weighted average of its Adam inputs. We then compare the
 performance of the learned optimizer with its individual Adam inputs. We do
 thorough testing of our approach on a small neural network on Mnist, we see that
